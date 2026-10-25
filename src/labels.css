@@ -1,0 +1,24 @@
+.label-editor{display:grid;gap:8px;max-width:100%;}
+.label-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 34px;gap:8px;align-items:center;min-width:0;}
+.label-editor-name-wrap{display:flex;align-items:center;gap:8px;min-width:0;}
+.label-editor-dot{height:12px;width:12px;border-radius:4px;flex:0 0 12px;border:1px solid #52617424;}
+.label-editor-row input[type="text"]{width:100%;min-width:0;min-height:36px;border:1px solid #dfe7ef;border-radius:8px;padding:8px 10px;background:#fafcff;color:#354760;font:inherit;font-size:12px;outline:none;}
+.label-editor-row input[type="text"]:focus-visible{border-color:#729ad5;box-shadow:0 0 0 2px #729ad51c;}
+.label-editor-row input[type="text"]:disabled{opacity:.75;cursor:default;}
+.label-editor-color{width:42px;height:36px;min-height:36px;padding:3px;border:1px solid #dfe7ef;background:#fff;border-radius:8px;cursor:pointer;}
+.label-editor-color:disabled{opacity:.6;cursor:default;}
+.label-editor-color::-webkit-color-swatch-wrapper{padding:0;}
+.label-editor-color::-webkit-color-swatch{border:0;border-radius:5px;}
+.label-editor-row button{display:grid;place-items:center;width:34px;height:36px;padding:0;border:1px solid #dfe7ef;border-radius:8px;cursor:pointer;}
+.label-editor-remove{background:#fff;color:#9b6474;}
+.label-editor-remove:hover:not(:disabled){background:#fff0f2;color:#b03f56;}
+.label-editor-add{background:#e8f0fc;color:#3a72bb;}
+.label-editor-add:hover:not(:disabled){background:#d7e7fb;}
+.label-editor-row button:disabled{opacity:.42;cursor:default;}
+.label-editor-create{padding-top:5px;border-top:1px solid #edf1f6;}
+.label-editor-error{font-size:11px;color:#b44356;line-height:1.7;}
+:root[data-theme="dark"] .label-editor-row input[type="text"],
+:root[data-theme="dark"] .label-editor-color,
+:root[data-theme="dark"] .label-editor-remove{background:#1c2a3b;border-color:#344862;color:#dce6f2;}
+:root[data-theme="dark"] .label-editor-create{border-color:#344862;}
+:root[data-theme="dark"] .label-editor-add{background:#283f5d;border-color:#344862;color:#99bdec;}

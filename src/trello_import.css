@@ -1,0 +1,10 @@
+.trello-import-backdrop{position:fixed;inset:0;background:#081c34a6;z-index:1750;display:grid;place-items:center;padding:18px}
+.trello-import-dialog{direction:rtl;width:min(520px,96vw);background:var(--surface,#fff);color:var(--text,#273c56);border-radius:16px;box-shadow:0 20px 75px #0003;overflow:hidden}
+.trello-import-dialog header{display:flex;justify-content:space-between;align-items:center;padding:17px 22px;border-bottom:1px solid #dbe4ed}
+.trello-import-dialog header h2{display:flex;align-items:center;gap:8px;margin:0;font-size:18px}
+.trello-import-dialog header button{border:0;background:transparent;color:inherit;cursor:pointer}
+.trello-import-body{padding:18px 22px;display:grid;gap:15px;font-size:13px}
+.trello-import-body p{line-height:1.8;margin:0}.trello-import-body input{width:100%;border:1px solid #d9e3ed;padding:10px;border-radius:8px}
+.trello-import-body small{color:#7d899e;line-height:1.8}
+.trello-import-body .trello-error{color:#b7384f}.trello-import-actions{display:flex;justify-content:flex-end;gap:9px}
+.trello-import-actions button{padding:10px;border-radius:9px;cursor:pointer;border:1px solid #dce3ef;background:transparent;color:inherit}

@@ -1,0 +1,93 @@
+.searchplus-shell {
+  position: relative;
+  width: min(100%, 520px);
+  min-width: 210px;
+  flex: 1 1 320px;
+  font: inherit;
+}
+
+.searchplus-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid var(--border, #d6dce4);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  padding: 0 10px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.searchplus-control:focus-within {
+  border-color: var(--accent, #5672ca);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #5672ca) 14%, transparent);
+}
+
+.searchplus-icon { flex: 0 0 auto; color: var(--muted, #66758a); }
+.searchplus-input {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  padding: 9px 0;
+  background: transparent;
+  color: var(--text, #1c293c);
+  font: inherit;
+  font-size: 13px;
+}
+.searchplus-input::-webkit-search-cancel-button { display: none; }
+.searchplus-input::placeholder { color: var(--muted, #8090a1); opacity: 1; }
+.searchplus-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--muted, #66758a);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.searchplus-action:hover, .searchplus-action.selected { background: rgba(86,114,202,.12); color: var(--accent, #5672ca); }
+.searchplus-action:focus-visible, .searchplus-help button:focus-visible {
+  outline: 2px solid var(--accent, #5672ca);
+  outline-offset: 2px;
+}
+.searchplus-count {
+  position: absolute;
+  top: calc(100% + 3px);
+  right: 5px;
+  font-size: 11px;
+  color: var(--muted, #66758a);
+  white-space: nowrap;
+}
+.searchplus-help {
+  position: absolute;
+  z-index: 80;
+  right: 0;
+  top: calc(100% + 10px);
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(70vh, 490px);
+  overflow: auto;
+  border: 1px solid var(--border, #d6dce4);
+  border-radius: 14px;
+  box-shadow: 0 15px 38px rgba(25,35,50,.19);
+  background: var(--surface, #fff);
+  color: var(--text, #1c293c);
+  padding: 14px;
+  line-height: 1.85;
+}
+.searchplus-help-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.searchplus-help-title strong { font-size: 14px; }
+.searchplus-help-title button { display: inline-flex; padding: 5px; border: 0; border-radius: 7px; background: transparent; color: inherit; cursor: pointer; }
+.searchplus-help p { font-size: 12px; margin: 10px 0; color: inherit; }
+.searchplus-help code { direction: ltr; unicode-bidi: isolate; display: inline-block; padding: 0 4px; margin: 1px 2px; border-radius: 4px; background: rgba(100,115,140,.10); font-size: 11px; }
+.searchplus-examples { display: grid; gap: 7px; margin-top: 12px; }
+.searchplus-examples button { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; text-align: right; gap: 5px; padding: 8px 10px; border: 1px solid var(--border, #d6dce4); background: transparent; border-radius: 8px; color: inherit; cursor: pointer; }
+.searchplus-examples button:hover { border-color: var(--accent, #5672ca); }
+.searchplus-examples button span { font-size: 12px; }
+.searchplus-examples button code { margin: 0; }
+@media (max-width: 700px) { .searchplus-shell { flex-basis: 100%; width: 100%; } }

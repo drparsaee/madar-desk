@@ -1,0 +1,17 @@
+﻿node_modules/
+dist/
+build/
+release/
+*.log
+*.db
+*.sqlite*
+*.bak
+*.exe
+*.zip
+.env*
+*.key
+*.pem
+__pycache__/
+.qa*/
+.build*/
+.private*/

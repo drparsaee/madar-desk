@@ -1,0 +1,24 @@
+/** Safe, independent card duplication that preserves reusable instructions. */
+export function duplicateCard(source, newId, timestamp, idFactory){
+ if(!source||typeof source!=='object'||typeof idFactory!=='function')throw new Error('Invalid card');
+ const copy=globalThis.structuredClone?globalThis.structuredClone(source):JSON.parse(JSON.stringify(source));
+ const cloneItem=item=>({...item,id:idFactory(),done:false,cost:0,expenseItems:[]});
+ copy.id=newId;
+ copy.title=source.title+' (مشابه)';
+ copy.createdAt=timestamp;
+ copy.updatedAt=timestamp;
+ copy.cost=0;copy.costEnabled=null;
+ copy.saleUnitPrice=0;copy.salePartyId='';
+ copy.assignees=[];copy.fileLinks=[];copy.attachments=[];
+ copy.reports=[];copy.actualMinutes=0;copy.dueDate='';
+ // A duplicate is a new active task, not another archived item, even when
+ // its source was recovered from a historical archived list/card.
+ copy.archived=false;copy.archivedByBoard=false;
+ copy.checklist=(source.checklist||[]).map(cloneItem);
+ copy.checklists=(source.checklists||[]).map(group=>({
+  ...group,
+  id:group.id==='checklist-legacy'?'checklist-legacy':idFactory(),
+  items:(group.items||[]).map(cloneItem)
+ }));
+ return copy;
+}

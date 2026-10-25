@@ -1,0 +1,1055 @@
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import packageInfo from '../package.json';
+import {
+  Activity, Archive, ArrowDownToLine, ArrowLeft, ArrowUpLeft, Bell, CalendarDays,
+  Check, CheckCheck, CheckCircle2, ChevronDown, ChevronLeft, Circle,
+  ClipboardCheck, Cloud, CloudDownload, CloudUpload, Command, Copy, Download,
+  Ellipsis, FileText, Flag, FolderClosed, HardDriveDownload, Inbox,
+  LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
+  MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Sparkles, Tag,
+  Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
+  Eye, EyeOff, Wallet, GripVertical, FileInput, ReceiptText
+} from 'lucide-react';
+import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
+import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
+import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
+import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
+import {CardComments,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
+import {FinancePanel} from './financepanel.jsx';
+import {RulesPanel} from './rulespanel.jsx';
+import {duplicateCard} from './taskops.js';
+import {CardAttachments} from './attachments.jsx';
+import {archiveBoardState,restoreBoardState,renameBoardState,moveCardToBoard,boardStageUpdate,legacyStatusForStage} from './boardops.js';
+import {FinanceOverview,ProfitPeek} from './financeoverview.jsx';
+import {AccountingPanel} from './accounting_panel.jsx';
+import {AccountingWorkspace} from './accounting_workspace.jsx';
+import {RialJournalPanel} from './rial_journal_panel.jsx';
+import {filterTasks} from './searchplus.js';
+import {SearchPlus} from './searchplus.jsx';
+import {LabelEditor} from './labels.jsx';
+import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
+import {ReportingPanel} from './reporting.jsx';
+import {TrelloImportPanel} from './trello_import.jsx';
+import {CardCover,CardChecklists,CardCustomFields,BoardFieldEditor} from './cardextras.jsx';
+import {PlannerPanel} from './planner.jsx';
+import {removeUnpaidLegacyStep} from './checklistguard.js';
+import {plannerIdentity} from './planner_identity.js';
+import {importCalendarEvents} from './calendar_import_state.js';
+import {getOrderedLaneCards,moveCardInState} from './cardorder.js';
+import {WorkspaceManager} from './workspaces_panel.jsx';
+import {archiveListState,restoreListState,activeBoardLists} from './listarchive.js';
+import {softDeleteCardState,restoreDeletedCardState} from './cardtrash.js';
+import {syncHealth} from './sync_health.js';
+import {createBoardPerformanceIndex} from './board_performance.js';
+import {PortableExportPanel} from './portable_export_panel.jsx';
+import {ProgressiveLane} from './progressive_lane.jsx';
+import {CardDependencyPanel} from './card_dependency_panel.jsx';
+import {InterfaceModeSelector,useInterfaceModePreference} from './interface_mode.jsx';
+import {isInterfaceFeatureVisible} from './interface_mode.js';
+import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
+import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
+import './interface_mode.css';
+import './boardplus.css';
+
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+const now=()=>new Date().toISOString();
+const todayISO=()=>{const value=new Date();return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;};
+const makeBoard=(project,workspace,stages)=>({
+ id:uid(),workspaceId:workspace,projectId:project.id,name:project.name,
+ color:project.color,archived:false,stages:JSON.parse(JSON.stringify(stages)),
+ labelDefinitions:[],customFields:[]
+});
+const seed=()=>({
+  version:1,
+  projects:[{id:'p-personal',name:'کارهای من',color:'#5672ca',costEnabled:false,price:0},{id:'p-sample',name:'پروژه نمونه',color:'#3d977e',costEnabled:false,price:0}],
+  tasks:[
+    {id:'demo-1',projectId:'p-sample',title:'طراحی برد و چیدمان کارها',description:'یک تسک نمونه برای آشنایی با کارت‌ها و ستون‌ها',status:'done',priority:'high',dueDate:'',labels:['طراحی'],checklist:[{id:'d1',text:'تعریف ساختار',done:true},{id:'d2',text:'مرور رابط',done:true}],reports:[{id:'r1',agent:'نمونه',summary:'طرح اولیه بررسی و تکمیل شد.',createdAt:now()}],createdAt:now(),updatedAt:now()},
+    {id:'demo-2',projectId:'p-sample',title:'جمع‌آوری نیازمندی‌های نسخه اول',description:'',status:'active',priority:'medium',dueDate:'',labels:['برنامه‌ریزی'],checklist:[{id:'d3',text:'فهرست قابلیت‌ها',done:true},{id:'d4',text:'انتخاب ویژگی‌های ضروری',done:false}],reports:[{id:'r2',agent:'نمونه',summary:'فهرست اولیه آماده است؛ در حال اولویت‌بندی.',createdAt:now()}],createdAt:now(),updatedAt:now()},
+    {id:'demo-3',projectId:'p-sample',title:'بازبینی تجربه کاربری',description:'',status:'review',priority:'high',dueDate:'',labels:['بازبینی'],checklist:[],reports:[],createdAt:now(),updatedAt:now()},
+    {id:'demo-4',projectId:'p-sample',title:'تعریف شیوه گزارش ایجنت',description:'',status:'planned',priority:'low',dueDate:'',labels:['ایجنت'],checklist:[],reports:[],createdAt:now(),updatedAt:now()}
+  ],
+  stages:DEFAULT_STAGES,settings:{theme:'light',googleClientId:'',costDefault:false}
+});
+const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'light',costDefault:false,...s.settings}});
+const mockBridge={
+  getState:async()=>JSON.parse(localStorage.getItem('madar-preview')||'null')||seed(),
+  saveState:async s=>{localStorage.setItem('madar-preview',JSON.stringify(s));return true;},
+  exportBackup:async()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(JSON.parse(localStorage.getItem('madar-preview')||'{}'),null,2)],{type:'application/json'}));a.download='madar-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);return {path:'madar-backup.json'};},
+  importBackup:async()=>{throw new Error('ورود فایل در نسخه پیش‌نمایش وب فعال نیست؛ برنامه ویندوز این قابلیت را دارد.');},
+  driveStatus:async()=>({connected:false,clientId:''}),
+  driveConnect:async()=>{throw new Error('اتصال Google Drive در نسخه EXE در دسترس است.');},
+  driveUpload:async()=>{throw new Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
+  driveList:async()=>[],
+  driveRestore:async()=>{throw new Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
+  driveDisconnect:async()=>({connected:false}),
+  lanStatus:async()=>({mode:'solo',user:{username:'local',role:'admin',projects:null}}),
+  lanHost:async()=>{throw Error('امکان شبکه در نسخه EXE فعال است.');},
+  lanJoin:async()=>{throw Error('امکان شبکه در نسخه EXE فعال است.');},
+  lanLeave:async()=>({mode:'solo'}),
+  lanUsers:async()=>[],
+  lanSaveUser:async()=>{throw Error('شبکه فعال نیست.');},
+  lanDeleteUser:async()=>{throw Error('شبکه فعال نیست.');},
+  lanProfiles:async()=>[{username:'local',displayName:'من',avatarIcon:'user',avatarPhoto:'',role:'admin',projects:null}],
+  lanMyProfile:async()=>{throw Error('شخصی‌سازی کاربران شبکه در برنامه ویندوز فعال است.');},
+  lanChangePassword:async()=>{throw Error('حساب شبکه فعال نیست.');},
+  lanResetPassword:async()=>{throw Error('حساب شبکه فعال نیست.');},
+  integrationIssueKey:async()=>{throw Error('کلید API فقط روی میزبان HTTPS ویندوز فعال است.');},
+  integrationRevokeKey:async()=>{throw Error('کلید API فقط روی میزبان HTTPS ویندوز فعال است.');},
+  calendarExportIcs:async()=>{throw Error('خروجی ICS فقط از برنامه ویندوز قابل دریافت است.');},
+  calendarImportPreview:async()=>{throw Error('ورود ICS فقط در برنامه ویندوز فعال است.');},
+  automationEngineStatus:async()=>({mode:'legacy',ready:false,pending:0,dead:0}),
+  enableAutomationEngine:async()=>{throw Error('موتور اتوماسیون فقط در میزبان ویندوز با SQLite فعال می‌شود.');},
+  syncStatus:async()=>({mode:'solo',connected:true,pending:false,lastSync:null,drive:false,folder:{configured:false}}),
+  chooseDriveFolder:async()=>{throw Error('انتخاب پوشه Google Drive در EXE فعال است.');},
+  driveFolderStatus:async()=>({configured:false,folder:'',pending:false}),
+  driveFolderList:async()=>[],
+  driveFolderRestore:async()=>{throw Error('بازیابی پوشه در نسخه ویندوز فعال است.');},
+  driveFolderBackup:async()=>{throw Error('پشتیبان پوشه فقط در EXE ویندوز فعال است.');},
+  cloudPeerStatus:async()=>({paired:false,enabled:false,cloudVerified:false}),
+  cloudPeerConfigure:async()=>{throw Error('اشتراک پوشه میان کلاینت‌ها فقط در برنامه ویندوز فعال است.');},
+  cloudPeerGenerate:async()=>{throw Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
+  cloudPeerForget:async()=>({paired:false,enabled:false,cloudVerified:false}),
+  financeRead:async()=>[],
+  financeStatus:async()=>({pending:0,warning:''}),
+  financeCommand:async()=>{throw Error('ثبت مالی در نسخه ویندوز فعال است.');},
+  accountingRead:async()=>{throw Error('حسابداری دوبل فقط در نسخه ویندوز فعال است.');},
+  accountingCommand:async()=>{throw Error('ثبت حسابداری دوبل فقط در نسخه ویندوز فعال است.');},
+  standaloneAccountingRead:async()=>{throw Error('حسابداری مستقل فقط در میزبان ویندوز فعال است.');},
+  standaloneAccountingCommand:async()=>{throw Error('ثبت حسابداری مستقل فقط در میزبان ویندوز فعال است.');},
+  standaloneAccountingPrepare:async()=>{throw Error('آماده‌سازی سفارش صرفاً توسط میزبان معتبر امکان‌پذیر است.');},
+  standaloneAccountingQuote:async()=>{throw Error('محاسبه سفارش فقط در میزبان حسابداری فعال است.');},
+  getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
+  setPreferences:async p=>{localStorage.setItem('madar-preferences',JSON.stringify(p));return p;},
+  openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
+  createLocalBackup:async()=>{throw Error('نسخه پشتیبان داخلی فقط در EXE فعال است.');},
+  listLocalBackups:async()=>[],
+  restoreLocalBackup:async()=>{throw Error('بازیابی داخلی فقط در EXE فعال است.');}
+  ,collabRead:async()=>[],
+  collabCommand:async()=>{throw Error('گفتگو در نسخه نمایشی وب غیرفعال است.');}
+  ,runDueScheduler:async()=>({events:0,new:0})
+  ,attachmentList:async()=>[]
+  ,attachmentPreview:async()=>({available:false,kind:'none'})
+  ,attachmentRead:async()=>{throw Error('دریافت فایل فقط در نسخه ویندوز فعال است.');}
+  ,attachmentUpload:async()=>{throw Error('بارگذاری فایل فقط در نسخه ویندوز فعال است.');}
+  ,attachmentDelete:async()=>{throw Error('حذف فایل فقط در نسخه ویندوز فعال است.');}
+  ,attachmentBackup:async()=>{throw Error('بکاپ فایل فقط روی میزبان ویندوز فعال است.');}
+  ,createUnifiedSqliteBackup:async()=>{throw Error('خروجی SQLite فقط روی میزبان ویندوز فعال است.');}
+};
+const api=window.madar||mockBridge;
+const isDesktop=!!window.madar;
+const shortDate=v=>{if(!v)return '';try{return new Date(v).toLocaleDateString('fa-IR',{month:'short',day:'numeric'});}catch{return v;}};
+
+function Empty({title,description,onAdd}){
+  return <div className="lane-empty"><span className="lane-empty-icon"><Plus size={18}/></span><strong>{title}</strong><small>{description}</small>{onAdd&&<button onClick={onAdd}>افزودن کار <Plus size={14}/></button>}</div>;
+}
+
+function TaskCard({task,project,users,onOpen,onDrag,onToggleStep,onCardDrop,onKeyboardReorder,calendar,priorities,canEdit=true,canManage=false,showCosts=true}){
+  const [collapsed,setCollapsed]=useState(true);
+  const done=task.checklist.filter(i=>i.done).length;
+  const percent=task.checklist.length?Math.round(done/task.checklist.length*100):0;
+  const report=task.reports[task.reports.length-1];
+  const priority=priorityById(priorities,task.priority);
+  return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect} style={{'--priority-color':priority.color}} draggable={canEdit} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown':undefined} aria-label={'جزئیات '+task.title}>
+    {task.cover?.type==='color'&&/^#[0-9a-f]{6}$/i.test(task.cover.color)&&<div className={'task-card-cover task-card-cover-'+(task.cover.size==='full'?'full':'strip')} style={{backgroundColor:task.cover.color}}/>}
+    <div className="task-card-top"><span className="project-tiny"><i style={{background:project?.color||'#7790aa'}}></i>{project?.name||'پروژه'}</span><MoreHorizontal size={17} strokeWidth={1.8}/></div>
+    <div className="task-title">{task.title}</div>
+    {task.description&&<div className="task-description">{task.description}</div>}
+    {!!task.labels?.length&&<div className="tags">{task.labels.map((l,i)=><LabelChip key={i} label={task.labelColors?.[l]?{name:l,color:task.labelColors[l]}:l}/>)}</div>}
+    {task.checklist.length>0&&<div className="progress-block"><div className="progress-caption"><span><ListChecks size={13}/> {done} از {task.checklist.length} مرحله</span><b>{percent}٪</b></div><div className="progress-track"><i style={{width:percent+'%'}}/></div></div>}
+    <InlineChecklist items={task.checklist} taskId={task.id} canEdit={canEdit} collapsed={collapsed} onCollapse={()=>setCollapsed(x=>!x)} onToggle={onToggleStep}/>
+    {canManage&&showCosts&&cardCostEnabled(task,project)&&<div className="card-cost"><WalletIcon/>{money((task.cost||0)+task.checklist.reduce((x,c)=>x+(c.cost||0),0))} تومان</div>}
+    {report&&<div className="agent-line"><span className="agent-avatar"><Zap size={12}/></span><span><b>{report.agent}:</b> {report.summary}</span></div>}
+    <div className="task-footer">
+      <span className="priority priority-label"><Flag size={13}/>{priority.label}</span>
+      <span className="footer-icons"><AssignedMembers users={users} assignees={task.assignees||[]}/>{!!task.reports.length&&<span><MessageCircle size={13}/>{task.reports.length}</span>}<span title="تاریخ ایجاد"><CalendarDays size={13}/>{displayDate(task.createdAt,calendar)}</span>{!!task.dueDate&&<span title="موعد انجام"><CalendarDays size={13}/>{displayDate(task.dueDate,calendar)}</span>}{!!task.estimatedMinutes&&<span title="برآورد زمان"><Clock3 size={13}/>{durationText(task.estimatedMinutes)}</span>}</span>
+    </div>
+  </div>;
+}
+function WalletIcon(){return <span className="money-coin">ت</span>;}
+
+function Modal({title,children,onClose,width=470}){
+  const root=useRef(null),closeRef=useRef(onClose);
+  closeRef.current=onClose;
+  useEffect(()=>{
+    const previous=document.activeElement;
+    const focusable=()=>Array.from(root.current?.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')||[])
+      .filter(el=>el.getClientRects().length>0);
+    const initial=root.current?.querySelector('[autofocus]')||focusable()[0];
+    initial?.focus();
+    const fn=e=>{
+      if(e.key==='Escape'){e.stopPropagation();closeRef.current();return;}
+      if(e.key!=='Tab')return;
+      const elements=focusable();
+      if(!elements.length){e.preventDefault();root.current?.focus();return;}
+      const first=elements[0],last=elements[elements.length-1];
+      if(e.shiftKey&&(document.activeElement===first||!root.current?.contains(document.activeElement))){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&(document.activeElement===last||!root.current?.contains(document.activeElement))){e.preventDefault();first.focus();}
+    };
+    window.addEventListener('keydown',fn);
+    return()=>{window.removeEventListener('keydown',fn);if(previous?.isConnected)previous.focus();};
+  },[]);
+  return <div className="overlay" onMouseDown={()=>closeRef.current()}><div ref={root} tabIndex={-1} className="dialog" style={{maxWidth:width}} onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-head"><h2>{title}</h2><button className="icon-btn" aria-label="بستن" onClick={()=>closeRef.current()}><X size={19}/></button></div>{children}</div></div>;
+}
+
+function DateClock({calendar}){
+  const [current,setCurrent]=useState(()=>new Date());
+  useEffect(()=>{const interval=setInterval(()=>setCurrent(new Date()),1000);return()=>clearInterval(interval);},[]);
+  const locale=calendar==='jalali'?'fa-IR-u-ca-persian':'fa-IR-u-ca-gregory';
+  const date=new Intl.DateTimeFormat(locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'}).format(current);
+  const hour=new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(current);
+  return <div className="live-clock" title="تاریخ و ساعت سیستم"><strong dir="ltr">{hour}</strong><span>{date}</span></div>;
+}
+
+function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false}){
+  const health=syncHealth(status,{conflict,saving});
+  const label=health.label;
+  return <button type="button" aria-live="polite" className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/>{label}</button>;
+}
+
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
+  const [newStep,setNewStep]=useState('');
+  const [accountView,setAccountView]=useState(null);
+  useEffect(()=>{
+    if(!canManage)return;
+    let live=true;
+    api.standaloneAccountingRead().then(r=>{if(live)setAccountView(r.view);}).catch(()=>{});
+    return()=>{live=false;};
+  },[api,canManage]);
+  const [agent,setAgent]=useState('');
+  const [summary,setSummary]=useState('');
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const update=changes=>{if(canEdit)onUpdate(task.id,changes);};
+  const addStep=()=>{if(!newStep.trim())return;update({checklist:[...task.checklist,{id:uid(),text:newStep.trim(),done:false}]});setNewStep('');};
+  const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');};
+  const total=task.checklist.length,done=task.checklist.filter(i=>i.done).length;
+  const priceEnabled=canManage&&showCosts&&cardCostEnabled(task,projects.find(p=>p.id===task.projectId));
+  const taskBoard=boards.find(b=>b.id===task.boardId);
+  return <div className="drawer-overlay" onMouseDown={onClose}><aside className="drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
+    <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div>
+    <div className="drawer-scroll">
+      <input className="task-edit-title" aria-label="عنوان کار" value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
+      <div className="edit-grid">
+        <label>پروژه<select disabled={!canEdit} value={task.projectId} onChange={e=>update({projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        {boards.filter(b=>b.projectId===task.projectId&&!b.archived).length>1&&
+          <label>برد<select disabled={!canEdit} value={task.boardId||''} onChange={e=>update({boardId:e.target.value})}>
+            {boards.filter(b=>b.projectId===task.projectId&&!b.archived).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+          </select></label>}
+        <label>مرحله<select disabled={!canEdit} value={task.listId||task.status} onChange={e=>update({listId:e.target.value})}>{stages.map(s=><option key={s.id} value={s.id} disabled={s.archived===true&&s.id!==(task.listId||task.status)}>{s.label}{s.archived===true?' (بایگانی‌شده)':''}</option>)}</select></label>
+        <label>اولویت<select disabled={!canEdit} value={task.priority} onChange={e=>update({priority:e.target.value})}>{priorities.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
+        <CalendarField value={task.dueDate||''} calendar={calendar} disabled={!canEdit} label="موعد انجام" onChange={dueDate=>update({dueDate})}/>
+      </div>
+      <div className="task-created-date"><CalendarDays size={15}/> تاریخ ثبت: {displayDate(task.createdAt,calendar,true)}</div>
+      {!!task.orderCustomerName&&<div className="task-created-date">سفارش‌دهنده: {task.orderCustomerName}</div>}
+      <OrderSaleFields task={task} api={api} onUpdate={update}
+        onPrepare={onOpenSale} canEdit={canEdit} canManage={canManage}/>
+      <div className="edit-section"><h3><Users size={17}/> مسئولان کار</h3><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>
+      {canManage&&showCosts&&<div className="edit-section"><h3>تنظیمات هزینه همین کارت</h3><label className="setting-toggle"><input type="checkbox" disabled={!canEdit} checked={priceEnabled} onChange={e=>update({costEnabled:e.target.checked})}/><span><strong>فعال‌کردن فیلد هزینه</strong><small>فقط همین کارت؛ تنظیم کلی پروژه را تغییر نمی‌دهد.</small></span></label>{task.costEnabled!==null&&task.costEnabled!==undefined&&canEdit&&<button className="subtle-action" onClick={()=>update({costEnabled:null})}>بازگشت به تنظیم پیش‌فرض پروژه</button>}</div>}
+      {showOperations&&<div className="edit-section"><h3><Clock3 size={17}/> مدیریت زمان</h3><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>}
+      {showOperations&&<CardDependencyPanel task={task} allTasks={allTasks} canEdit={canEdit} onChange={dependencies=>update({dependencies})}/>}
+      <div className="edit-section"><h3><FileText size={17}/> توضیحات و جهت متن</h3><RichDescription disabled={!canEdit} value={task.description||''} direction={task.textDirection||'auto'} onChange={description=>update({description})} onDirection={textDirection=>update({textDirection})}/></div>
+      <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
+      {showOperations&&taskBoard&&<div className="edit-section"><CardCustomFields task={task} board={taskBoard} calendar={calendar} disabled={!canEdit} onChange={update}/>{canManage&&<BoardFieldEditor board={taskBoard} tasks={allTasks} templates={allTemplates} disabled={!canManage} onChange={onBoardChange}/>}</div>}
+      {priceEnabled&&<div className="edit-section"><h3>هزینه مستقیم کار</h3><MoneyField disabled={!canEdit} value={task.cost||0} label="هزینه مستقیم این کار" onChange={cost=>update({cost,costDate:task.costDate||(cost?todayISO():'')})}/><label className="expense-category-field">دسته هزینه<input maxLength={80} value={task.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک، چاپ، حمل‌ونقل" onChange={e=>update({costCategory:e.target.value})}/></label><CalendarField label="تاریخ هزینه مستقیم" calendar={calendar} value={task.costDate||''} disabled={!canEdit} onChange={costDate=>update({costDate})}/><p className="money-help">تاریخ واردشده برای گزارش هزینه در بازه زمانی استفاده می‌شود. هزینه‌های قدیمی بدون تاریخ اختصاصی با تاریخ آخرین ویرایش کارت گزارش می‌شوند.</p></div>}
+      <div className="edit-section"><h3><Tag size={17}/> برچسب</h3><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>
+      <div className="edit-section"><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
+        <div className="step-list">{task.checklist.map(c=><div className="step-row" key={c.id}><button disabled={!canEdit} className={'step-check '+(c.done?'checked':'')} aria-label={'تغییر وضعیت '+c.text} onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>{c.done&&<Check size={14}/>}</button><span className={c.done?'completed':''}>{c.text}</span>{priceEnabled&&<div className="step-cost-fields"><MoneyField disabled={!canEdit} value={c.cost||0} label={'هزینه مرحله '+c.text} onChange={cost=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,cost,costDate:i.costDate||(cost?todayISO():'')}:i)})}/><input aria-label={'دسته هزینه مرحله '+c.text} maxLength={80} value={c.costCategory||''} disabled={!canEdit} placeholder="دسته هزینه؛ مثلاً پیک" onChange={e=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costCategory:e.target.value}:i)})}/><CalendarField label={'تاریخ هزینه مرحله '+c.text} calendar={calendar} value={c.costDate||''} disabled={!canEdit} onChange={costDate=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costDate}:i)})}/></div>}<button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button></div>)}</div>
+        {canManage&&task.checklist.map(step=><div key={step.id} className="edit-section">
+          <h4>هزینه‌های مستقل مرحله: {step.text}</h4>
+          <StageExpenseFields task={task} step={step}
+            parties={Object.values(accountView?.parties||{})}
+            existingJobs={accountView?.contractorJobs||{}}
+            accountReady={Boolean(accountView)}
+            canEdit={canEdit} onUpdate={update} onPrepare={onOpenPurchase}/>
+        </div>)}
+        {priceEnabled&&<div className="step-total">جمع هزینه‌های قدیمی این کار: <strong>{money((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))} تومان</strong></div>}
+        {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
+      </div>
+      <div className="edit-section"><CardChecklists task={task} hideLegacy disabled={!canEdit} onChange={update}/></div>
+      <div className="edit-section"><h3><MessageCircle size={17}/> گزارش پیشرفت</h3>
+        <div className="report-list">{task.reports.length?task.reports.slice().reverse().map(r=><div className="report-entry" key={r.id}><div className="report-entry-top"><span className="agent-avatar"><Zap size={12}/></span><strong>{r.agent}</strong><small>{shortDate(r.createdAt)}</small></div><p>{r.summary}</p></div>):<div className="empty-reports">هنوز گزارشی ثبت نشده است.</div>}</div>
+        {canEdit&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام ایجنت یا مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="یک خط درباره آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
+      </div>
+      {showOperations&&<div className="edit-section"><CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/></div>}
+      <div className="edit-section"><h3><FolderOpen size={17}/> فایل‌های اشتراکی این کار</h3><SharedLinks links={task.fileLinks||[]} canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/></div>
+      <div className="edit-section"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
+      <div className="edit-section"><h3><Copy size={17}/> پیشنهاد کارهای مشابه</h3>{similarTasks(task.title,allTasks,task.id).length?similarTasks(task.title,allTasks,task.id).map(({task:t,score})=><div className="similar-row" key={t.id}><span>{t.title}<small>{Math.round(score*100)}٪ شباهت</small></span><button disabled={!canEdit} onClick={()=>onDuplicate(t)}>ساخت مشابه</button></div>):<p className="shared-empty">کار مشابهی با این عنوان پیدا نشد.</p>}</div>
+      {canEdit&&<div className="drawer-danger">{confirmDelete?<div className="delete-confirm"><span>کارت به زباله‌دان منتقل شود؟ تمام هزینه‌ها، فایل‌ها و گزارش‌ها حفظ می‌شوند.</span><button onClick={onDelete}>انتقال به زباله‌دان</button><button onClick={()=>setConfirmDelete(false)}>انصراف</button></div>:<button className="danger-link" onClick={()=>setConfirmDelete(true)}><Trash2 size={16}/> انتقال به زباله‌دان</button>}</div>}
+    </div>
+  </aside></div>;
+}
+
+function DrivePanel({data,onClose,onRestore}){
+  const [id,setId]=useState(data.settings.googleClientId||'');
+  const [connected,setConnected]=useState(false);
+  const [backups,setBackups]=useState([]);
+  const [busy,setBusy]=useState('');
+  const [message,setMessage]=useState('');
+  const [restoreId,setRestoreId]=useState('');
+  const [localBackups,setLocalBackups]=useState([]);
+  const [folder,setFolder]=useState({configured:false,folder:'',available:false});
+  const [folderFiles,setFolderFiles]=useState([]);
+  const [peerStatus,setPeerStatus]=useState({paired:false,enabled:false});
+  const [peerCode,setPeerCode]=useState('');
+  const [showPeerCode,setShowPeerCode]=useState(false);
+  const [storageStatus,setStorageStatus]=useState(null);
+  const [automationStatus,setAutomationStatus]=useState(null);
+  useEffect(()=>{api.driveStatus().then(s=>{setConnected(s.connected);if(s.clientId)setId(s.clientId);}).catch(e=>setMessage(e.message));},[]);
+  useEffect(()=>{api.listLocalBackups().then(setLocalBackups).catch(()=>{});},[]);
+  useEffect(()=>{api.driveFolderStatus().then(setFolder).catch(e=>setMessage(e.message));api.driveFolderList().then(setFolderFiles).catch(()=>{});},[]);
+  useEffect(()=>{api.cloudPeerStatus().then(setPeerStatus).catch(()=>{});},[]);
+  useEffect(()=>{if(typeof api.storageStatus==='function')api.storageStatus().then(setStorageStatus).catch(e=>setMessage(e.message));},[]);
+  useEffect(()=>{if(typeof api.automationEngineStatus==='function')api.automationEngineStatus().then(setAutomationStatus).catch(e=>setMessage(e.message));},[]);
+  const operation=async(name,fn)=>{setBusy(name);setMessage('');try{await fn();}catch(e){setMessage(e.message||String(e));}finally{setBusy('');}};
+  const fetchBackups=async()=>{const items=await api.driveList();setBackups(items);};
+  const connect=()=>operation('connect',async()=>{await api.driveConnect(id.trim());setConnected(true);setMessage('حساب Google Drive متصل شد.');await fetchBackups();});
+  const upload=()=>operation('upload',async()=>{await api.driveUpload();await fetchBackups();setMessage('نسخه پشتیبان با موفقیت در Google Drive ذخیره شد.');});
+  const restore=()=>operation('restore',async()=>{const restored=await api.driveRestore(restoreId);onRestore(restored);});
+  const selectFolder=()=>operation('folder',async()=>{
+    const result=await api.chooseDriveFolder();
+    if(!result.canceled){setFolder(await api.driveFolderStatus());setFolderFiles(await api.driveFolderList());setMessage('پوشه ذخیره‌سازی انتخاب شد. همگام‌سازی اینترنتی این پوشه را برنامه Google Drive for desktop انجام می‌دهد.');}
+  });
+  const folderBackup=()=>operation('folder-backup',async()=>{
+    const result=await api.driveFolderBackup();
+    if(result?.name){setFolderFiles(await api.driveFolderList());setMessage('نسخه اطلاعات داخل پوشه همگام‌شده ثبت شد: '+result.name);}
+    else setMessage('ابتدا پوشه Google Drive for desktop را انتخاب و در ویندوز قابل‌دسترسی کنید.');
+  });
+  return <Modal title="پشتیبان‌گیری و انتقال اطلاعات" onClose={onClose} width={570}>
+    <div className="dialog-body cloud-panel">
+      <div className="cloud-hero"><div className="cloud-hero-icon"><Cloud size={27}/></div><div><strong>اطلاعات تو، در هر دو کامپیوتر</strong><p>نسخه پشتیبان را در فضای خصوصی برنامه در Google Drive ذخیره کن و در سیستم دوم بازیابی کن.</p></div></div>
+      <div className="cloud-state"><span className={'connection-dot '+(connected?'online':'')}/><span>{connected?'حساب Google Drive متصل است':'هنوز به حساب Google متصل نشده‌ای'}</span><small>{isDesktop?'برنامه ویندوز':'حالت پیش‌نمایش'}</small></div>
+      <div className="drive-simple"><strong><Cloud size={18}/> اتصال ساده با Google Drive for desktop</strong><p>۱. برنامه رسمی Google Drive for desktop را روی هر سیستم نصب و با حساب Google یکسان وارد شو. ۲. یک پوشه همگام‌شده برای مدار انتخاب کن. ۳. نسخه‌های بازیابی بدون تنظیم OAuth Client ID داخل همان پوشه نگهداری می‌شوند.</p><div className="drive-simple-actions"><button disabled={!!busy} className="btn primary" onClick={selectFolder}><FolderOpen size={17}/> انتخاب پوشه همگام‌شده</button>{folder.configured&&<button disabled={!!busy||!folder.available} className="btn secondary" onClick={folderBackup}><CloudUpload size={17}/> ذخیره نسخه حالا</button>}{folder.configured&&<button disabled={!!busy} className="btn secondary" onClick={()=>operation('list-folder',async()=>setFolderFiles(await api.driveFolderList()))}><RefreshCw size={15}/> فهرست نسخه‌ها</button>}</div>{folder.configured&&<div className="drive-path"><span className={folder.available?'positive':'warning'}>{folder.available?'پوشه در دسترس است':'پوشه در دسترس نیست'}</span><code dir="ltr">{folder.folder}</code></div>}{folderFiles.length>0&&<div className="drive-folder-files"><strong>نسخه‌های موجود در پوشه</strong>{folderFiles.slice(0,12).map(file=><div key={file.name}><small dir="ltr" title={file.name}>{file.name}</small><button disabled={!!busy} onClick={()=>operation('restore-folder',async()=>{if(!window.confirm('این نسخه جایگزین اطلاعات محلی می‌شود و از نسخه فعلی بکاپ ایمن گرفته خواهد شد. ادامه می‌دهید؟'))return;onRestore(await api.driveFolderRestore(file.name));})}>بازیابی</button></div>)}</div>}<small>Google Drive for desktop باید فایل‌ها را واقعاً با اینترنت همگام کند. این روش جایگزین سرور مشترک چندکاربره نیست؛ هنگامی که سرور قطع باشد، ویرایش‌ها در کلاینت صف می‌شوند و پس از اتصال دوباره با بررسی تعارض اعمال خواهند شد. فایل‌های SMB منتقل نمی‌شوند.</small></div>
+      <div className="drive-peer">
+        <strong><Users size={17}/> تبادل آزمایشی تغییرات هنگام قطع میزبان</strong>
+        <p>دو رایانه با همان حساب LAN، پوشه Drive همگام‌شده یکسان و کد جفت‌سازی مشترک می‌توانند تغییرات کارت‌های متفاوت را در زمان قطعی مبادله کنند. تعارض یک کارت متوقف و گزارش می‌شود. رمز جفت‌سازی در پوشه Drive ذخیره نمی‌شود.</p>
+        <small>{peerStatus.enabled?'تبادل پوشه‌ای روی این کلاینت فعال است':peerStatus.paired?'کد ذخیره شده است؛ پوشه یا اتصال کلاینت بررسی شود':'هنوز کد جفت‌سازی ثبت نشده است'}</small>
+        <div className="drive-simple-actions">
+          <button className="btn secondary" disabled={!!busy} onClick={()=>operation('peer-generate',async()=>{const result=await api.cloudPeerGenerate();setPeerCode(result.code);setShowPeerCode(true);setPeerStatus(result.status);setMessage('کد جدید ایجاد شد. آن را فقط با رایانه مورد اعتماد همان حساب LAN به اشتراک بگذار.');})}>ایجاد کد مشترک</button>
+          {peerStatus.paired&&<button className="btn secondary" disabled={!!busy} onClick={()=>operation('peer-forget',async()=>{setPeerStatus(await api.cloudPeerForget());setPeerCode('');setShowPeerCode(false);})}>غیرفعال‌کردن</button>}
+        </div>
+        <label>کد مشترک رایانه اول را اینجا وارد کن</label>
+        <div className="drive-simple-actions"><input dir="ltr" type="text" autoComplete="off" aria-label="کد جفت‌سازی" value={peerCode} onChange={e=>setPeerCode(e.target.value.trim())} placeholder="کد جفت‌سازی حداقل ۲۴ کاراکتری"/><button className="btn primary" disabled={!!busy||peerCode.length<24} onClick={()=>operation('peer-pair',async()=>{setPeerStatus(await api.cloudPeerConfigure(peerCode));setPeerCode('');setShowPeerCode(false);setMessage('کد جفت‌سازی روی این دستگاه ذخیره شد.');})}>ثبت کد</button></div>
+        {showPeerCode&&<small>کد بالا را پیش از بستن این پنجره روی رایانه دوم وارد کن. با ساخت کد جدید، رویدادهای امضاشده با کد قبلی دیگر قابل خواندن نیستند.</small>}
+        <small>محدودیت: فایل‌ها تا تأیید Google Drive for desktop روی دستگاه مقابل دیده نمی‌شوند؛ پوشه Drive خودبه‌خود مجوز LAN نمی‌دهد؛ حساب‌های مختلف، تغییر ساختار برد و فایل‌های SMB از این مسیر پشتیبانی نمی‌شوند. داده این مسیر رمزگذاری سرتاسری نشده و آزمایش دو سیستم واقعی هنوز انجام نشده است.</small>
+      </div>
+      {!connected&&<details className="drive-advanced"><summary>روش پیشرفته اتصال مستقیم Google API (اختیاری)</summary><div className="settings-field"><label>Google OAuth Desktop Client ID</label><input dir="ltr" placeholder="12345-....apps.googleusercontent.com" value={id} onChange={e=>setId(e.target.value)}/><p>فقط برای ساخت پشتیبان از Google API. یک‌بار باید از Google Cloud Console شناسه Desktop Client خودتان را تعریف کنید. واردکردن همان ایمیل بدون مجوز اپلیکیشن کافی نیست.</p><button className="btn secondary" disabled={!!busy||!id.trim()} onClick={connect}>{busy==='connect'?<LoaderCircle className="spin" size={16}/>:<Cloud size={16}/>} اتصال API Google</button></div></details>}
+      {connected&&<><div className="cloud-actions"><button className="btn primary" disabled={!!busy} onClick={upload}><CloudUpload size={17}/> ذخیره پشتیبان جدید</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('list',fetchBackups)}><CloudDownload size={17}/> نمایش نسخه‌ها</button></div><div className="backup-list"><h4>نسخه‌های موجود در Drive</h4>{backups.length?backups.map(b=><div className="backup-row" key={b.id}><div><FileText size={17}/><div><strong>{shortDate(b.createdAt)} · {new Date(b.createdAt).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'})}</strong><small>{b.name}</small></div></div><button onClick={()=>setRestoreId(b.id)}>بازیابی</button></div>):<p>نسخه‌ای یافت نشد. برای شروع یک پشتیبان جدید بساز.</p>}</div><button className="subtle-action" onClick={()=>operation('disconnect',async()=>{await api.driveDisconnect();setConnected(false);setBackups([]);})}>قطع اتصال Google</button></>}
+      {!!restoreId&&<div className="warning-strip"><strong>جایگزینی اطلاعات محلی</strong><p>اطلاعات فعلی با نسخه انتخاب‌شده جایگزین می‌شود. ابتدا یک کپی محلی از اطلاعات فعلی ذخیره خواهد شد.</p><div><button onClick={()=>setRestoreId('')} className="btn secondary">انصراف</button><button disabled={!!busy} className="btn primary" onClick={restore}>تأیید بازیابی</button></div></div>}
+      <div className="local-backups"><button className="btn secondary" onClick={()=>operation('export',async()=>{const result=await api.exportBackup();if(!result.canceled)setMessage('فایل پشتیبان ذخیره شد.');})}><Download size={16}/> خروجی JSON</button><button className="btn secondary" onClick={()=>operation('import',async()=>{if(!window.confirm('اطلاعات فعلی جایگزین شوند؟ یک کپی خودکار از داده‌های قبلی نگهداری می‌شود.'))return;const result=await api.importBackup();if(result.state)onRestore(result.state);})}><ArrowDownToLine size={16}/> ورود JSON</button></div>
+      <div className="local-backup-section"><h3><HardDriveDownload size={17}/> نسخه‌های پشتیبان روی این کامپیوتر</h3><div className="local-backups"><button className="btn primary" disabled={!!busy} onClick={()=>operation('local',async()=>{await api.createLocalBackup();setLocalBackups(await api.listLocalBackups());setMessage('نسخه پشتیبان محلی ایجاد شد.');})}>ایجاد پشتیبان محلی</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('load-local',async()=>setLocalBackups(await api.listLocalBackups()))}>تازه‌سازی فهرست</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('attachments-backup',async()=>{const result=await api.attachmentBackup();setMessage('پشتیبان مجزای '+result.blobs+' فایل پیوست روی میزبان ایجاد شد: '+result.path);})}>بکاپ جداگانه پیوست‌ها</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('sqlite-export',async()=>{const result=await api.createUnifiedSqliteBackup();setMessage('خروجی آزمایشی SQLite یکپارچه ایجاد شد: '+result.path);})}>خروجی SQLite یکپارچه</button></div>{localBackups.map(item=><div className="backup-row" key={item.name}><div><FileText size={16}/><small dir="ltr">{item.name}</small></div><button disabled={!!busy} onClick={()=>operation('restore-local',async()=>{if(!window.confirm('این نسخه بازیابی و داده فعلی جایگزین شود؟ از داده فعلی نسخه ایمنی ساخته می‌شود.'))return;onRestore(await api.restoreLocalBackup(item.name));})}>بازیابی</button></div>)}</div>
+      <aside role="note" className="warning-strip"><strong>محدوده واقعی پشتیبان‌ها</strong><p>خروجی JSON و Google Drive فقط اطلاعات اصلی کارها و بردها را منتقل می‌کنند. فایل SQLite محلی دامنه‌های ثبت‌شده در پایگاه داده را دارد، اما فایل‌های پیوست و حساب‌های LAN را شامل نمی‌شود. برنامه‌ریزی شخصی در حافظه همین دستگاه ذخیره می‌شود و در هیچ‌یک از این خروجی‌ها نیست. برای بازیابی گسترده همراه با پیوست‌ها از ابزار مستقل maintenance_recovery.py فقط پس از توقف کامل برنامه و نویسنده‌های شبکه استفاده کنید؛ آرشیو آن رمزنگاری نشده است.</p></aside>
+      {storageStatus&&<section className="unified-storage-panel"><h3><HardDriveDownload size={17}/> ذخیره‌سازی یکپارچه SQLite</h3>
+        <p className={storageStatus.mode==='sqlite'?'positive':'warning'}>وضعیت میزبان: {storageStatus.mode==='sqlite'?'SQLite فعال':'ذخیره‌سازی فایل‌های JSON'}{storageStatus.revision!=null?' · نسخه '+storageStatus.revision:''}</p>
+        {storageStatus.mode!=='sqlite'&&<><p>فعال‌سازی، اطلاعات فعلی را با پشتیبان ایمنی به پایگاه داده SQLite منتقل می‌کند. بازگشت مستقیم به ذخیره‌سازی JSON از این پنجره فراهم نیست. پیش از اقدام از داده‌ها نسخه پشتیبان مستقل نگهدارید.</p>
+          <button className="btn secondary" disabled={!!busy||!storageStatus.ready||typeof api.enableUnifiedStorage!=='function'} onClick={()=>operation('enable-storage',async()=>{
+            if(!window.confirm('ذخیره‌سازی SQLite برای این میزبان فعال شود؟ مهاجرت یک‌طرفه است؛ ابتدا از اطلاعات فعلی نسخه پشتیبان مستقل تهیه کنید. ادامه؟'))return;
+            const result=await api.enableUnifiedStorage();setStorageStatus(result);setAutomationStatus(await api.automationEngineStatus());setMessage('SQLite فعال شد؛ داده‌ها را دوباره از میزبان دریافت کنید.');
+          })}>فعال‌سازی ذخیره‌سازی یکپارچه</button>
+          {!storageStatus.ready&&<small className="warning">فعال‌سازی اکنون از طرف میزبان مجاز نیست.</small>}
+        </>}
+      </section>}
+      {automationStatus&&<section className="unified-storage-panel"><h3><Activity size={17}/> موتور صف و گزارش اجرای قوانین</h3>
+        <p>وضعیت: {automationStatus.mode==='active'?'فعال':automationStatus.mode==='disabled'?'در انتظار فعال‌سازی':automationStatus.mode==='remote'?'فقط میزبان':'ذخیره‌سازی قدیمی'}؛ در صف: {automationStatus.pending||0}؛ متوقف‌شده: {automationStatus.dead||0}</p>
+        {automationStatus.mode==='disabled'&&<><small className="warning">فعال‌سازی یک‌طرفه است. نسخه‌های قدیمی EXE نمی‌توانند داده جدید دارای ژورنال اتوماسیون را باز کنند؛ از پایگاه داده پیش از فعال‌سازی یک نسخه پشتیبان تهیه می‌شود.</small>
+          <button className="btn secondary" disabled={!!busy||!automationStatus.ready} onClick={()=>operation('enable-automation',async()=>{
+            if(!window.confirm('موتور جدید صف اتوماسیون فعال شود؟ بازگشت با EXE قبلی بدون بازیابی نسخه پیش از فعال‌سازی ممکن نیست. ادامه می‌دهید؟'))return;
+            const response=await api.enableAutomationEngine();setAutomationStatus(response);setMessage('موتور رویدادها فعال شد و پشتیبان اولیه ثبت شد: '+response.preActivationBackup);
+          })}>فعال‌سازی موتور اتوماسیون با پشتیبان ایمنی</button></>}
+      </section>}
+      {message&&<div className="inline-message" role="status">{message}</div>}
+      <p className="cloud-note"><ShieldCheck size={15}/> روش API از پوشه خصوصی appData استفاده می‌کند؛ روش Drive for desktop از پوشه انتخابی داخل ویندوز. حساب‌های LAN و رمزها در این پشتیبان‌ها قرار نمی‌گیرند.</p>
+    </div>
+  </Modal>;
+}
+
+function IntegrationKeyPanel({api,users,onClose}){
+  const [username,setUsername]=useState(users[0]?.username||'');
+  const [writeAccess,setWriteAccess]=useState(false);
+  const [issued,setIssued]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const issue=async()=>{
+    setBusy(true);setError('');setIssued(null);
+    try{setIssued(await api.integrationIssueKey(username,writeAccess?['read','write']:['read'],3600));}
+    catch(e){setError(e.message||String(e));}
+    finally{setBusy(false);}
+  };
+  const revoke=async()=>{
+    if(!issued)return;
+    setBusy(true);setError('');
+    try{await api.integrationRevokeKey(issued.keyId);setIssued(null);}
+    catch(e){setError(e.message||String(e));}
+    finally{setBusy(false);}
+  };
+  return <Modal title="کلید API یکپارچه‌سازی" onClose={onClose} width={580}>
+    <div className="dialog-body">
+      <p>این کلید فقط با شبکه HTTPS فعال معتبر است، یک ساعت عمر دارد و پس از بستن این پنجره دیگر قابل نمایش نیست. آن را فقط در برنامه مورد اعتماد نگهداری کنید.</p>
+      <label>حساب هدف<select disabled={busy||!!issued} value={username} onChange={e=>setUsername(e.target.value)}>{users.map(u=><option value={u.username} key={u.username}>{u.displayName||u.username} ({u.role})</option>)}</select></label>
+      <label className="setting-toggle"><input type="checkbox" disabled={busy||!!issued} checked={writeAccess} onChange={e=>setWriteAccess(e.target.checked)}/><span>اجازه ویرایش عنوان کارت‌ها (بدون دسترسی مالی)</span></label>
+      {!issued&&<button className="btn primary" disabled={busy||!username} onClick={issue}>ساخت کلید یک‌ساعته</button>}
+      {issued&&<div role="status" className="inline-message"><p>کلید فقط همین یک‌بار نمایش داده می‌شود:</p><textarea dir="ltr" aria-label="کلید API ساخته‌شده" readOnly value={issued.key} rows={3} onFocus={e=>e.target.select()}/><small>شناسه: {issued.keyId} | مسیر: /integrations/v1/</small><div><button className="btn secondary" disabled={busy} onClick={revoke}>ابطال کلید</button></div></div>}
+      {error&&<p role="alert" className="error-toast">{error}</p>}
+    </div>
+  </Modal>;
+}
+
+function CalendarFilePanel({api,projects,boards,onImport,onClose}){
+  const eligible=projects.filter(p=>boards.some(b=>b.projectId===p.id&&!b.archived&&b.stages?.length));
+  const [project,setProject]=useState(eligible[0]?.id||'');
+  const [preview,setPreview]=useState(null);
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const read=async e=>{
+    setPreview(null);setError('');
+    const file=e.target.files?.[0];if(!file)return;
+    if(file.size>2000000){setError('حجم فایل ICS بیش از حد مجاز است.');return;}
+    setBusy(true);
+    try{setPreview(await api.calendarImportPreview(await file.text()));}
+    catch(err){setError(err.message||String(err));}
+    finally{setBusy(false);}
+  };
+  const exportFile=async()=>{
+    setError('');setBusy(true);
+    try{
+      const content=await api.calendarExportIcs();
+      const blob=new Blob([content],{type:'text/calendar;charset=utf-8'});
+      const href=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=href;a.download='madar-calendar.ics';a.click();
+      setTimeout(()=>URL.revokeObjectURL(href),1000);
+    }catch(err){setError(err.message||String(err));}finally{setBusy(false);}
+  };
+  return <Modal title="تبادل فایل تقویم ICS" onClose={onClose} width={580}>
+    <div className="dialog-body">
+      <p>خروجی از عنوان و موعد کارت‌های قابل‌مشاهده ساخته می‌شود. فایل‌های ICS خروجی Google Calendar و Outlook قابل بررسی و ورود هستند؛ اتصال و همگام‌سازی مستقیم انجام نمی‌شود.</p>
+      <button className="btn secondary" disabled={busy} onClick={exportFile}><Download size={16}/> دریافت فایل ICS</button>
+      <label>انتخاب فایل تقویم<input type="file" aria-label="فایل ICS" accept=".ics,text/calendar" disabled={busy} onChange={read}/></label>
+      {preview&&<><p role="status">{preview.events.length} رویداد قابل ورود، {preview.skipped.length} مورد کنار گذاشته‌شده.</p>
+        <label>پروژه مقصد<select value={project} onChange={e=>setProject(e.target.value)}>{eligible.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <small>فقط عنوان و تاریخ روز رویداد انتقال می‌یابد. ساعت، تکرار و منطقه زمانی در کارت اعمال نمی‌شوند. موارد تکراری در مقصد دوباره ساخته نخواهند شد.</small>
+        <button className="btn primary" disabled={busy||!project||!preview.events.length} onClick={()=>{
+          try{onImport(project,preview.events);onClose();}
+          catch(err){setError(err.message||String(err));}
+        }}>افزودن به برد و صف ذخیره</button>
+      </>}
+      {error&&<p role="alert" className="inline-message">{error}</p>}
+    </div>
+  </Modal>;
+}
+
+export default function App(){
+  const [data,setData]=useState(null);
+  const [selected,setSelected]=useState('all');
+  const [boardId,setBoardId]=useState(null);
+  const [workspaceId,setWorkspaceId]=useState(null);
+  const [workspaceOpen,setWorkspaceOpen]=useState(false);
+  const [trashOpen,setTrashOpen]=useState(false);
+  const [boardModal,setBoardModal]=useState(false);
+  const [boardName,setBoardName]=useState('');
+  const [renameBoardId,setRenameBoardId]=useState(null);
+  const [draftBoardId,setDraftBoardId]=useState('');
+  const [mode,setMode]=useState('board');
+  const [search,setSearch]=useState('');
+  const [filter,setFilter]=useState('all');
+  const [advanced,setAdvanced]=useState({priority:'all',member:'all',label:'all',status:'all',due:'all',attachments:false});
+  const [editorId,setEditorId]=useState(null);
+  const [adding,setAdding]=useState(null);
+  const [projectModal,setProjectModal]=useState(false);
+  const [projectSettings,setProjectSettings]=useState(null);
+  const [projectName,setProjectName]=useState('');
+  const [cloudOpen,setCloudOpen]=useState(false);
+  const [settingsOpen,setSettingsOpen]=useState(false);
+  const [lanOpen,setLanOpen]=useState(false);
+  const [notificationsOpen,setNotificationsOpen]=useState(false);
+  const [activityOpen,setActivityOpen]=useState(false);
+  const [financeOpen,setFinanceOpen]=useState(false);
+  const [financeHubOpen,setFinanceHubOpen]=useState(false);
+  const [accountingOpen,setAccountingOpen]=useState(false);
+  const [rialJournalOpen,setRialJournalOpen]=useState(false);
+  const [rialCompanyId,setRialCompanyId]=useState('');
+  const [rialFiscalPeriodId,setRialFiscalPeriodId]=useState('');
+  const [rialFiscalStart,setRialFiscalStart]=useState('');
+  const [rialFiscalEnd,setRialFiscalEnd]=useState('');
+  const [rialActivationNotice,setRialActivationNotice]=useState('');
+  const [rialRefresh,setRialRefresh]=useState(0);
+  const [accountingSource,setAccountingSource]=useState(null);
+  const [financeHubProject,setFinanceHubProject]=useState('');
+  const [profitVisible,setProfitVisible]=useState(false);
+  const [rulesOpen,setRulesOpen]=useState(false);
+  const [reportingOpen,setReportingOpen]=useState(false);
+  const [trelloImportOpen,setTrelloImportOpen]=useState(false);
+  const [portableExportOpen,setPortableExportOpen]=useState(false);
+  const [plannerOpen,setPlannerOpen]=useState(false);
+  const [integrationOpen,setIntegrationOpen]=useState(false);
+  const [calendarInteropOpen,setCalendarInteropOpen]=useState(false);
+  const [lanStatus,setLanStatus]=useState({mode:'solo',user:{role:'admin'}});
+  const {mode:interfaceMode,setMode:setInterfaceMode,persisted:interfaceModePersisted,accountReady:interfaceModeAccountReady}=useInterfaceModePreference(lanStatus);
+  const [users,setUsers]=useState([]);
+  const [profileOpen,setProfileOpen]=useState(false);
+  const [syncing,setSyncing]=useState(false);
+  const [lastSync,setLastSync]=useState(null);
+  const [syncInfo,setSyncInfo]=useState({mode:'solo',connected:true,pending:false,folder:{configured:false}});
+  const [calendar,setCalendar]=useState('jalali');
+  const [toast,setToast]=useState('');
+  const [savingError,setSavingError]=useState('');
+  const [pendingRecovery,setPendingRecovery]=useState(false);
+  const [draftTitle,setDraftTitle]=useState('');
+  const [draftPriority,setDraftPriority]=useState('medium');
+  const [draftProject,setDraftProject]=useState('p-personal');
+  const [draftStatus,setDraftStatus]=useState('inbox');
+  const [draftTemplate,setDraftTemplate]=useState(null);
+  const ready=useRef(false);
+  const dirty=useRef(false);
+  const blocked=useRef(false);
+  const saving=useRef(false);
+  const lastSaved=useRef('');
+  const refresh=async(force=false)=>{
+    if((dirty.current||saving.current||blocked.current)&&!force)return;
+    const fresh=normalize(await (api.getStateForUi?api.getStateForUi():api.getState()));
+    setData(previous=>!previous||JSON.stringify(previous)!==JSON.stringify(fresh)?fresh:previous);
+    lastSaved.current=JSON.stringify(fresh);
+    setLastSync(new Date());
+    setSavingError('');
+  };
+  const refreshLan=async()=>setLanStatus(await api.lanStatus());
+  const refreshSyncStatus=async()=>setSyncInfo(await api.syncStatus());
+  const refreshUsers=async()=>setUsers(await api.lanProfiles());
+  useEffect(()=>{Promise.all([api.getStateForUi?api.getStateForUi():api.getState(),api.lanStatus(),api.getPreferences(),api.lanProfiles(),api.syncStatus()]).then(([s,lan,prefs,members,sync])=>{
+    const normalized=normalize(s);setData(normalized);lastSaved.current=JSON.stringify(normalized);setLanStatus(lan);setUsers(members);setCalendar(prefs.calendar||'jalali');setLastSync(new Date());ready.current=true;
+    setSyncInfo(sync);
+  }).catch(e=>setSavingError('خطا در خواندن اطلاعات: '+e.message));},[]);
+  useEffect(()=>{
+    if(!ready.current||!data||!dirty.current||blocked.current)return;
+    const t=setTimeout(async()=>{
+      if(saving.current||!dirty.current)return;
+      saving.current=true;
+      const snapshot=data;
+      dirty.current=false;
+      try{
+        const result=await api.saveState(snapshot);
+        lastSaved.current=JSON.stringify(snapshot);
+        if(result?.revision||result?.localRevision){
+          setData(current=>({...current,...(result.revision?{__remoteRevision:result.revision}:{}),...(result.localRevision?{__localRevision:result.localRevision}:{})}));
+          if(dirty.current)setData(current=>({...current}));
+        }else if(dirty.current){
+          // Edits made during the previous request still need their own save.
+          setData(current=>({...current}));
+        }
+        setLastSync(new Date());
+        refreshSyncStatus().catch(()=>{});
+        setSavingError('');
+      }
+      catch(e){
+        dirty.current=false;
+        blocked.current=true;
+        setPendingRecovery(true);
+        setSavingError('ذخیره ناموفق بود: '+e.message+' | قبل از ادامه تغییرات، اتصال و داده‌ها را بررسی کن.');
+        try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(snapshot));}catch{}
+      }finally{saving.current=false;}
+    },320);
+    return()=>clearTimeout(t);
+  },[data]);
+  useEffect(()=>{
+    const timer=setInterval(()=>{if(ready.current&&!dirty.current&&!saving.current&&!blocked.current){
+      Promise.all([refresh(),refreshSyncStatus(),refreshUsers(),refreshLan()]).catch(e=>setSavingError('همگام‌سازی انجام نشد: '+e.message));
+    }},15000);
+    return()=>clearInterval(timer);
+  },[]);
+  useEffect(()=>{document.documentElement.dataset.theme=data?.settings?.theme==='dark'?'dark':'light';},[data?.settings?.theme]);
+  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
+  const tasks=data?.tasks||[];
+  const projects=data?.projects||[];
+  const stages=data?.stages||DEFAULT_STAGES;
+  const priorities=priorityDefs(data?.settings);
+  const boards=data?.boards||[];
+  const workspaces=data?.workspaces||[];
+  const activeWorkspace=workspaces.find(w=>w.id===workspaceId&&!w.archived)
+    ||workspaces.find(w=>!w.archived)||null;
+  const activeWorkspaceId=activeWorkspace?.id||null;
+  const workspaceBoards=boards.filter(b=>!b.archived&&b.workspaceId===activeWorkspaceId);
+  const workspaceProjectIds=new Set(workspaceBoards.map(b=>b.projectId));
+  const visibleProjects=boards.length?projects.filter(p=>workspaceProjectIds.has(p.id)):projects;
+  const activeBoard=(workspaceBoards.find(b=>b.id===boardId&&b.projectId===selected)
+                     ||(selected==='all'?null:workspaceBoards.find(b=>b.projectId===selected)))||null;
+  const viewStages=activeBoard?activeBoardLists(activeBoard):stages;
+  const canManage=lanStatus?.user?.role==='admin';
+  const canViewStandalone=canManage||
+    lanStatus?.user?.financeView===true||
+    (lanStatus?.user?.role==='editor'&&lanStatus?.user?.financeEdit===true);
+  const canEdit=lanStatus?.mode==='client'
+    ?(['admin','editor'].includes(lanStatus?.user?.role))
+    :lanStatus?.user?.role!=='viewer';
+  const show=feature=>isInterfaceFeatureVisible(interfaceMode,feature,{canManage,canEdit});
+  useEffect(()=>{
+    if(interfaceMode==='basic'){
+      setMode(previous=>previous==='time'?'board':previous);
+      setReportingOpen(false);setPlannerOpen(false);setActivityOpen(false);
+      setWorkspaceOpen(false);setRulesOpen(false);setTrelloImportOpen(false);
+      setCalendarInteropOpen(false);setIntegrationOpen(false);
+      setPortableExportOpen(false);
+    }
+    if(interfaceMode!=='finance'){
+      setFinanceOpen(false);setFinanceHubOpen(false);setAccountingOpen(false);
+      setRialJournalOpen(false);
+      setProfitVisible(false);
+    }
+  },[interfaceMode]);
+  const manualRefresh=async()=>{
+    if(dirty.current||saving.current){setToast('تغییرات در حال ذخیره هستند؛ پس از ذخیره دوباره تازه‌سازی کنید.');return;}
+    if(blocked.current){setToast('ابتدا خطای ذخیره و تداخل را بررسی کنید.');return;}
+    setSyncing(true);
+    try{await Promise.all([refresh(),refreshLan(),refreshUsers(),refreshSyncStatus()]);setToast('آخرین اطلاعات موجود بارگیری شد.');}
+    catch(e){setSavingError('خطای تازه‌سازی: '+e.message);}
+    finally{setSyncing(false);}
+  };
+  useEffect(()=>{setProfitVisible(false);},[selected,boardId]);
+  useEffect(()=>{
+    const hide=()=>setProfitVisible(false);
+    window.addEventListener('blur',hide);
+    const onVisibility=()=>{if(document.hidden)hide();};
+    document.addEventListener('visibilitychange',onVisibility);
+    return()=>{window.removeEventListener('blur',hide);document.removeEventListener('visibilitychange',onVisibility);};
+  },[]);
+  // The Bridge/LAN already scopes and redacts this state; the index additionally
+  // requires the explicit list of project IDs in that authenticated view.
+  const boardIndex=useMemo(()=>data?createBoardPerformanceIndex(data,{
+    permittedProjectIds:(data.projects||[]).map(p=>p.id)
+  }):null,[data]);
+  const filtered=useMemo(()=>{
+    if(!boardIndex)return [];
+    const candidates=boardIndex.selectActiveCards({
+      workspaceId:activeWorkspaceId||'workspace-legacy',
+      projectId:selected==='all'?undefined:selected,
+      boardId:activeBoard?.id,
+      highOnly:filter==='high',withReports:filter==='with-reports'
+    });
+    const found=search.trim()?new Set(filterTasks(candidates,{query:search,projects,users,stages:viewStages}).map(t=>t.id)):null;
+    return candidates.filter(t=>(!found||found.has(t.id))&&matchAdvanced(t,advanced,activeBoard?.id));
+  },[boardIndex,activeWorkspaceId,projects,users,viewStages,selected,activeBoard?.id,search,filter,advanced]);
+  const boardGroups=useMemo(()=>boardIndex?boardIndex.groupActiveCards({
+    workspaceId:activeWorkspaceId||'workspace-legacy',
+    projectId:selected==='all'?undefined:selected,
+    boardId:activeBoard?.id,
+    matchIds:new Set(filtered.map(t=>t.id))
+  }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
+  const counts=useMemo(()=>({
+    all:filtered.length,active:filtered.filter(t=>t.status==='active').length,
+    review:filtered.filter(t=>t.status==='review').length,done:filtered.filter(t=>t.status==='done').length
+  }),[filtered]);
+  const selectedProject=projects.find(p=>p.id===selected);
+  const activeTask=tasks.find(t=>t.id===editorId);
+  const draftBoards=workspaceBoards.filter(b=>b.projectId===draftProject);
+  const draftSelectedBoard=draftBoards.find(b=>b.id===draftBoardId)||draftBoards[0];
+  const draftStages=draftSelectedBoard?activeBoardLists(draftSelectedBoard):stages;
+  const change=next=>{if(!canEdit)return;dirty.current=true;setData(current=>{
+    const newState=typeof next==='function'?next(current):next;
+    if(blocked.current){try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}}
+    return newState;
+  });setProfitVisible(false);};
+  const changeAdmin=next=>{if(!canManage)return;change(next);};
+  const updateBoardListArchive=(listId,restore=false)=>{
+    if(!canManage||!activeBoard)return;
+    const action=restore?restoreListState:archiveListState;
+    const options={canManage:true};
+    try{
+      if(action(data,activeBoard.id,listId,options)===data)return;
+      changeAdmin(s=>{try{return action(s,activeBoard.id,listId,options);}catch{return s;}});
+      setToast(restore?'ستون و کارت‌های آن بازیابی شدند.':'ستون بایگانی شد؛ کارت‌ها و هزینه‌ها حفظ شدند.');
+    }catch(e){setToast('عملیات ستون انجام نشد: '+e.message);}
+  };
+  const selectWorkspace=id=>{setWorkspaceId(id);setSelected('all');setBoardId(null);setFilter('all');setAdvanced(a=>({...a,status:'all'}));};
+  const reorderCard=(cardId,toListId,anchorCardId=null,placement='end')=>{
+    if(!canEdit||!activeBoard)return;
+    if(!activeBoardLists(activeBoard).some(s=>s.id===toListId))return;
+    const card=tasks.find(t=>t.id===cardId);
+    if(!card||card.boardId!==activeBoard.id)return;
+    const request={cardId,toListId,toBoardId:activeBoard.id,anchorCardId,placement};
+    try{
+      if(moveCardInState(data,request)===data)return;
+      // Keep the host's full-state CAS and recovery path authoritative.
+      change(s=>{try{return moveCardInState(s,request);}catch{return s;}});
+    }catch(e){setToast('جابه‌جایی کارت انجام نشد: '+e.message);}
+  };
+  const reorderStage=(sourceId,targetId)=>{
+    if(!canManage||sourceId===targetId)return;
+    changeAdmin(s=>activeBoard?
+      {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?{...b,stages:reorderStageArray(b.stages,sourceId,targetId)}:b)}:
+      {...s,stages:reorderStageArray(s.stages,sourceId,targetId)});
+  };
+  const updateStageColor=(stageId,color)=>{
+    if(!canManage||!/^#[0-9a-f]{6}$/i.test(color))return;
+    changeAdmin(s=>activeBoard?
+      {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?{...b,stages:b.stages.map(stage=>stage.id===stageId?{...stage,color}:stage)}:b)}:
+      {...s,stages:s.stages.map(stage=>stage.id===stageId?{...stage,color}:stage)});
+  };
+  const taskUpdate=(id,fields)=>change(s=>{
+    const original=s.tasks.find(t=>t.id===id);
+    const board=s.boards?.find(b=>b.id===original?.boardId);
+    const requestedList=fields.listId||(fields.status&&board?.stages.some(x=>x.id===fields.status)?fields.status:null);
+    if(requestedList&&board?.stages.some(stage=>stage.id===requestedList&&stage.archived===true)&&requestedList!==original?.listId)return s;
+    const movingWithinBoard=original&&board&&requestedList&&requestedList!==original.listId
+      &&(!fields.boardId||fields.boardId===original.boardId)
+      &&(!fields.projectId||fields.projectId===original.projectId);
+    const base=movingWithinBoard?moveCardInState(s,{cardId:id,toListId:requestedList,placement:'end'}):s;
+    return {...base,tasks:base.tasks.map(t=>{
+    if(t.id!==id)return t;
+    let changed={...t,...fields,updatedAt:now()};
+    if(fields.projectId&&fields.projectId!==t.projectId){
+      const board=base.boards?.find(b=>b.projectId===fields.projectId&&!b.archived);
+      if(!board)return t;
+      const {cardOrder:oldOrder,...relocated}=moveCardToBoard({...changed,boardId:t.boardId,projectId:fields.projectId},board,base.stages);
+      changed={...relocated,updatedAt:changed.updatedAt};
+    }else if(fields.boardId&&fields.boardId!==t.boardId){
+      const board=base.boards?.find(b=>b.id===fields.boardId);
+      const {cardOrder:oldOrder,...relocated}=moveCardToBoard({...changed,boardId:t.boardId},board,base.stages);
+      changed={...relocated,updatedAt:changed.updatedAt};
+    }else if(fields.listId||fields.status){
+      const stageBoard=base.boards?.find(b=>b.id===t.boardId);
+      changed=stageBoard?boardStageUpdate(changed,stageBoard,base.stages,fields.listId||fields.status):{...changed,status:fields.status||fields.listId};
+    }
+    return changed;
+  })};});
+  const toggleChecklistStep=(taskId,stepId)=>change(s=>({...s,tasks:s.tasks.map(t=>t.id===taskId?
+    {...t,checklist:t.checklist.map(c=>c.id===stepId?{...c,done:!c.done}:c),updatedAt:now()}:t)}));
+  const cardTrashOptions=()=>canManage?{canManage:true}:{canEdit:true,grantedProjectIds:projects.map(p=>p.id)};
+  const deleteTask=id=>{
+    if(!canEdit)return;
+    try{
+      const options=cardTrashOptions();
+      if(softDeleteCardState(data,id,options)===data)return;
+      change(s=>softDeleteCardState(s,id,options));
+      setEditorId(null);
+      setToast('کارت به زباله‌دان منتقل شد؛ هزینه‌ها و اطلاعات آن حفظ شدند.');
+    }catch(e){setToast('انتقال به زباله‌دان انجام نشد: '+e.message);}
+  };
+  const restoreTrashedCard=id=>{
+    if(!canEdit)return;
+    try{
+      const options=cardTrashOptions();
+      if(restoreDeletedCardState(data,id,options)===data)return;
+      change(s=>restoreDeletedCardState(s,id,options));
+      setToast('کارت با تمام اطلاعاتش بازیابی شد.');
+    }catch(e){setToast('بازیابی کارت انجام نشد: '+e.message);}
+  };
+  const trashCards=tasks.filter(t=>t.deleted===true &&
+    projects.some(p=>p.id===t.projectId) &&
+    (!t.boardId||boards.some(b=>b.id===t.boardId&&b.workspaceId===activeWorkspaceId)));
+  const createTask=()=>{
+    if(!draftTitle.trim())return;
+    const template=draftTemplate;
+    const targetBoard=workspaceBoards.find(b=>b.id===draftBoardId&&b.projectId===draftProject)
+      ||(activeBoard?.projectId===draftProject?activeBoard:null)
+      ||workspaceBoards.find(b=>b.projectId===draftProject);
+    const availableStages=targetBoard?activeBoardLists(targetBoard):stages;
+    const stage=availableStages.some(s=>s.id===draftStatus)?draftStatus:availableStages[0]?.id;
+    if(!stage)return;
+    const t={id:uid(),projectId:draftProject,boardId:targetBoard?.id,listId:stage,title:draftTitle.trim(),description:template?.description||'',status:legacyStatusForStage(stage,stages)||stage,priority:draftPriority,dueDate:'',labels:template?[...template.labels]:[],checklist:template?template.checklist.map(s=>({...s,id:uid(),done:false,cost:0})):[],reports:[],assignees:[],costEnabled:null,fileLinks:[],estimatedMinutes:template?.estimatedMinutes||0,actualMinutes:0,cost:0,createdAt:now(),updatedAt:now()};
+    change(s=>{const next={...s,tasks:[t,...s.tasks]};return targetBoard?.id?moveCardInState(next,{cardId:t.id,toListId:stage,placement:'start'}):next;});
+    setAdding(null);setDraftTitle('');setDraftTemplate(null);setEditorId(t.id);setToast('کار جدید اضافه شد.');
+  };
+  const duplicateTask=template=>{
+    const board=boards.find(b=>b.id===template.boardId);
+    if(board?.archived){setToast('ابتدا برد بایگانی‌شده را بازیابی کنید.');return;}
+    const draft=duplicateCard(template,uid(),now(),uid);
+    const {cardOrder:staleOrder,...t}=draft;
+    const sourceListActive=board?.stages.some(stage=>stage.id===t.listId&&stage.archived!==true);
+    if(board&&!sourceListActive){
+      const fallback=activeBoardLists(board)[0];
+      if(!fallback){setToast('برد مقصد ستون فعال ندارد.');return;}
+      t.listId=fallback.id;
+      t.status=legacyStatusForStage(fallback.id,stages)||fallback.id;
+    }
+    change(s=>{
+      const next={...s,tasks:[t,...s.tasks]};
+      if(!board||!t.listId)return next;
+      const placement=sourceListActive?'after':'start';
+      try{return moveCardInState(next,{cardId:t.id,toListId:t.listId,
+        ...(placement==='after'?{anchorCardId:template.id}:{}),placement});}
+      catch{return next;}
+    });
+    setEditorId(t.id);setToast('تسک مشابه ساخته شد؛ هزینه‌ها و مراحل تکمیل‌شده منتقل نشدند.');
+  };
+  const openAdd=status=>{
+    const projectId=selected==='all'?(visibleProjects[0]?.id||''):selected;
+    const board=activeBoard?.projectId===projectId?activeBoard:workspaceBoards.find(b=>b.projectId===projectId);
+    const available=board?activeBoardLists(board):stages;
+    setDraftBoardId(board?.id||'');setDraftStatus(status&&available.some(s=>s.id===status)?status:available[0]?.id||stages[0]?.id);
+    setDraftPriority('medium');setDraftProject(projectId);setDraftTitle('');setDraftTemplate(null);setAdding(true);
+  };
+  const createProject=()=>{
+    if(!projectName.trim())return;
+    const p={id:uid(),name:projectName.trim(),color:['#5672ca','#3d977e','#b27cc2','#d39558'][projects.length%4],price:0,costEnabled:!!data.settings.costDefault,fileLinks:[]};
+    const b=makeBoard(p,activeWorkspaceId||'workspace-legacy',stages);
+    change(s=>({...s,projects:[...s.projects,p],boards:[...(s.boards||[]),b]}));
+    setSelected(p.id);setBoardId(b.id);setProjectModal(false);setProjectName('');setToast('پروژه ساخته شد.');
+  };
+  const createBoard=()=>{
+    if(!boardName.trim()||!selectedProject)return;
+    const board=makeBoard({...selectedProject,name:boardName.trim()},
+       activeWorkspaceId||'workspace-legacy',viewStages);
+    changeAdmin(s=>({...s,boards:[...(s.boards||[]),board]}));
+    setBoardId(board.id);setBoardName('');setBoardModal(false);setToast('برد جدید در پروژه ساخته شد.');
+  };
+  const renameBoard=()=>{
+    if(!renameBoardId||!boardName.trim())return;
+    changeAdmin(s=>renameBoardState(s,renameBoardId,boardName));
+    setRenameBoardId(null);setBoardName('');setToast('نام برد تغییر کرد.');
+  };
+  const archiveBoard=()=>{
+    if(!activeBoard||!window.confirm('برد و کارت‌های فعال آن بایگانی شوند؟ از فهرست بردهای بایگانی‌شده می‌توان آن‌ها را بازیابی کرد.'))return;
+    changeAdmin(s=>archiveBoardState(s,activeBoard.id));
+    setBoardId(null);setToast('برد بایگانی شد و قابل بازیابی است.');
+  };
+  const restoreBoard=id=>{
+    changeAdmin(s=>restoreBoardState(s,id));setBoardId(id);setToast('برد و کارت‌های بایگانی‌شده همراه آن بازیابی شدند.');
+  };
+  const updateProject=()=>{
+    if(!projectName.trim()||!projectSettings)return;
+    change(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,name:projectName.trim()}:p)}));
+    setProjectSettings(null);setProjectName('');setToast('نام پروژه تغییر کرد.');
+  };
+  const deleteProject=()=>{
+    if(!projectSettings||projects.length<=1)return;
+    // Do not silently re-parent tasks: their invoices, purchase sources and
+    // accounting journals retain the original legal project association.
+    if(tasks.some(t=>t.projectId===projectSettings)){
+      setToast('حذف پروژه دارای کارت مجاز نیست؛ کارت‌ها و اسناد مالی آن باید حفظ شوند.');
+      return;
+    }
+    const fallback=projects.find(p=>p.id!==projectSettings);
+    if(!fallback)return;
+    const deletedBoards=new Set(boards.filter(b=>b.projectId===projectSettings).map(b=>b.id));
+    change(s=>({...s,
+      projects:s.projects.filter(p=>p.id!==projectSettings),
+      boards:s.boards.filter(b=>b.projectId!==projectSettings),
+      templates:(s.templates||[]).filter(t=>!deletedBoards.has(t.boardId)),
+    }));
+    if(selected===projectSettings)setSelected('all');
+    setProjectSettings(null);setProjectName('');
+    setToast('پروژه خالی حذف شد؛ هیچ کارت یا سندی جابه‌جا نشد.');
+  };
+  const updateSettingsForBoard=fn=>{
+    if(!activeBoard){changeAdmin(fn);return;}
+    changeAdmin(s=>{
+      const localTasks=s.tasks.filter(t=>t.boardId===activeBoard.id);
+      const edited=fn({...s,stages:activeBoard.stages,tasks:localTasks});
+      const updatedStageIds=new Set(edited.stages.map(x=>x.id));
+      const fallback=edited.stages.find(stage=>stage.archived!==true)?.id;
+      const globalStages=[...s.stages];
+      for(const stage of edited.stages){
+        if(globalStages.length<40&&!globalStages.some(x=>x.id===stage.id))globalStages.push(stage);
+      }
+      const adapted=edited.tasks.map(t=>{
+        const listId=updatedStageIds.has(t.listId)?t.listId:updatedStageIds.has(t.status)?t.status:fallback;
+        return {...t,listId,status:legacyStatusForStage(listId,globalStages)||t.status};
+      });
+      const originalOther=s.tasks.filter(t=>t.boardId!==activeBoard.id);
+      return {...s,settings:edited.settings,projects:edited.projects,
+        stages:globalStages,
+        boards:s.boards.map(b=>b.id===activeBoard.id?{...b,stages:edited.stages}:b),
+        tasks:[...originalOther,...adapted]};
+    });
+  };
+  const restoreState=s=>{setData(normalize(s));dirty.current=false;setSelected('all');setEditorId(null);setCloudOpen(false);setToast('اطلاعات بازیابی شد.');};
+  const syncFromServer=async()=>{
+    if((blocked.current||dirty.current)&&!window.confirm('تغییرات ذخیره‌نشده وجود دارد. ابتدا از آن‌ها خروجی JSON بگیر. اطلاعات از سرور جایگزین شوند؟'))return;
+    dirty.current=false;blocked.current=false;setPendingRecovery(false);
+    await refresh(true);await refreshLan();await refreshUsers();setSelected('all');setEditorId(null);
+  };
+  const saveRecovery=()=>{
+    const snapshot=localStorage.getItem('madar-unsaved-recovery')||JSON.stringify(data);
+    const file=new Blob([snapshot],{type:'application/json;charset=utf-8'});
+    const anchor=document.createElement('a');anchor.href=URL.createObjectURL(file);
+    anchor.download='madar-unsaved-recovery.json';anchor.click();
+    setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+  };
+  const discardRecovery=async()=>{
+    if(!window.confirm('تغییرات ذخیره‌نشده کنار گذاشته شود و نسخه موجود دوباره بارگیری شود؟'))return;
+    dirty.current=false;blocked.current=false;setPendingRecovery(false);setSavingError('');
+    await refresh(true).catch(e=>{blocked.current=true;setPendingRecovery(true);setSavingError(e.message);});
+  };
+  const openAccounting=source=>{
+    if(!canManage)return;
+    if(dirty.current||saving.current||blocked.current){
+      setToast('قبل از انتقال به حسابداری، ذخیره کارت باید با موفقیت تمام شود.');return;
+    }
+    setAccountingSource(source||null);setEditorId(null);setAccountingOpen(true);
+  };
+  const prepareIndependentAccounting=async(task,expense=null)=>{
+    if(!canManage){setToast('صدور سند مالی فقط برای مدیر مجاز است.');return;}
+    if(dirty.current||saving.current||blocked.current){
+      setToast('ابتدا ذخیره سفارش و هزینه‌های آن باید کامل شود.');return;
+    }
+    try{
+      const result=await prepareStandaloneFromTask(api,{
+        task,expense,day:todayISO()});
+      setToast((result.existing?'این منبع قبلاً در حسابداری ثبت شده: ':
+        'پیش‌نویس/کار به حسابداری مستقل ارسال شد: ')+result.id);
+      setEditorId(null);
+      window.location.assign('./accounting.html');
+    }catch(err){setToast('ارسال به حسابداری ناموفق: '+String(err?.message||err));}
+  };
+  if(!data)return <div className="loading"><span className="logo-symbol">م</span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
+  if(accountingOpen&&canManage)return <AccountingWorkspace api={api} projects={projects} tasks={tasks}
+    canManage={canManage} initialSource={accountingSource} onExit={()=>{setAccountingOpen(false);setAccountingSource(null);refresh(true).catch(e=>setSavingError(e.message));}}/>;
+  // New RIAL V2 is deliberately read-only/fail-closed until host supplies
+  // authoritative company+period identity and a committed migration boundary.
+  // Never reinterpret the existing TOMAN finance snapshot as a RIAL journal.
+  if(rialJournalOpen&&canManage)return <div className="rjv-route">
+    <form className="rjv-scope" onSubmit={async event=>{
+      event.preventDefault();
+      if(typeof api?.rialJournalActivate!=='function'){setRialActivationNotice('میزبان فعال‌سازی دفتر ریالی V2 را پشتیبانی نمی‌کند.');return;}
+      if(!window.confirm('فقط یک دفتر ریالی جدید و خالی ایجاد می‌شود. هیچ فاکتور یا سند تومانی منتقل نمی‌شود. ادامه؟'))return;
+      try{
+        const result=await api.rialJournalActivate({
+          companyId:rialCompanyId,fiscalPeriodId:rialFiscalPeriodId,
+          startDate:rialFiscalStart,endDate:rialFiscalEnd});
+        if(result?.currency!=='RIAL'||result?.migrationPerformed!==false){
+          throw Error('پاسخ فعال‌سازی قابل اعتماد نیست.');}
+        setRialActivationNotice('دفتر ریالی خالی فعال شد. داده‌های قدیمی منتقل نشده‌اند.');
+        setRialRefresh(value=>value+1);
+      }catch(error){setRialActivationNotice('فعال‌سازی متوقف شد: '+String(error?.message||error));}
+    }}>
+      <p>این دفترکل فعلاً فقط‌خواندنی است. شناسه‌های شرکت و دوره باید از دفتر ریالی V2 تأییدشده باشند؛ داده‌های تومانی قدیمی تبدیل خودکار نمی‌شوند.</p>
+      <label>شناسه شرکت<input aria-label="شناسه شرکت دفتر ریالی" dir="ltr"
+        value={rialCompanyId} maxLength={96} onChange={event=>setRialCompanyId(event.target.value)}/></label>
+      <label>دوره مالی<input aria-label="شناسه دوره مالی ریالی" dir="ltr"
+        value={rialFiscalPeriodId} maxLength={96} onChange={event=>setRialFiscalPeriodId(event.target.value)}/></label>
+      <label>شروع دوره<input type="date" aria-label="شروع دوره ریالی"
+        value={rialFiscalStart} onChange={event=>setRialFiscalStart(event.target.value)}/></label>
+      <label>پایان دوره<input type="date" aria-label="پایان دوره ریالی"
+        value={rialFiscalEnd} onChange={event=>setRialFiscalEnd(event.target.value)}/></label>
+      <button type="submit" disabled={!canManage||typeof api?.rialJournalActivate!=='function'||
+        !rialCompanyId||!rialFiscalPeriodId||!rialFiscalStart||!rialFiscalEnd}>
+        فعال‌سازی دفتر خالی V2 (فقط با پایگاه یکپارچه)
+      </button>
+      {rialActivationNotice&&<p role="status">{rialActivationNotice}</p>}
+    </form>
+    <RialJournalPanel key={rialRefresh} api={api} companyId={rialCompanyId}
+      fiscalPeriodId={rialFiscalPeriodId} canView={canManage} canPreview={false}
+      onExit={()=>setRialJournalOpen(false)}/>
+  </div>;
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand"><div className="brand-mark"><span></span><i></i></div><div><strong>مدار</strong><small>فضای شخصی کارها</small></div></div>
+      <div className="side-divider"/>
+      <span className="sidebar-section">فضای کار</span>
+      <div className="sidebar-nav" style={{padding:'0 12px 9px'}}>
+        <label htmlFor="madar-active-workspace" className="sidebar-section">Workspace فعال</label>
+        <select id="madar-active-workspace" aria-label="انتخاب فضای کاری" value={activeWorkspaceId||''} onChange={e=>selectWorkspace(e.target.value)} style={{width:'100%',padding:'9px',borderRadius:9}}>
+          {workspaces.filter(w=>!w.archived).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        {show('workspaceManagement')&&<button type="button" onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> مدیریت فضاهای کاری</button>}
+      </div>
+      <nav className="sidebar-nav" aria-label="پیمایش برنامه">
+        <button className={selected==='all'?'active':''} onClick={()=>{setSelected('all');setBoardId(null);}}><LayoutGrid size={18}/> همه کارها <span>{filtered.length}</span></button>
+        <button onClick={()=>{setSelected('all');setFilter('high');}}><Flag size={18}/> کارهای مهم</button>
+        <button type="button" onClick={()=>setTrashOpen(true)} aria-label="زباله‌دان کارت‌ها"><Trash2 size={18}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
+        {show('reporting')&&<button onClick={()=>setReportingOpen(true)}><BarChart3 size={18}/> گزارش و تحلیل</button>}
+        {show('planner')&&<button onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
+        {show('activity')&&<button onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
+        {show('timeDashboard')&&<button onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
+        {show('financeHub')&&<button onClick={()=>{setFinanceHubProject(selected==='all'?'':selected);setFinanceHubOpen(true);setProfitVisible(false);}}><Wallet size={18}/> مدیریت مالی</button>}
+        {canViewStandalone&&<button type="button" onClick={()=>{
+          if(dirty.current||saving.current||blocked.current){
+            setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
+          }
+          window.location.assign('./accounting.html');
+        }}><ReceiptText size={18}/> حسابداری مستقل</button>}
+        {canManage&&<button type="button" onClick={()=>setRialJournalOpen(true)}
+          aria-label="دفتر روزنامه ریالی V2 فقط خواندنی"><FileText size={18}/>
+          دفتر ریالی V2 (آزمایشی)</button>}
+        {show('trelloImport')&&<button onClick={()=>setTrelloImportOpen(true)}><FileInput size={18}/> ورود فایل Trello</button>}
+        {show('trelloImport')&&<button onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={18}/> خروجی عملیاتی قابل‌انتقال</button>}
+        {show('calendarInterop')&&<button onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={18}/> تبادل فایل تقویم</button>}
+        {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={18}/> کلید API امن</button>}
+      </nav>
+      <div className="side-project-header"><span className="sidebar-section">پروژه‌های من</span>{canManage&&<button className="sidebar-plus" onClick={()=>setProjectModal(true)} aria-label="پروژه جدید"><Plus size={18}/></button>}</div>
+      <nav className="sidebar-nav projects-nav" aria-label="پروژه‌ها">
+        {visibleProjects.map(p=><div className="project-entry" key={p.id}><button className={selected===p.id?'active':''} onClick={()=>{setSelected(p.id);setBoardId(null);setFilter('all');}}><span className="project-dot" style={{background:p.color}}/>{p.name}<span>{tasks.filter(t=>t.projectId===p.id&&!t.archived&&t.deleted!==true&&(!boards.length||workspaceBoards.some(b=>b.id===t.boardId))).length}</span></button>{show('projectAdministration')&&<button className="project-options" aria-label={'تنظیمات پروژه '+p.name} onClick={()=>{setProjectSettings(p.id);setProjectName(p.name);}}><MoreHorizontal size={15}/></button>}</div>)}
+      </nav>
+      {selected!=='all'&&<div className="workspace-board-nav">
+        <div className="side-project-header"><span className="sidebar-section">بردهای پروژه</span>{canManage&&<button className="sidebar-plus" title="ساخت برد" onClick={()=>setBoardModal(true)}><Plus size={17}/></button>}</div>
+        {workspaceBoards.filter(b=>b.projectId===selected).map(b=><button key={b.id} className={activeBoard?.id===b.id?'chosen':''} onClick={()=>{setBoardId(b.id);setAdvanced(a=>({...a,status:'all'}));}}><LayoutGrid size={14}/><span>{b.name}</span></button>)}
+        {show('boardAdministration')&&boards.some(b=>b.projectId===selected&&b.workspaceId===activeWorkspaceId&&b.archived)&&<details className="archived-board-controls"><summary>بردهای بایگانی‌شده ({boards.filter(b=>b.projectId===selected&&b.workspaceId===activeWorkspaceId&&b.archived).length.toLocaleString('fa-IR')})</summary>
+          {boards.filter(b=>b.projectId===selected&&b.workspaceId===activeWorkspaceId&&b.archived).map(b=><button key={b.id} onClick={()=>{restoreBoard(b.id);setAdvanced(a=>({...a,status:'all'}));}} title={'بازیابی '+b.name}><span>{b.name}</span><span>بازیابی</span></button>)}
+        </details>}
+      </div>}
+      <div className="sidebar-bottom">
+        <InterfaceModeSelector mode={interfaceMode} onChange={setInterfaceMode} disabled={!interfaceModeAccountReady} compact />
+        {!interfaceModePersisted&&<small role="status">ترجیح نمایش این حساب روی دستگاه ذخیره نشده است.</small>}
+        <div className="sidebar-help"><div className="help-icon"><Sparkles size={19}/></div><strong>یک قدم، هر بار.</strong><p>کارها را از ذهن به برد منتقل کن و مسیرشان را ببین.</p></div>
+        <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری و Drive <ArrowUpLeft size={15}/></button>
+        <button className="sidebar-settings" onClick={()=>setLanOpen(true)}><Users size={18}/> شبکه محلی و کاربران</button>
+        <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات و مراحل برد</button>
+        <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
+      </div>
+    </aside>
+
+    <main className="workspace">
+      <header className="topbar"><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><DateClock calendar={calendar}/></div></header>
+      <div className="workspace-scroll">
+        <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
+        {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
+        {selectedProject&&<section className="project-file-panel"><h3><FolderOpen size={17}/> فایل‌های اشتراکی پروژه</h3><SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/></section>}
+        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
+        <div className="stats">
+          <div className="stat-card"><div className="stat-icon total"><LayoutDashboard size={19}/></div><span>کل کارها</span><strong>{counts.all.toLocaleString('fa-IR')}</strong><small>در این نما</small></div>
+          <div className="stat-card"><div className="stat-icon ongoing"><Activity size={19}/></div><span>در حال انجام</span><strong>{counts.active.toLocaleString('fa-IR')}</strong><small>تسک فعال</small></div>
+          <div className="stat-card"><div className="stat-icon waiting"><ClipboardCheck size={19}/></div><span>منتظر بررسی</span><strong>{counts.review.toLocaleString('fa-IR')}</strong><small>نیازمند توجه</small></div>
+          <div className="stat-card"><div className="stat-icon completed"><CheckCheck size={19}/></div><span>انجام‌شده</span><strong>{counts.done.toLocaleString('fa-IR')}</strong><small>موفق و تمام</small></div>
+        </div>
+        <section className="board-section">
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={()=>setMode('board')}><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')}><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')}><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
+            const items=boardGroups.get(stage.id)||[];
+            return <section className="kanban-lane" key={stage.id} style={{'--stage-accent':stage.color}} onDragOver={e=>{if(canEdit||canManage){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();const plain=e.dataTransfer.getData('text/plain');const draggedStage=e.dataTransfer.getData('application/x-madar-stage')||(plain.startsWith('madar-stage:')?plain.slice(12):'');if(draggedStage){if(canManage)reorderStage(draggedStage,stage.id);return;}if(!canEdit)return;const id=e.dataTransfer.getData('application/x-madar-card')||plain;const task=tasks.find(t=>t.id===id);if(!task||activeBoard&&task.boardId!==activeBoard.id)return;const originBoard=boards.find(b=>b.id===task.boardId);if(task.boardId&&(!originBoard||!originBoard.stages.some(s=>s.id===stage.id)))return;if(activeBoard)reorderCard(id,stage.id);else taskUpdate(id,task.boardId?{listId:stage.id}:{status:stage.id});}}>
+              <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions">{show('boardAdministration')&&<input type="color" className="lane-color-picker" aria-label={'رنگ ستون '+stage.label} title="انتخاب رنگ ستون" value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'} onChange={e=>updateStageColor(stage.id,e.target.value)}/>} {canEdit&&<button className="lane-add" aria-label={'افزودن به '+stage.label} onClick={()=>openAdd(stage.id)}><Plus size={18}/></button>}</div></div>
+              <div className="lane-subtitle">{stage.subtitle}</div>
+              <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><TaskCard key={t.id} task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleStep={toggleChecklistStep}/>} empty={<Empty title="هنوز کاری اینجا نیست" description="کارت‌ها را به این ستون بکش" onAdd={canEdit?()=>openAdd(stage.id):undefined}/>} />
+            </section>;
+          })}</div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
+        </section>
+        <footer className="app-footer"><span>مدار · نسخه آزمایشی {packageInfo.version}</span><span>برای تست کاربر؛ اطلاعات واقعی وارد نکنید</span></footer>
+      </div>
+    </main>
+    {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}
+    {show('projectFinance')&&financeOpen&&selectedProject&&<FinancePanel api={api} project={selectedProject} tasks={tasks.filter(t=>t.projectId===selectedProject.id)} onClose={()=>setFinanceOpen(false)}/>}
+    {show('financeHub')&&financeHubOpen&&<FinanceOverview api={api} projects={projects} calendar={calendar} initialProjectId={financeHubProject} onClose={()=>setFinanceHubOpen(false)} onOpenInvoices={projectId=>{setSelected(projectId);setBoardId(null);setFinanceHubOpen(false);setFinanceOpen(true);}}/>}
+    {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} stages={viewStages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
+    {trashOpen&&<Modal title="زباله‌دان کارت‌ها" width={680} onClose={()=>setTrashOpen(false)}>
+      <div className="dialog-body">
+        <p className="board-info-note">حذف دائمی انجام نمی‌شود. کارت، هزینه‌ها، فاکتورها و پیوست‌ها با شناسه اصلی نگهداری می‌شوند.</p>
+        {trashCards.length?trashCards.map(t=>{
+          const board=boards.find(b=>b.id===t.boardId);
+          const workspace=workspaces.find(w=>w.id===board?.workspaceId);
+          const containerArchived=board?.archived||workspace?.archived;
+          return <div key={t.id} className="similar-row" style={{padding:'12px 0'}}>
+            <span><strong>{t.title}</strong><small>{projects.find(p=>p.id===t.projectId)?.name||'پروژه قدیمی'} · {board?.name||'کارت قدیمی'}{containerArchived?' · فضای بایگانی‌شده':''}</small></span>
+            <button type="button" disabled={!canEdit||!!containerArchived} onClick={()=>restoreTrashedCard(t.id)} aria-label={'بازیابی کارت '+t.title}>بازیابی کارت</button>
+          </div>;
+        }):<p className="shared-empty">در این فضای کاری کارت حذف‌شده‌ای وجود ندارد.</p>}
+      </div>
+    </Modal>}
+    {show('workspaceManagement')&&workspaceOpen&&<Modal title="مدیریت فضاهای کاری" width={800} onClose={()=>setWorkspaceOpen(false)}><WorkspaceManager data={data} currentWorkspaceId={activeWorkspaceId} canManage={canManage} onChange={changeAdmin} onSelect={selectWorkspace}/></Modal>}
+    {show('trelloImport')&&trelloImportOpen&&<TrelloImportPanel onClose={()=>setTrelloImportOpen(false)} onImport={changeAdmin}/>}
+    {show('trelloImport')&&portableExportOpen&&<Modal title="خروجی قابل‌انتقال مدار" width={680} onClose={()=>setPortableExportOpen(false)}><PortableExportPanel state={data} canManage={canManage} onClose={()=>setPortableExportOpen(false)}/></Modal>}
+    {show('planner')&&plannerOpen&&(plannerIdentity(lanStatus)
+      ?<PlannerPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} calendar={calendar} onClose={()=>setPlannerOpen(false)} onOpenTask={id=>{setPlannerOpen(false);setEditorId(id);}} accountId={plannerIdentity(lanStatus)}/>
+      :<Modal title="برنامه‌ریزی شخصی" onClose={()=>setPlannerOpen(false)}><p className="dialog-body">شناسه سرور یا حساب کاربری مشخص نیست. برای جلوگیری از تداخل برنامه‌های شخصی، ابتدا اتصال را تکمیل کنید.</p></Modal>)}
+    {show('automationRules')&&rulesOpen&&selectedProject&&<RulesPanel api={api} project={selectedProject} users={users} onClose={()=>setRulesOpen(false)}/>}
+    {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {adding&&<Modal title="ایجاد کار جدید" onClose={()=>setAdding(null)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createTask();}}><label>عنوان کار<input autoFocus value={draftTitle} onChange={e=>{setDraftTitle(e.target.value);setDraftTemplate(null);}} maxLength={300} placeholder="مثلاً: آماده‌کردن گزارش پروژه" required/></label>{similarTasks(draftTitle,tasks.filter(t=>t.deleted!==true)).length>0&&<div className="similar-suggestions"><strong><Copy size={15}/> کار مشابه پیدا شد</strong>{similarTasks(draftTitle,tasks.filter(t=>t.deleted!==true)).map(({task:t,score})=><button type="button" key={t.id} onClick={()=>{setDraftTemplate(t);setDraftTitle(t.title);}}>{t.title} <small>{Math.round(score*100)}٪ مشابه</small></button>)}{draftTemplate&&<small>از چک‌لیست و توضیحات این کار به عنوان الگو استفاده خواهد شد؛ هزینه‌ها صفر می‌شوند.</small>}</div>}<div className="form-grid"><label>پروژه<select value={draftProject} onChange={e=>{const project=e.target.value;const board=workspaceBoards.find(b=>b.projectId===project);const first=board?activeBoardLists(board)[0]:null;setDraftProject(project);setDraftBoardId(board?.id||'');setDraftStatus(first?.id||stages[0]?.id);}}>{visibleProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{draftBoards.length>1&&<label>برد<select value={draftSelectedBoard?.id||''} onChange={e=>{const board=draftBoards.find(b=>b.id===e.target.value);setDraftBoardId(e.target.value);setDraftStatus(board?activeBoardLists(board)[0]?.id||'':'');}}>{draftBoards.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}<label>مرحله<select value={draftStages.some(s=>s.id===draftStatus)?draftStatus:draftStages[0]?.id||''} onChange={e=>setDraftStatus(e.target.value)}>{draftStages.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></label></div><label>اولویت<select value={draftPriority} onChange={e=>setDraftPriority(e.target.value)}>{priorities.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setAdding(null)}>انصراف</button><button className="btn primary" type="submit" disabled={!draftTitle.trim()||(isDesktop&&!draftSelectedBoard)}><Plus size={17}/> ایجاد کار</button></div></form></Modal>}
+    {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
+    {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
+    {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
+    {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه حذف شود؟ کارهایش به پروژه دیگری منتقل خواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
+    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
+    {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
+    {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
+    {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
+    {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
+    {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
+    {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
+    {cloudOpen&&<DrivePanel data={data} onClose={()=>setCloudOpen(false)} onRestore={restoreState}/>}
+  </div>;
+}

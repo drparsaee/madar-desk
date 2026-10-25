@@ -1,0 +1,29 @@
+/* Task-side commercial fields remain separate from the standalone finance UI. */
+.order-expense-list {
+  display: grid;
+  gap: .75rem;
+  margin: .65rem 0;
+  min-width: 0;
+}
+.order-expense-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  align-items: center;
+  gap: .55rem;
+  min-width: 0;
+  padding: .7rem;
+  border: 1px solid var(--border, #d8e3e4);
+  border-radius: 12px;
+}
+.order-expense-item > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.order-expense-item input,
+.order-expense-item select {
+  width: 100%;
+  min-width: 0;
+}
+.order-expense-item button {
+  min-height: 34px;
+}

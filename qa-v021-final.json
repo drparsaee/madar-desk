@@ -1,0 +1,15 @@
+{
+  "port": 14921,
+  "url": "http://127.0.0.1:14921/",
+  "readyState": "complete",
+  "rootLength": 27263,
+  "bodyTextStart": "مدار\nفضای شخصی کارها\nفضای کار\nهمه کارها\n4\nکارهای مهم\nگزارش‌ها\nداشبورد زمان\nپروژه‌های من\nکارهای من\n0\nپروژه نمونه\n4\nیک قدم، هر بار.\n\nکارها را از ذهن به برد منتقل کن و مسیرشان را ببین.\n\nپشتیبان‌گیری و Drive\nشبکه محلی و کاربران\nتنظیمات و مراحل برد\nم\nفضای",
+  "bridgeType": "object",
+  "pywebviewType": "object",
+  "fontLoaded": true,
+  "theme": "light",
+  "stageCount": 5,
+  "screenshot": {
+    "done": false
+  }
+}

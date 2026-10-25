@@ -1,0 +1,26 @@
+.cardextras{display:grid;gap:12px;min-width:0;font:inherit;color:var(--text,#263347)}
+.cardextras h3{display:flex;gap:8px;align-items:center;margin:0;font-size:15px}
+.cardextras button{cursor:pointer;display:inline-flex;gap:4px;align-items:center;justify-content:center;min-height:30px;border:1px solid var(--border,#dce2eb);border-radius:8px;background:var(--surface,#fff);color:inherit;font:inherit;font-size:12px;padding:5px 9px}
+.cardextras button:disabled{cursor:not-allowed;opacity:.46}
+.cardextras button:focus-visible,.cardextras input:focus-visible,.cardextras select:focus-visible{outline:2px solid var(--accent,#5672ca);outline-offset:2px}
+.cardextras input:not([type=checkbox]),.cardextras select{min-width:0;border-radius:8px;border:1px solid var(--border,#dce2eb);padding:8px;background:var(--surface,#fff);color:inherit;font:inherit;font-size:12px}
+.cardextras input[type=checkbox]{accent-color:var(--accent,#5672ca);cursor:pointer}
+.cardextras-group{padding:12px;border:1px solid var(--border,#dce2eb);border-radius:11px;display:grid;gap:9px;min-width:0}
+.cardextras-grouphead,.cardextras-checkitem,.cardextras-addrow,.cardextras-fieldrow{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:0}
+.cardextras-grow{flex:1 1 140px;min-width:0;overflow-wrap:anywhere}
+.cardextras-progress,.cardextras-muted{font-size:12px;opacity:.72}
+.cardextras-track{height:5px;background:var(--border,#dce2eb);border-radius:10px;overflow:hidden}
+.cardextras-track>span{display:block;height:100%;background:var(--accent,#5672ca);transition:width .15s ease}
+.cardextras-items{padding:0;list-style:none;display:grid;gap:7px;margin:0}
+.cardextras-checkitem{padding:6px 2px;border-bottom:1px solid var(--border,#e6ebf1);font-size:13px}
+.cardextras-complete{text-decoration:line-through;opacity:.64}
+.cardextras-addrow input{flex:1 1 150px}
+.cardextras-addrow label,.cardextras-field label{display:flex;gap:6px;flex-direction:column;font-size:12px}
+.cardextras-field{min-width:0;display:grid;gap:6px}
+.cardextras-field input:not([type=checkbox]),.cardextras-field select{width:100%}
+.cardextras-field label:has(input[type=checkbox]){flex-direction:row;align-items:center}
+.cardextras-colors{display:flex;gap:9px;flex-wrap:wrap}
+.cardextras-colors button{width:35px;height:35px;padding:0;color:white}
+.cardextras-cover{width:100%;border-radius:10px;border:1px solid #0001}
+.cardextras-cover-strip{height:44px}.cardextras-cover-full{height:120px}
+.cardextras-error{color:#b23a50;font-size:12px;margin:0}

@@ -1,0 +1,31 @@
+.priority-settings{min-width:0}
+.priority-definition-list{display:grid;gap:9px}
+.priority-definition{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.2fr) 64px minmax(145px,1fr) auto;align-items:end;gap:10px;padding:12px;border:1px solid #e2e8f2;border-radius:11px;background:var(--surface,#fff)}
+.priority-definition label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text,#5b6d86)}
+.priority-definition input:not([type=color]),.priority-definition select,.priority-new input{min-width:0;width:100%;border:1px solid #d5deeb;color:inherit;background:var(--surface,#fff);border-radius:8px;padding:8px;font:inherit}
+.priority-definition input[type=color]{width:100%;height:36px;border-radius:8px;border:1px solid #dae1e9;padding:2px;background:transparent;cursor:pointer}
+.priority-definition>button{height:36px;padding:8px;border:0;background:transparent;color:#b04a5b}
+.priority-definition .priority-demo{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border-radius:9px;padding:7px;font-size:11px;font-weight:700}
+.priority-new{display:flex;gap:10px;margin-top:12px}.priority-new>input{flex:1}
+.priority-warning{color:#b04752;font-size:12px}
+.priority-effect-none{color:var(--priority-color)}
+.priority-effect-solid{color:var(--priority-color);background:color-mix(in srgb,var(--priority-color) 22%,white)}
+.priority-effect-neon{color:var(--priority-color);border:2px solid transparent;background:linear-gradient(var(--surface,#fff),var(--surface,#fff)) padding-box,conic-gradient(from var(--glow-angle,0deg),transparent,var(--priority-color),transparent,var(--priority-color),transparent) border-box;animation:priority-turn 2.4s linear infinite;box-shadow:0 0 9px color-mix(in srgb,var(--priority-color) 42%,transparent)}
+.priority-effect-shimmer{color:var(--priority-color);border:1px solid var(--priority-color);animation:priority-shimmer 2.5s ease-in-out infinite}
+.priority-effect-pulse{color:var(--priority-color);animation:priority-pulse 1.75s ease-in-out infinite}
+.priority-effect-glow{color:var(--priority-color);box-shadow:0 0 8px var(--priority-color),inset 0 0 9px color-mix(in srgb,var(--priority-color) 23%,transparent)}
+@property --glow-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
+@keyframes priority-turn{to{--glow-angle:360deg}}
+@keyframes priority-shimmer{50%{box-shadow:0 0 13px var(--priority-color)}}
+@keyframes priority-pulse{50%{opacity:.56;transform:scale(.98)}}
+.task-card{position:relative}
+.task-card-cover{width:calc(100% + 28px);height:12px;margin:-14px -14px 12px;border-radius:11px 11px 0 0;pointer-events:none}
+.task-card-cover-full{height:54px}
+.task-card.priority-effect-neon{border:2px solid transparent;background:linear-gradient(var(--surface,#fff),var(--surface,#fff)) padding-box,conic-gradient(from var(--glow-angle,0deg),transparent,var(--priority-color),transparent,var(--priority-color),transparent) border-box;animation:priority-turn 2.4s linear infinite;box-shadow:0 0 10px color-mix(in srgb,var(--priority-color) 38%,transparent)}
+.task-card.priority-effect-shimmer{border-color:var(--priority-color);animation:priority-shimmer 2.5s ease-in-out infinite}
+.task-card.priority-effect-pulse{animation:priority-pulse 1.75s ease-in-out infinite}
+.task-card.priority-effect-glow{box-shadow:0 0 11px color-mix(in srgb,var(--priority-color) 65%,transparent)}
+.task-card.priority-effect-solid{background:color-mix(in srgb,var(--priority-color) 17%,var(--surface,#fff));border-color:var(--priority-color)}
+.task-card .priority-label{color:var(--priority-color)}
+@media(max-width:800px){.priority-definition{grid-template-columns:1fr 1fr}.priority-definition .priority-demo{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){.priority-demo,.task-card.priority-effect-neon,.task-card.priority-effect-pulse,.task-card.priority-effect-shimmer{animation:none!important}}

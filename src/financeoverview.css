@@ -1,0 +1,46 @@
+.finance-hub-backdrop{position:fixed;inset:0;z-index:1600;background:rgba(13,24,43,.58);display:grid;place-items:center;padding:24px}
+.finance-hub{background:var(--surface,#fff);color:var(--text,#1f2e46);width:min(1080px,96vw);max-height:94vh;border-radius:21px;display:flex;flex-direction:column;box-shadow:0 25px 80px #0004;overflow:hidden;direction:rtl}
+.finance-hub-head{display:flex;justify-content:space-between;align-items:center;padding:20px 28px;background:var(--surface,#fff);border-bottom:1px solid var(--border,#e4e7ee)}
+.finance-hub-head h2{display:flex;align-items:center;gap:10px;font-size:21px;margin:4px 0 0}
+.finance-hub-head small{display:flex;gap:6px;align-items:center;opacity:.7;font-size:12px}
+.finance-hub-head>button{border:0;background:transparent;color:inherit;padding:9px;border-radius:9px;cursor:pointer}
+.finance-hub-body{overflow:auto;padding:24px 28px;display:flex;flex-direction:column;gap:22px}
+.finance-hub-filters{display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end}
+.finance-hub-filters label,.finance-hub-receipt label,.expense-category-field{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600}
+.finance-hub-filters .calendar-field,.finance-hub-receipt .calendar-field{display:flex;flex-direction:column;min-width:0;gap:7px}
+.finance-hub-filters .calendar-field label,.finance-hub-receipt .calendar-field label{font-size:12px;font-weight:600}
+.finance-hub-filters .calendar-field label small,.finance-hub-receipt .calendar-field label small{font-size:10px;opacity:.65}
+.finance-hub-filters .calendar-field input,.finance-hub-receipt .calendar-field input{width:100%;min-width:0;min-height:40px;padding:10px;border:1px solid var(--border,#dae1ec);border-radius:10px;color:var(--text,#1f2e46);background:var(--surface,#fff)}
+.finance-hub-filters .calendar-field .field-error,.finance-hub-receipt .calendar-field .field-error{font-size:11px;color:#ba3e50;line-height:1.5}
+.finance-hub-filters input,.finance-hub-filters select,.finance-hub-receipt input,.finance-hub-receipt select,.expense-category-field input,.step-cost-fields input{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--border,#dae1ec);background:var(--surface,#fff);color:var(--text,#1f2e46);border-radius:10px;font:inherit}
+.finance-hub-filters>button,.finance-hub-projects button{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:1px solid var(--border,#d9e0eb);background:var(--surface,#fff);color:inherit;border-radius:10px;cursor:pointer}
+.finance-hub-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.finance-hub-cards article{background:var(--background,#f4f7fb);border:1px solid var(--border,#e0e6f0);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.finance-hub-cards small{opacity:.75}.finance-hub-cards strong{font-size:19px;font-variant-numeric:tabular-nums}
+.finance-hub-cards .gain strong,.profit-positive{color:#187b59}.finance-hub-cards .loss strong,.profit-negative{color:#b83850}
+.finance-hub-sections{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.finance-hub-sections>section,.finance-hub-receipt{background:var(--background,#f8fafc);border-radius:13px;padding:17px;border:1px solid var(--border,#e4e8f0)}
+.finance-hub-sections h3,.finance-hub-receipt h3{display:flex;align-items:center;gap:8px;font-size:15px;margin:0 0 15px}
+.finance-hub-table>div{display:grid;grid-template-columns:1.2fr .5fr 1fr;gap:10px;padding:10px 8px;border-bottom:1px solid var(--border,#e4e8f0);font-size:13px}
+.finance-hub-table .table-head{font-weight:700;font-size:12px;opacity:.75}
+.finance-hub-table>p,.finance-hub-projects>p{font-size:13px;opacity:.7}
+.finance-hub-projects{display:grid;gap:10px}
+.finance-hub-projects article{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;border:1px solid var(--border,#e1e6ed);border-radius:10px;background:var(--surface,#fff);padding:12px;font-size:12px}
+.finance-hub-projects article>strong{font-size:14px;grid-column:1/-1}
+.finance-hub-projects article>b{font-weight:700}
+.finance-hub-projects article>button{padding:6px;font-size:11px}
+.finance-hub-receipt>p,.finance-hub-note{font-size:12px;line-height:1.9;opacity:.78;margin:4px 0 18px}
+.finance-hub-receipt form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end}
+.finance-hub-receipt form>button{height:41px}
+.finance-hub-receipts{margin-top:14px}
+.finance-hub-receipts h4{font-size:13px}
+.finance-hub-receipts>div{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid var(--border,#e1e6ed);font-size:12px}
+.finance-hub-error{color:#bb3347;background:#fff2f3;border-radius:8px;padding:10px 13px;font-size:13px}
+.finance-hub-notice{color:#247a5b;background:#ebf9f3;border-radius:8px;padding:10px 13px;font-size:13px}
+.finance-hub-note{margin:0}
+.private-profit{display:flex;align-items:center;flex-wrap:wrap;gap:18px;background:var(--surface,#fff);border:1px solid var(--border,#d5dfea);border-radius:12px;padding:14px 18px;font-size:13px;margin:0 0 16px}
+.private-profit>svg{flex:none}.private-profit strong{font-weight:800}
+.private-profit-toggle{display:flex;align-items:center;gap:7px}
+.private-profit-toggle[aria-pressed="true"]{background:var(--primary,#456ed2);color:white}
+.expense-category-field{margin-top:10px;max-width:320px}.step-cost-fields{min-width:180px;display:flex;flex-direction:column;gap:7px;flex:1}.step-cost-fields input{font-size:12px}
+@media(max-width:770px){.finance-hub-backdrop{padding:8px}.finance-hub-body{padding:15px}.finance-hub-filters{grid-template-columns:1fr 1fr}.finance-hub-cards,.finance-hub-sections{grid-template-columns:1fr}.finance-hub-receipt form{grid-template-columns:1fr 1fr}}

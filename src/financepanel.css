@@ -1,0 +1,26 @@
+.finance-backdrop{position:fixed;inset:0;z-index:200;background:#1020388a;display:grid;place-items:center;padding:20px}
+.finance-dialog{background:var(--surface,#fff);color:var(--text,#34445a);width:min(720px,95vw);max-height:90vh;overflow:auto;border-radius:15px;box-shadow:0 24px 60px #10203855;direction:rtl}
+.finance-dialog>header,.finance-list>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px;border-bottom:1px solid #dbe4ef}
+.finance-dialog>header strong,.finance-form h3{display:flex;gap:8px;align-items:center;font-size:14px}
+.finance-dialog>header button{font-size:25px;background:transparent;color:inherit;padding:0 8px}
+.finance-content{padding:17px;display:grid;gap:15px}
+.finance-info{display:flex;gap:7px;align-items:flex-start;background:#eff6fd;border-radius:9px;padding:10px;font-size:11px;line-height:1.9}
+.finance-form{display:grid;gap:11px}
+.finance-form label{display:grid;gap:6px;font-size:11px}
+.finance-form input,.finance-form select{border:1px solid #d2dfe9;border-radius:8px;padding:9px;background:var(--surface,#fff);color:inherit;font-size:12px;width:100%}
+.finance-form-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.finance-form .finance-check{display:flex;align-items:center;gap:7px}
+.finance-form .finance-check input{width:auto}
+.finance-form>.btn{justify-self:start}
+.finance-list{border:1px solid #dce5ef;border-radius:9px}
+.finance-list>header{padding:12px}
+.finance-list>header button,.finance-actions button{display:flex;gap:5px;align-items:center;background:#edf3fd;color:#3c689a;padding:7px 10px;border-radius:6px;font-size:10px}
+.finance-list>p{padding:12px;font-size:11px}
+.finance-invoice{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:11px;border-bottom:1px solid #e4eaf2}
+.finance-invoice>div:first-child{display:grid;gap:5px;font-size:11px}
+.finance-invoice small{color:#8494a7}
+.finance-actions{display:flex;gap:6px;flex-wrap:wrap}
+.finance-warning,.finance-message{font-size:11px;line-height:1.9;color:#9c6b37}
+:root[data-theme=dark] .finance-info{background:#20364c}
+:root[data-theme=dark] .finance-list,.finance-list>header{border-color:#34475f}
+@media(max-width:620px){.finance-invoice{align-items:stretch;flex-direction:column}.finance-dialog{max-height:94vh}}

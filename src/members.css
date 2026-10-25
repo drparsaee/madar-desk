@@ -1,0 +1,29 @@
+.workplace-avatar{position:relative;overflow:visible!important;color:var(--avatar-color)!important;background:color-mix(in srgb,var(--avatar-color) 15%,white)!important;border:2px solid var(--avatar-color)!important}
+.workplace-avatar img{border-radius:50%;overflow:hidden}
+.avatar-role-pin{position:absolute;bottom:-5px;right:-6px;min-width:14px;height:14px;display:grid;place-items:center;border-radius:50%;border:1.5px solid #fff;font-weight:850;font-size:8px;line-height:1;color:white;box-shadow:0 1px 2px #0002}
+.avatar-role-admin,.member-role-admin{background:#7c4cc0;color:#fff}
+.avatar-role-editor,.member-role-editor{background:#287bab;color:#fff}
+.avatar-role-viewer,.member-role-viewer{background:#68788f;color:#fff}
+.member-role{display:inline-flex;align-items:center;justify-content:center;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:740;white-space:nowrap;width:max-content;line-height:1.4}
+.member-role.compact{width:20px;height:20px;padding:0}
+.avatar-function-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:7px;max-height:235px;overflow-y:auto;padding:2px}
+.avatar-function-grid button{display:flex;align-items:center;gap:7px;min-width:0;text-align:right;border:1px solid #dfe8f2;border-radius:9px;padding:8px;background:#f5f8fc;color:#607993;cursor:pointer;font:inherit;font-size:10px}
+.avatar-function-grid button.chosen,.avatar-function-grid button:hover:not(:disabled){border-color:#7399d9;background:#dfebfc;color:#315d9b}
+.avatar-function-grid button:disabled{opacity:.65;cursor:default}
+.avatar-function-grid span{white-space:normal;line-height:1.5}
+.member-color-field{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#69809a;font-size:12px}
+.member-color-field input[type="color"]{width:54px;height:36px;padding:3px;border-radius:8px;border:1px solid #dce6ee;background:#fff;cursor:pointer}
+.member-color-field input::-webkit-color-swatch{border:0;border-radius:5px}
+.profile-hero>div{min-width:0}
+.assignee-picker label .member-role{display:inline-flex;font-size:9px;padding:2px 6px}
+.account-create-heading{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:#48688a;margin:0 0 10px}
+.account-role-help{font-size:10px;line-height:1.9;color:#71849b;margin:5px 0 12px}
+.account-role-help strong{color:#4b6582}
+.users-list .user-row .person-avatar{margin-inline-end:8px}
+.account-avatar-controls{display:grid;gap:11px;border:1px solid #e4e9f1;padding:13px;border-radius:11px;background:#fbfcfe;margin:14px 0}
+.account-avatar-controls>span{font-size:11px;color:#59728e;font-weight:750}
+.account-avatar-preview{display:flex;align-items:center;gap:12px;font-size:11px;color:#627c98}
+:root[data-theme="dark"] .avatar-function-grid button,:root[data-theme="dark"] .account-avatar-controls{background:#192b41;border-color:#39506a;color:#c6d5e9}
+:root[data-theme="dark"] .avatar-function-grid button.chosen{background:#2b4566;border-color:#6f95ce}
+:root[data-theme="dark"] .member-color-field{color:#c0d3e9}
+:root[data-theme="dark"] .account-create-heading{color:#c0d8fb}

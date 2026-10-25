@@ -1,0 +1,1112 @@
+"""Password-protected LAN task collaboration, independent from cloud services.
+
+The default HTTP listener is for trusted private networks only. TLS may be
+explicitly enabled with a certificate and key; HTTPS clients must verify the
+server certificate fingerprint before sending credentials or other data.
+Every mutation is authorized on the server.
+"""
+from __future__ import annotations
+from copy import deepcopy
+import base64
+import binascii
+import hashlib
+import hmac
+from http.client import HTTPSConnection
+import ipaddress
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
+import json
+from pathlib import Path
+import re
+import secrets
+import ssl
+import threading
+import time
+from urllib.error import HTTPError
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
+from datetime import datetime, timezone
+from automation_due import due_events
+from attachments import AttachmentStore
+from offline_exchange import atomic_json
+import collab
+import finance
+
+ROLES = {"admin", "editor", "viewer"}
+
+
+def standalone_finance_access(actor, accounts, *, mutation=False):
+    """Only trusted server-side account grants, independent of project ACL."""
+    if (type(actor) is not str or not actor or type(accounts) is not dict
+            or type(accounts.get(actor)) is not dict):
+        raise PermissionError("Authenticated standalone-accounting principal required")
+    account = accounts[actor]
+    if account.get("username") != actor or account.get("role") not in ROLES:
+        raise PermissionError("Standalone-accounting principal/role mismatch")
+    if account["role"] == "admin":
+        return
+    if mutation:
+        if account["role"] != "editor" or account.get("financeEdit") is not True:
+            raise PermissionError("Standalone-accounting mutations require finance editor")
+        return
+    # A finance writer must be able to read the ledger it is allowed to edit.
+    # The editor grant is still explicit and does not elevate viewers.
+    if (account.get("financeView") is not True and not
+            (account["role"] == "editor" and account.get("financeEdit") is True)):
+        raise PermissionError("Standalone-accounting read requires financeView")
+
+
+def standalone_finance_accounts(accounts):
+    """Give isolated reducer only finance ACLs, never password hashes or tasks."""
+    if type(accounts) is not dict or not accounts:
+        raise PermissionError("Authenticated account registry required")
+    result = {}
+    for username, account in accounts.items():
+        if (type(username) is not str or type(account) is not dict or
+                account.get("username") != username or account.get("role") not in ROLES):
+            raise PermissionError("Malformed standalone finance principal registry")
+        result[username] = {
+            "username": username, "role": account["role"],
+            "financeView": (account["role"] == "admin" or
+                            account.get("financeView") is True or
+                            (account["role"] == "editor" and
+                             account.get("financeEdit") is True)),
+            "financeEdit": (account["role"] == "admin" or
+                            (account["role"] == "editor" and
+                             account.get("financeEdit") is True)),
+        }
+    return result
+
+
+def standalone_command_request(request):
+    """Strict UI/LAN envelope, never accepts caller-selected actor or company."""
+    if (type(request) is not dict or set(request) != {"command", "expectedRevision"}
+            or type(request["command"]) is not dict
+            or type(request["expectedRevision"]) is not int
+            or request["expectedRevision"] < 0):
+        raise ValueError("Expected {command: object, expectedRevision: nonnegative integer}")
+    return request["command"], request["expectedRevision"]
+
+AVATAR_ICONS = {
+    "user", "briefcase", "code", "palette", "wrench", "chart", "sparkles",
+    "check", "rocket", "folder", "star", "camera", "finance", "management",
+    "support", "production", "operations", "sales", "quality", "marketing",
+}
+AVATAR_COLOR_DEFAULT = "#5376b5"
+AVATAR_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def clean_profile(payload, old=None):
+    old = old or {}
+    name = payload.get("displayName", old.get("displayName", ""))
+    icon = payload.get("avatarIcon", old.get("avatarIcon", "user"))
+    photo = payload.get("avatarPhoto", old.get("avatarPhoto", ""))
+    color = payload.get("avatarColor", old.get("avatarColor", AVATAR_COLOR_DEFAULT))
+    if not isinstance(name, str) or len(name.strip()) > 80:
+        raise ValueError("نام نمایشی باید کوتاه باشد.")
+    if not isinstance(icon, str) or icon not in AVATAR_ICONS:
+        raise ValueError("آیکون انتخابی معتبر نیست.")
+    if not isinstance(color, str) or not AVATAR_COLOR_PATTERN.fullmatch(color):
+        raise ValueError("رنگ آواتار باید در قالب شش‌رقمی #RRGGBB باشد.")
+    if not isinstance(photo, str) or len(photo) > 120000:
+        raise ValueError("حجم تصویر پروفایل بیشتر از حد مجاز است.")
+    if photo:
+        prefix, separator, content = photo.partition(",")
+        if prefix not in ("data:image/png;base64", "data:image/jpeg;base64") or not separator:
+            raise ValueError("فقط عکس PNG یا JPEG مجاز است.")
+        try:
+            decoded = base64.b64decode(content, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("فرمت تصویر درست نیست.") from exc
+        if len(decoded) > 85000 or not (
+            decoded.startswith(b"\x89PNG\r\n\x1a\n") or decoded.startswith(b"\xff\xd8\xff")
+        ):
+            raise ValueError("فرمت فایل عکس تأیید نشد.")
+    return {"displayName": name.strip(), "avatarIcon": icon,
+            "avatarPhoto": photo, "avatarColor": color.lower()}
+
+
+def password_hash(password, salt=None):
+    if not isinstance(password, str) or len(password) < 10:
+        raise ValueError("رمز باید دست‌کم ۱۰ نویسه باشد.")
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 250_000)
+    return salt.hex() + ":" + digest.hex()
+
+
+def verify_password(password, stored):
+    try:
+        salt, expected = stored.split(":")
+        value = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), 250_000)
+        return hmac.compare_digest(value, bytes.fromhex(expected))
+    except (TypeError, ValueError):
+        return False
+
+
+def make_account(username, password, role="viewer", projects=None):
+    if not isinstance(username, str) or not 3 <= len(username) <= 40 or not all(
+        c.isascii() and (c.isalnum() or c in "._-") for c in username
+    ):
+        raise ValueError("نام کاربری باید ۳ تا ۴۰ کاراکتر انگلیسی باشد.")
+    if role not in ROLES:
+        raise ValueError("نقش معتبر نیست.")
+    if projects is not None and (not isinstance(projects, list) or
+                                 not all(isinstance(p, str) for p in projects)):
+        raise ValueError("محدوده پروژه‌ها معتبر نیست.")
+    return {"username": username, "passwordHash": password_hash(password),
+            "role": role, "projects": projects, **clean_profile({})}
+
+
+def public_user(account):
+    return {k: account.get(k) for k in ("username", "role", "projects")} | {
+        "financeView": (account.get("role") == "admin" or
+                        account.get("financeView") is True),
+        "financeEdit": (account.get("role") == "admin" or
+                        (account.get("role") == "editor" and
+                         account.get("financeEdit") is True)),
+        **clean_profile({}, account)
+    }
+
+
+def view_for(data, account):
+    if account["role"] == "admin":
+        return deepcopy(data)
+    filtered = deepcopy(data)
+    # Project price historically lived in shared task JSON. Hide the existing
+    # legacy field from every non-admin, even if they can view all projects.
+    from finance_visibility import redact_card
+    for project in filtered["projects"]:
+        project["price"] = 0
+    filtered["tasks"] = [redact_card(task) for task in filtered["tasks"]]
+    if account["projects"] is None:
+        return filtered
+    permitted = set(account["projects"])
+    filtered["projects"] = [p for p in filtered["projects"] if p["id"] in permitted]
+    filtered["tasks"] = [t for t in filtered["tasks"] if t["projectId"] in permitted]
+    if "boards" in data:
+        filtered["boards"] = [b for b in data["boards"] if b.get("projectId") in permitted]
+        allowed_boards = {b["id"] for b in filtered["boards"]}
+        filtered["templates"] = [t for t in data.get("templates", [])
+                                 if t["boardId"] in allowed_boards]
+        allowed_workspaces = {b["workspaceId"] for b in filtered["boards"]}
+        filtered["workspaces"] = [w for w in data.get("workspaces", [])
+                                  if w["id"] in allowed_workspaces]
+    return filtered
+
+
+def revision(data):
+    canonical = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def certificate_fingerprint(certfile):
+    """Return the SHA-256 fingerprint of the first PEM certificate (the leaf)."""
+    pem = Path(certfile).read_text(encoding="ascii")
+    match = re.search(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", pem, re.S)
+    if not match:
+        raise ValueError("PEM certificate missing")
+    der = ssl.PEM_cert_to_DER_cert(match.group())
+    return hashlib.sha256(der).hexdigest()
+
+
+def _fingerprint_bytes(fingerprint):
+    """Require an explicit complete SHA-256 pin, with optional colon separators."""
+    if not isinstance(fingerprint, str):
+        raise ValueError("SHA-256 server fingerprint is required")
+    value = fingerprint.strip()
+    if re.fullmatch(r"[a-fA-F0-9]{64}", value):
+        return bytes.fromhex(value)
+    if re.fullmatch(r"[a-fA-F0-9]{2}(?::[a-fA-F0-9]{2}){31}", value):
+        return bytes.fromhex(value.replace(":", ""))
+    raise ValueError("Expected a complete 64-digit SHA-256 server fingerprint")
+
+
+def pinned_https_json(url, fingerprint, *, method="GET", data=None, headers=None, timeout=25):
+    """Make one JSON API request over HTTPS, pinning the leaf certificate.
+
+    Self-signed LAN certificates are supported. TLS is established first and
+    the peer certificate is checked on that SAME connection before the HTTP
+    request (including passwords and bearer tokens) is sent. No redirects or
+    HTTP fallback are followed. HTTP failures raise urllib HTTPError.
+    """
+    expected = _fingerprint_bytes(fingerprint)
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.port is None or (
+        parsed.username is not None or parsed.password is not None or parsed.fragment
+    ):
+        raise ValueError("Expected https://PRIVATE_IP:PORT/path without userinfo or fragment")
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError as exc:
+        raise ValueError("LAN HTTPS requires a private or loopback IP address") from exc
+    if not (address.is_private or address.is_loopback):
+        raise ValueError("LAN HTTPS requires a private or loopback IP address")
+    if method not in ("GET", "POST"):
+        raise ValueError("Unsupported LAN HTTP method")
+
+    body = None if data is None else (data if isinstance(data, bytes)
+                                       else json.dumps(data).encode("utf8"))
+    request_headers = dict(headers or {})
+    if body is not None:
+        request_headers.setdefault("Content-Type", "application/json")
+    # A trusted fingerprint authenticates a self-signed peer. Skipping CA
+    # checks here is safe ONLY because a mandatory pin is checked pre-request.
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    connection = HTTPSConnection(parsed.hostname, parsed.port, timeout=timeout,
+                                 context=context)
+    try:
+        connection.connect()
+        der = connection.sock.getpeercert(binary_form=True)
+        if not der or not hmac.compare_digest(hashlib.sha256(der).digest(), expected):
+            raise ssl.SSLCertVerificationError("LAN server certificate fingerprint mismatch")
+        target = parsed.path or "/"
+        if parsed.query:
+            target += "?" + parsed.query
+        connection.request(method, target, body=body, headers=request_headers)
+        response = connection.getresponse()
+        # LAN attachment JSON may contain base64 payloads up to 16 MB.
+        raw = response.read(20_000_001)
+        if len(raw) > 20_000_000:
+            raise ValueError("LAN HTTPS response exceeds size limit")
+        if not 200 <= response.status < 300:
+            raise HTTPError(url, response.status, response.reason,
+                            response.headers, BytesIO(raw))
+        return json.loads(raw.decode("utf8"))
+    finally:
+        connection.close()
+
+
+class LanService:
+    def __init__(self, bridge, users_path, bind="0.0.0.0", port=48370,
+                 *, certfile=None, keyfile=None):
+        self.bridge = bridge
+        self.users_path = users_path
+        self.bind, self.port = bind, port
+        self.certfile, self.keyfile = certfile, keyfile
+        self.lock = threading.RLock()
+        self.sessions = {}
+        self.failed = {}
+        self.users = self._read_users()
+        self.server = None
+        self.thread = None
+        self.integration_router = None
+
+    def _commit_domain(self, domain, state, *, expected_finance_sha256=None):
+        """Use the unified store when available, or the legacy JSON bridge."""
+        if domain not in ("collab", "finance"):
+            raise ValueError("Unsupported persistence domain")
+        commit = getattr(self.bridge, "_commit_domain", None)
+        if callable(commit):
+            return commit(domain, state,
+                          expected_finance_sha256=expected_finance_sha256)
+        if expected_finance_sha256 is not None:
+            raise ValueError("RIAL financial CAS requires unified SQLite host")
+        path = self.bridge.collab_path if domain == "collab" else self.bridge.finance_path
+        return atomic_json(path, state)
+
+    def _read_users(self):
+        if not self.users_path.exists():
+            return {}
+        data = json.loads(self.users_path.read_text(encoding="utf8"))
+        if not isinstance(data, dict):
+            raise ValueError("فایل کاربران شبکه معتبر نیست.")
+        return data
+
+    def _store_users(self):
+        filename = self.users_path
+        tmp = filename.with_name(filename.name + ".tmp")
+        tmp.write_text(json.dumps(self.users, ensure_ascii=False, indent=2), encoding="utf8")
+        tmp.replace(filename)
+
+    def setup_owner(self, username, password):
+        with self.lock:
+            if self.users:
+                raise ValueError("مدیر قبلاً تعریف شده است.")
+            account = make_account(username, password, "admin")
+            self.users[username] = account
+            self._store_users()
+            return public_user(account)
+
+    def authenticate(self, username, password, ip="127.0.0.1"):
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise ValueError("نام کاربری و رمز عبور باید متن باشند.")
+        with self.lock:
+            failures, last = self.failed.get(ip, (0, 0))
+            if failures >= 6 and time.time() - last < 120:
+                raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
+            account = self.users.get(username)
+            if not account or not verify_password(password, account["passwordHash"]):
+                self.failed[ip] = (failures + 1, time.time())
+                raise PermissionError("نام کاربری یا رمز عبور نادرست است.")
+            self.failed.pop(ip, None)
+            token = secrets.token_urlsafe(32)
+            self.sessions[token] = (username, time.time() + 12 * 3600)
+            return {"token": token, "user": public_user(account)}
+
+    def account_for(self, token):
+        with self.lock:
+            record = self.sessions.get(token)
+            if not record or time.time() >= record[1]:
+                self.sessions.pop(token, None)
+                raise PermissionError("جلسه ورود معتبر نیست. دوباره وارد شوید.")
+            account = self.users.get(record[0])
+            if not account:
+                raise PermissionError("حساب کاربری پیدا نشد.")
+            return account
+
+    def list_users(self, token):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("فقط مدیر به کاربران دسترسی دارد.")
+            return [public_user(u) for u in self.users.values()]
+
+    def list_profiles(self, token):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] == "admin":
+                return [public_user(u) for u in self.users.values()]
+            result = []
+            for user in self.users.values():
+                if user["username"] == who["username"]:
+                    result.append(public_user(user))
+                    continue
+                # Profiles are directory entries for coworkers on shared projects,
+                # not a general user directory. A user with zero grants sees self.
+                if who["projects"] is not None and not who["projects"]:
+                    continue
+                if who["projects"] is not None and user["projects"] is not None:
+                    shared = set(who["projects"]) & set(user["projects"])
+                    if not shared:
+                        continue
+                else:
+                    shared = None if who["projects"] is None else set(who["projects"])
+                visible = public_user(user)
+                # Do not disclose coworkers' project permissions outside what the
+                # requesting user can already see.
+                if shared is not None:
+                    visible["projects"] = sorted(shared)
+                result.append(visible)
+            return result
+
+    def update_profile(self, token, payload):
+        if not isinstance(payload, dict) or set(payload) - {
+            "displayName", "avatarIcon", "avatarPhoto", "avatarColor"
+        }:
+            raise PermissionError("تغییر نقش، حساب یا دسترسی از پروفایل شخصی مجاز نیست.")
+        with self.lock:
+            who = self.account_for(token)
+            who.update(clean_profile(payload, who))
+            self._store_users()
+            return public_user(who)
+
+    def change_password(self, token, current, new_password):
+        with self.lock:
+            who = self.account_for(token)
+            if not isinstance(current, str) or not verify_password(current, who["passwordHash"]):
+                raise PermissionError("رمز فعلی درست نیست.")
+            who["passwordHash"] = password_hash(new_password)
+            self._store_users()
+            # Other sessions are revoked, current session is kept.
+            for key, item in list(self.sessions.items()):
+                if item[0] == who["username"] and key != token:
+                    del self.sessions[key]
+            return True
+
+    def reset_password(self, token, username, new_password):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("فقط مدیر می‌تواند رمز را بازنشانی کند.")
+            target = self.users.get(username)
+            if not target:
+                raise ValueError("کاربر پیدا نشد.")
+            target["passwordHash"] = password_hash(new_password)
+            self._store_users()
+            for key, item in list(self.sessions.items()):
+                if item[0] == username:
+                    del self.sessions[key]
+            return True
+
+    def authenticate_owner_token(self):
+        """Trusted in-process administrator channel, never exposed on HTTP."""
+        with self.lock:
+            admins = [a for a in self.users.values() if a["role"] == "admin"]
+            if not admins:
+                raise PermissionError("مدیر شبکه تعریف نشده است.")
+            token = secrets.token_urlsafe(32)
+            self.sessions[token] = (admins[0]["username"], time.time() + 60)
+            return token
+
+    def upsert_user(self, token, payload):
+        who = self.account_for(token)
+        if who["role"] != "admin":
+            raise PermissionError("فقط مدیر می‌تواند کاربران را تغییر دهد.")
+        if not isinstance(payload, dict):
+            raise ValueError("اطلاعات حساب معتبر نیست.")
+        username, password = payload.get("username"), payload.get("password")
+        role, scope = payload.get("role", "viewer"), payload.get("projects")
+        if not isinstance(role, str) or role not in ROLES:
+            raise ValueError("سطح دسترسی معتبر نیست.")
+        if (not isinstance(username, str) or
+                not 3 <= len(username) <= 40 or
+                any(not c.isascii() or (not c.isalnum() and c not in "._-")
+                    for c in username)):
+            raise ValueError("نام کاربری باید ۳ تا ۴۰ کاراکتر انگلیسی باشد.")
+        if (scope is not None and (
+                not isinstance(scope, list) or len(scope) > 500 or
+                any(not isinstance(p, str) for p in scope) or
+                len(scope) != len(set(scope)))):
+            raise ValueError("محدوده پروژه‌ها معتبر نیست.")
+        if role == "admin" and scope is not None:
+            raise ValueError("مدیر به تمام پروژه‌ها دسترسی دارد؛ محدوده انتخابی برای مدیر مجاز نیست.")
+        for grant in ("financeView", "financeEdit"):
+            if grant in payload and type(payload[grant]) is not bool:
+                raise ValueError("مجوز مالی باید مقدار درست یا نادرست داشته باشد.")
+        if role == "viewer" and payload.get("financeEdit") is True:
+            raise ValueError("کاربر مشاهده‌گر نمی‌تواند مجوز ویرایش مالی داشته باشد.")
+        profile_fields = {key: payload[key] for key in
+                          ("displayName", "avatarIcon", "avatarPhoto", "avatarColor")
+                          if key in payload}
+        with self.lock:
+            # Role changes can race a request already authenticated above.
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("فقط مدیر می‌تواند کاربران را تغییر دهد.")
+            old = self.users.get(username)
+            if username == who["username"] and role != "admin":
+                raise ValueError("مدیر نمی‌تواند نقش خودش را کاهش دهد.")
+            if not password and not old:
+                raise ValueError("برای کاربر جدید باید رمز تعیین شود.")
+            if password:
+                account = make_account(username, password, role, scope)
+                if old:
+                    account.update(clean_profile({}, old))
+            else:
+                account = {**old, "role": role, "projects": scope}
+            # The admin API is the only place where finance grants are
+            # assigned. Password/profile updates preserve existing grants.
+            # A downgrade to viewer must revoke write access immediately.
+            account["financeView"] = (payload.get(
+                "financeView", old.get("financeView", False) if old else False)
+                if role != "admin" else True)
+            account["financeEdit"] = (payload.get(
+                "financeEdit", old.get("financeEdit", False) if old else False)
+                if role == "editor" else role == "admin")
+            if profile_fields:
+                account.update(clean_profile(profile_fields, account))
+            with self.bridge._lock:
+                data = self.bridge.getState()
+                if account["projects"] is not None and any(
+                    p not in {v["id"] for v in data["projects"]} for p in account["projects"]
+                ):
+                    raise ValueError("یک پروژه در محدوده دسترسی وجود ندارد.")
+                if account["role"] != "admin" and account["projects"] is not None and any(
+                    username in task.get("assignees", []) and task["projectId"] not in account["projects"]
+                    for task in data["tasks"]
+                ):
+                    raise ValueError("این کاربر هنوز مسئول کارهایی خارج از محدوده جدید است.")
+            self.users[username] = account
+            self._store_users()
+            if password and old:
+                for key, record in list(self.sessions.items()):
+                    if record[0] == username:
+                        del self.sessions[key]
+            return public_user(account)
+
+    def delete_user(self, token, username):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin" or username == who["username"]:
+                raise PermissionError("حذف این حساب مجاز نیست.")
+            if username not in self.users:
+                raise ValueError("کاربر پیدا نشد.")
+            with self.bridge._lock:
+                state = self.bridge.getState()
+                updated = False
+                for task in state["tasks"]:
+                    if username in task.get("assignees", []):
+                        task["assignees"] = [u for u in task["assignees"] if u != username]
+                        updated = True
+                if updated:
+                    self.bridge.saveState(state)
+            self.users.pop(username)
+            for key, record in list(self.sessions.items()):
+                if record[0] == username:
+                    del self.sessions[key]
+            self._store_users()
+        return True
+
+    def read_state(self, token):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            data = view_for(self.bridge.getState(), who)
+            return {"state": data, "revision": revision(data), "user": public_user(who)}
+
+    def write_state(self, token, incoming, expected):
+        from native_app import is_valid, normalize_state
+        # Keep the same lock order as user-management actions (users -> state).
+        # The previous order (state -> users via read_state) could deadlock when
+        # an administrator changed account scope during a concurrent card save.
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] == "viewer":
+                raise PermissionError("این کاربر فقط اجازه مشاهده دارد.")
+            old = self.bridge.getState()
+            current_view = view_for(old, who)
+            if revision(current_view) != expected:
+                raise RuntimeError("CONFLICT: اطلاعات روی سرور تغییر کرده است. ابتدا تازه‌سازی کنید.")
+            next_view = normalize_state(incoming)
+            is_valid(next_view)
+            if who["role"] == "admin":
+                for t in next_view["tasks"]:
+                    for username in t.get("assignees", []):
+                        target = self.users.get(username)
+                        if target is None or (
+                            target["role"] != "admin" and target["projects"] is not None
+                            and t["projectId"] not in target["projects"]
+                        ):
+                            raise PermissionError("کاربر مسئول به پروژه دسترسی ندارد.")
+                self.bridge._save_local_state(next_view, actor=who["username"],
+                                              accounts=self.users,
+                                              expected_local_revision=revision(old))
+                return self.read_state(token)
+            # Editors cannot edit structure or global configuration, only tasks
+            # in the projects explicitly granted to them.
+            if next_view["stages"] != current_view["stages"] or next_view["settings"] != current_view["settings"]:
+                raise PermissionError("ویرایش ستون‌ها یا تنظیمات مخصوص مدیر است.")
+            if next_view["projects"] != current_view["projects"]:
+                raise PermissionError("ویرایش پروژه مخصوص مدیر است.")
+            for field in ("boards", "workspaces", "templates"):
+                if next_view.get(field) != current_view.get(field):
+                    raise PermissionError("ویرایش ساختار بردها و قالب‌ها مخصوص مدیر است.")
+            allowed = {p["id"] for p in current_view["projects"]}
+            if any(t["projectId"] not in allowed for t in next_view["tasks"]):
+                raise PermissionError("دسترسی به پروژه مقصد وجود ندارد.")
+            for t in next_view["tasks"]:
+                for username in t.get("assignees", []):
+                    target = self.users.get(username)
+                    if target is None or (
+                        target["role"] != "admin" and target["projects"] is not None
+                        and t["projectId"] not in target["projects"]
+                    ):
+                        raise PermissionError("کاربر مسئول به پروژه دسترسی ندارد.")
+            old_other = [t for t in old["tasks"] if t["projectId"] not in allowed]
+            # Editor receives a redacted financial projection. Restore original
+            # finance fields on the trusted host before saving ordinary edits.
+            # Reject any attempted monetary mutation or paid checklist deletion.
+            from finance_visibility import preserve_editor_finance
+            # Only the editor-visible subset is submitted. Unrelated projects
+            # are kept byte-for-byte in old_other, not treated as deletions.
+            preserve_editor_finance(
+                [task for task in old["tasks"] if task["projectId"] in allowed],
+                next_view["tasks"])
+            merged = {**old, "tasks": old_other + next_view["tasks"]}
+            is_valid(merged)
+            self.bridge._save_local_state(merged, actor=who["username"],
+                                          accounts=self.users,
+                                          expected_local_revision=revision(old))
+            return self.read_state(token)
+
+    def collab_read(self, token, kind, card_id=""):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            stored = self.bridge._load_collab()
+            kwargs = {"actor": who["username"], "accounts": self.users,
+                      "cards": state["tasks"], "projects": state["projects"]}
+            if kind == "comments":
+                return collab.list_comments(stored, card_id, **kwargs)
+            if kind == "notifications":
+                return collab.list_notifications(stored, **kwargs)
+            if kind == "rules":
+                return collab.list_rules(stored, project_id=card_id or None, **kwargs)
+            if kind == "activity":
+                return collab.list_activity(stored, **kwargs)
+            raise ValueError("نوع اطلاعات همکاری معتبر نیست.")
+
+    def collab_command(self, token, command):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            current = self.bridge.getState()
+            output = collab.apply_command(
+                self.bridge._load_collab(), command, actor=who["username"],
+                accounts=self.users, cards=current["tasks"],
+                projects=current["projects"],
+                now=datetime.now(timezone.utc).isoformat())
+            if output["changed"]:
+                self._commit_domain("collab", output["state"])
+            return output["result"]
+
+    def finance_read(self, token, project_id=""):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            return finance.list_invoices(
+                self.bridge._load_finance(), actor=who["username"],
+                accounts=self.users, cards=state["tasks"], projects=state["projects"],
+                project_id=project_id or None)
+
+    def finance_overview(self, token, project_id="", start_date="", end_date=""):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Financial overview requires administrator")
+            state = self.bridge.getState()
+            return finance.financial_overview(
+                self.bridge._load_finance(), actor=who["username"],
+                accounts=self.users, cards=state["tasks"], projects=state["projects"],
+                project_id=project_id, start_date=start_date, end_date=end_date)
+
+    def finance_status(self, token):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("فقط مدیر می‌تواند وضعیت صف مالی را مشاهده کند.")
+            return {"pending": len(self.bridge._pending_finance_events()),
+                    "warning": self.bridge._finance_warning}
+
+    def finance_command(self, token, command):
+        if not isinstance(command, dict) or command.get("type") == "completion.record":
+            raise ValueError("رویداد تکمیل را فقط سرور از تغییر وضعیت کار تولید می‌کند.")
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            before = self.bridge._load_finance()
+            now = datetime.now(timezone.utc).isoformat()
+            if "rialJournalV2" in before and command["type"] == "invoice.issue":
+                from ir_invoice_joint_issue import issue_legacy_sales_with_rial
+                output = issue_legacy_sales_with_rial(
+                    before, command, actor=who["username"], accounts=self.users,
+                    cards=state["tasks"], projects=state["projects"], now=now)
+            else:
+                output = finance.apply_finance_command(
+                    before, command, actor=who["username"],
+                    accounts=self.users, cards=state["tasks"], projects=state["projects"],
+                    now=now)
+            if output["changed"]:
+                if "rialJournalV2" in before:
+                    from money_policy import snapshot_sha256
+                    self._commit_domain(
+                        "finance", output["state"],
+                        expected_finance_sha256=snapshot_sha256(before))
+                else:
+                    self._commit_domain("finance", output["state"])
+            return output["result"]
+
+    def accounting_read(self, token, project_id=""):
+        from accounting_service import read_madar_accounting
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            return read_madar_accounting(
+                self.bridge._load_finance(), actor=who["username"],
+                accounts=self.users, project_id=project_id,
+                cards=state["tasks"], projects=state["projects"])
+
+    def standalone_accounting_read(self, token):
+        """Authenticated standalone DB only; no task or legacy accounting state."""
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            standalone_finance_access(who["username"], self.users, mutation=False)
+            return self.bridge._standalone_accounting_read_local(
+                actor=who["username"], accounts=self.users)
+
+    def standalone_accounting_command(self, token, request):
+        """One authenticated standalone store CAS, no shared finance transaction."""
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            standalone_finance_access(who["username"], self.users, mutation=True)
+            command, expected_revision = standalone_command_request(request)
+            return self.bridge._standalone_accounting_command_local(
+                {"command": command, "expectedRevision": expected_revision},
+                actor=who["username"], accounts=self.users)
+
+    def standalone_accounting_prepare(self, token, request):
+        """Resolve commercial fields exclusively from authoritative saved tasks."""
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Task accounting preparation requires administrator")
+            from standalone_task_prepare import prepare_from_saved_task
+            return prepare_from_saved_task(
+                self.bridge._standalone_accounting_store(), request,
+                tasks=self.bridge.getState()["tasks"], actor=who["username"],
+                accounts=standalone_finance_accounts(self.users))
+
+    def standalone_accounting_quote(self, token, request):
+        """Quote only: admin identity is verified before numerical evaluation."""
+        with self.lock:
+            who = self.account_for(token)
+            if who.get("role") != "admin":
+                raise PermissionError("Only administrator can request a task sale quote")
+            from standalone_accounting_quote import quote_standalone_sale
+            head = self.bridge._standalone_accounting_store().read(
+                actor=who["username"], accounts=standalone_finance_accounts(self.users))
+            return quote_standalone_sale(request,
+                                         ledger_currency=head["view"]["currency"])
+
+    def rial_journal_read(self, token, request):
+        """Role-checked RIAL V2 read. No legacy finance conversion or posting."""
+        with self.lock, self.bridge._lock:
+            principal = self.account_for(token)
+            if principal.get("role") != "admin":
+                raise PermissionError("RIAL journal is restricted to administrators")
+            if (type(request) is not dict or
+                    set(request) != {"companyId", "fiscalPeriodId"}):
+                raise ValueError("Invalid RIAL scope request")
+            import re
+            for value in request.values():
+                if type(value) is not str or not re.fullmatch(
+                        r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", value):
+                    raise ValueError("Invalid RIAL scope identifier")
+            return self.bridge._rial_journal_read_local(request)
+
+    def rial_journal_activate(self, token, command):
+        """Only the authenticated owner/admin can create a pristine RIAL ledger."""
+        with self.lock, self.bridge._lock:
+            principal = self.account_for(token)
+            if principal.get("role") != "admin":
+                raise PermissionError("Only admin may activate RIAL accounting")
+            if (type(command) is not dict or
+                    set(command) != {"companyId", "fiscalPeriodId",
+                                     "startDate", "endDate"}):
+                raise ValueError("Invalid RIAL activation command")
+            import re
+            if any(type(command[k]) is not str or not re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", command[k])
+                   for k in ("companyId", "fiscalPeriodId")):
+                raise ValueError("Invalid RIAL activation company/period ID")
+            return self.bridge._rial_journal_activate_local(
+                command, actor=principal["username"])
+
+    def accounting_command(self, token, command):
+        from accounting_service import apply_madar_accounting
+        if type(command) is not dict:
+            raise ValueError("Invalid authenticated accounting command")
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            before = self.bridge._load_finance()
+            context = {"actor": who["username"], "accounts": self.users,
+                       "cards": state["tasks"], "projects": state["projects"],
+                       "now": datetime.now(timezone.utc).isoformat()}
+            if "rialJournalV2" in before and isinstance(command, dict) and (
+                    command.get("type") in (
+                        "intake.create", "intake.price", "intake.cancel",
+                        "intake.convert")):
+                store = self.bridge._unified_store
+                if store is None:
+                    raise ValueError("Authenticated supplier intake requires unified SQLite")
+                from money_policy import snapshot_sha256
+                current = store.load()
+                if current is None:
+                    raise RuntimeError("CONFLICT: unified finance snapshot missing")
+                committed = store.commit_authenticated_intake(
+                    command, actor=who["username"], accounts=self.users,
+                    now=context["now"], expected_revision=current.revision,
+                    expected_finance_sha256=snapshot_sha256(before))
+                return committed["result"]
+            if "rialJournalV2" in before and command.get("type") == "document.issue":
+                from ir_purchase_host_adapter import issue_supplier_purchase_with_rial
+                output = issue_supplier_purchase_with_rial(before, command, **context)
+            else:
+                output = apply_madar_accounting(before, command, **context)
+            if output["changed"]:
+                if "rialJournalV2" in before:
+                    from money_policy import snapshot_sha256
+                    self._commit_domain(
+                        "finance", output["state"],
+                        expected_finance_sha256=snapshot_sha256(before))
+                else:
+                    self._commit_domain("finance", output["state"])
+            return output["result"]
+
+    def run_scheduler(self, token):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Only admin can run scheduler")
+            enhanced = self.bridge._run_engine_scheduler(who["username"], self.users)
+            if enhanced is not None:
+                return enhanced
+            current = self.bridge.getState()
+            events = due_events(current["tasks"], today=datetime.now().date())
+            snapshot = self.bridge._load_collab()
+            changed = 0
+            for event in events:
+                output = collab.apply_command(
+                    snapshot, event, actor=who["username"],
+                    accounts=self.users, cards=current["tasks"], projects=current["projects"],
+                    now=datetime.now(timezone.utc).isoformat())
+                if output["changed"]:
+                    self._commit_domain("collab", output["state"])
+                    changed += 1
+                snapshot = output["state"]
+            return {"events": len(events), "new": changed}
+
+    def attachment_action(self, token, kind, *, card_id="", attachment_id="", payload=None):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            state = self.bridge.getState()
+            context = {"actor": who["username"], "accounts": self.users,
+                       "cards": state["tasks"], "projects": state["projects"]}
+            store = self.bridge._attachment_store()
+            if kind == "list":
+                return store.list_card(card_id=card_id, **context)
+            if kind == "read":
+                return store.read(attachment_id=attachment_id, **context)
+            if kind == "preview":
+                return store.preview(attachment_id=attachment_id, **context)
+            if kind == "upload":
+                if not isinstance(payload, dict) or set(payload) != {"kind", "cardId", "filename",
+                                                                      "contentBase64", "requestId"}:
+                    raise ValueError("Invalid upload schema")
+                return store.upload(card_id=payload["cardId"], filename=payload["filename"],
+                                    content_base64=payload["contentBase64"],
+                                    request_id=payload["requestId"],
+                                    now=datetime.now(timezone.utc).isoformat(), **context)
+            if kind == "delete":
+                if not isinstance(payload, dict) or set(payload) != {"kind", "attachmentId", "requestId"}:
+                    raise ValueError("Invalid attachment delete schema")
+                return store.delete(attachment_id=payload["attachmentId"],
+                                    request_id=payload["requestId"],
+                                    now=datetime.now(timezone.utc).isoformat(), **context)
+            raise ValueError("Invalid attachment kind")
+
+    def start(self):
+        if self.server:
+            return self.port
+        if not self.users:
+            raise ValueError("ابتدا حساب مدیر سرور را بسازید.")
+        if bool(self.certfile) != bool(self.keyfile):
+            raise ValueError("TLS requires both certificate and private key")
+        tls_context = None
+        if self.certfile:
+            tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            tls_context.load_cert_chain(certfile=str(self.certfile),
+                                        keyfile=str(self.keyfile))
+        service = self
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                return
+
+            def reply(self, status, obj):
+                raw = json.dumps(obj, ensure_ascii=False).encode("utf8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def process(self):
+                endpoint = urlparse(self.path).path
+                try:
+                    client_ip = ipaddress.ip_address(self.client_address[0])
+                    if not (client_ip.is_private or client_ip.is_loopback):
+                        return self.reply(403, {"error": "فقط اتصال شبکه خصوصی مجاز است."})
+                except ValueError:
+                    return self.reply(403, {"error": "نشانی کاربر نامعتبر است."})
+                if endpoint.startswith("/integrations/v1/"):
+                    # Never expose integration credentials over the plaintext
+                    # LAN handler. The router rechecks TLS and current ACL.
+                    if service.integration_router is None:
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    # Reject alternate body-framing. Silently treating chunked
+                    # requests as empty creates request-smuggling ambiguity.
+                    if self.headers.get("Transfer-Encoding") is not None:
+                        return self.reply(400, {"error": "Transfer-Encoding پشتیبانی نمی‌شود."})
+                    names = [name.lower() for name in self.headers.keys()]
+                    if len(names) != len(set(names)):
+                        return self.reply(400, {"error": "هدر تکراری مجاز نیست."})
+                    try:
+                        length = int(self.headers.get("Content-Length", "0"))
+                    except (ValueError, TypeError):
+                        return self.reply(400, {"error": "طول درخواست نامعتبر است."})
+                    if length < 0 or length > 8192:
+                        return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
+                    if self.command == "GET" and length:
+                        return self.reply(400, {"error": "GET نباید داده داشته باشد."})
+                    body = self.rfile.read(length) if length else b""
+                    outcome = service.integration_router.handle(
+                        self.command, self.path, dict(self.headers.items()), body)
+                    self.send_response(outcome.status)
+                    for key, value in outcome.headers.items():
+                        self.send_header(key, value)
+                    self.send_header("Content-Length", str(len(outcome.body)))
+                    self.end_headers()
+                    self.wfile.write(outcome.body)
+                    return
+                if endpoint not in ("/api/login", "/api/state", "/api/users", "/api/user",
+                                    "/api/profiles", "/api/profile", "/api/password",
+                                    "/api/reset-password", "/api/comments", "/api/notifications",
+                                    "/api/activity", "/api/collab", "/api/finance", "/api/finance-status",
+                                    "/api/finance-overview", "/api/accounting",
+                                    "/api/standalone-accounting", "/api/standalone-accounting/prepare",
+                                    "/api/standalone-accounting/quote",
+                                    "/api/rial-journal", "/api/rial-journal/activate",
+                                    "/api/rules", "/api/scheduler", "/api/attachments"):
+                    return self.reply(404, {"error": "مسیر پیدا نشد."})
+                token = self.headers.get("Authorization", "").removeprefix("Bearer ")
+                payload = {}
+                if self.command == "POST":
+                    # Always validate the byte limit before reading POST bodies.
+                    # Returning 415 with an unread body can cause Windows TCP
+                    # to reset the connection before the client receives JSON.
+                    try:
+                        length = int(self.headers.get("Content-Length", "0"))
+                    except (ValueError, TypeError):
+                        return self.reply(400, {"error": "ساختار JSON نامعتبر است."})
+                    if length <= 0 or length > 16_000_000:
+                        return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
+                    content_type = self.headers.get("Content-Type", "")
+                    if not content_type.startswith("application/json"):
+                        # Read only an already bounded declared body so HTTP
+                        # error responses are observable instead of racing a
+                        # TCP reset triggered by unread request data.
+                        self.rfile.read(length)
+                        return self.reply(415, {"error": "درخواست باید JSON باشد."})
+                    try:
+                        payload = json.loads(self.rfile.read(length))
+                        if not isinstance(payload, dict):
+                            raise ValueError()
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        return self.reply(400, {"error": "ساختار JSON نامعتبر است."})
+                try:
+                    if self.command == "POST" and endpoint == "/api/login":
+                        return self.reply(200, service.authenticate(payload.get("username"),
+                                                                     payload.get("password"), self.client_address[0]))
+                    if self.command == "GET" and endpoint == "/api/state":
+                        return self.reply(200, service.read_state(token))
+                    if self.command == "POST" and endpoint == "/api/state":
+                        return self.reply(200, service.write_state(token, payload.get("state"),
+                                                                    payload.get("revision")))
+                    if self.command == "GET" and endpoint in ("/api/comments", "/api/notifications", "/api/activity", "/api/rules"):
+                        params = parse_qs(urlparse(self.path).query)
+                        return self.reply(200, {"items": service.collab_read(
+                            token, endpoint.removeprefix("/api/"), params.get(
+                                "projectId" if endpoint == "/api/rules" else "cardId", [""])[0])})
+                    if self.command == "POST" and endpoint == "/api/collab":
+                        return self.reply(200, {"result": service.collab_command(token, payload)})
+                    if self.command == "GET" and endpoint == "/api/finance":
+                        params = parse_qs(urlparse(self.path).query)
+                        return self.reply(200, {"invoices": service.finance_read(
+                            token, params.get("projectId", [""])[0])})
+                    if self.command == "GET" and endpoint == "/api/accounting":
+                        params = parse_qs(urlparse(self.path).query)
+                        return self.reply(200, service.accounting_read(
+                            token, params.get("projectId", [""])[0]))
+                    if self.command == "GET" and endpoint == "/api/standalone-accounting":
+                        if urlparse(self.path).query:
+                            raise ValueError("Standalone accounting read takes no query arguments")
+                        return self.reply(200, service.standalone_accounting_read(token))
+                    if self.command == "GET" and endpoint == "/api/rial-journal":
+                        params = parse_qs(urlparse(self.path).query)
+                        if set(params) != {"companyId", "fiscalPeriodId"} or any(
+                                len(values) != 1 for values in params.values()):
+                            raise ValueError("Company and fiscal period must be specified exactly once")
+                        return self.reply(200, service.rial_journal_read(
+                            token, {"companyId": params["companyId"][0],
+                                    "fiscalPeriodId": params["fiscalPeriodId"][0]}))
+                    if self.command == "GET" and endpoint == "/api/finance-overview":
+                        params = parse_qs(urlparse(self.path).query)
+                        return self.reply(200, service.finance_overview(
+                            token, params.get("projectId", [""])[0],
+                            params.get("startDate", [""])[0],
+                            params.get("endDate", [""])[0]))
+                    if self.command == "GET" and endpoint == "/api/finance-status":
+                        return self.reply(200, service.finance_status(token))
+                    if self.command == "POST" and endpoint == "/api/finance":
+                        return self.reply(200, {"result": service.finance_command(token, payload)})
+                    if self.command == "POST" and endpoint == "/api/accounting":
+                        return self.reply(200, {"result": service.accounting_command(token, payload)})
+                    if self.command == "POST" and endpoint == "/api/standalone-accounting":
+                        return self.reply(200, service.standalone_accounting_command(token, payload))
+                    if self.command == "POST" and endpoint == "/api/standalone-accounting/prepare":
+                        return self.reply(200, service.standalone_accounting_prepare(token, payload))
+                    if self.command == "POST" and endpoint == "/api/standalone-accounting/quote":
+                        return self.reply(200, service.standalone_accounting_quote(token, payload))
+                    if self.command == "POST" and endpoint == "/api/rial-journal/activate":
+                        return self.reply(200, {"result": service.rial_journal_activate(token, payload)})
+                    if self.command == "POST" and endpoint == "/api/scheduler":
+                        if payload != {"run": True}:
+                            raise ValueError("Invalid scheduler command")
+                        return self.reply(200, {"result": service.run_scheduler(token)})
+                    if self.command == "GET" and endpoint == "/api/attachments":
+                        params = parse_qs(urlparse(self.path).query)
+                        kind = params.get("kind", [""])[0]
+                        if kind not in {"list", "read", "preview"}:
+                            raise ValueError("Invalid attachment operation")
+                        return self.reply(200, {"result": service.attachment_action(
+                            token, kind, card_id=params.get("cardId", [""])[0],
+                            attachment_id=params.get("attachmentId", [""])[0])})
+                    if self.command == "POST" and endpoint == "/api/attachments":
+                        if payload.get("kind") not in ("upload", "delete"):
+                            raise ValueError("Invalid attachment operation")
+                        return self.reply(200, {"result": service.attachment_action(
+                            token, payload["kind"], payload=payload)})
+                    if self.command == "GET" and endpoint == "/api/users":
+                        return self.reply(200, {"users": service.list_users(token)})
+                    if self.command == "GET" and endpoint == "/api/profiles":
+                        return self.reply(200, {"users": service.list_profiles(token)})
+                    if self.command == "POST" and endpoint == "/api/profile":
+                        return self.reply(200, {"user": service.update_profile(token, payload)})
+                    if self.command == "POST" and endpoint == "/api/password":
+                        return self.reply(200, {"ok": service.change_password(
+                            token, payload.get("current"), payload.get("newPassword"))})
+                    if self.command == "POST" and endpoint == "/api/reset-password":
+                        return self.reply(200, {"ok": service.reset_password(
+                            token, payload.get("username"), payload.get("newPassword"))})
+                    if self.command == "POST" and endpoint == "/api/user":
+                        return self.reply(200, {"user": service.upsert_user(token, payload)})
+                    if self.command == "POST" and endpoint == "/api/users":
+                        return self.reply(200, {"ok": service.delete_user(token, payload.get("username"))})
+                    return self.reply(405, {"error": "روش درخواست معتبر نیست."})
+                except PermissionError as e:
+                    return self.reply(403, {"error": str(e)})
+                except ValueError as e:
+                    return self.reply(400, {"error": str(e)})
+                except RuntimeError as e:
+                    status = 409 if str(e).startswith("CONFLICT:") else 400
+                    return self.reply(status, {"error": str(e)})
+
+            def do_GET(self):
+                self.process()
+
+            def do_POST(self):
+                self.process()
+
+            def do_PATCH(self):
+                self.process()
+
+        server = ThreadingHTTPServer((self.bind, self.port), Handler)
+        try:
+            if tls_context:
+                server.socket = tls_context.wrap_socket(server.socket, server_side=True)
+        except Exception:
+            server.server_close()
+            raise
+        self.server = server
+        if tls_context:
+            from integration_api_v1 import IntegrationRouter
+            self.integration_router = IntegrationRouter(self)
+        else:
+            self.integration_router = None
+        self.port = self.server.server_port
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self.port
+
+    def stop(self):
+        if self.server:
+            self.server.shutdown()
+            self.server.server_close()
+            self.thread.join(timeout=3)
+            self.server = None
+            self.integration_router = None
