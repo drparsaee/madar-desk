@@ -117,8 +117,10 @@ def audit_import(*, export, date_mapping, trial_root, source_archive,
         "rawBaseTableRowsPreserved": sum(archived.values()),
         "sourceRowDigestMismatches": bad_sha,
         "sourceDocumentIdCoverageExact": True,
-        "sourceSQL": "READ_ONLY_ATTACHED_SQL_NOT_RESTORED_BAK",
-        "snapshotEqualToBakProven": False,
+        "sourceSQL": ("ISOLATED_VERIFIED_RESTORED_BAK"
+                      if detail["sourceBackupSnapshotVerified"] else
+                      "READ_ONLY_ATTACHED_SQL_NOT_RESTORED_BAK"),
+        "snapshotEqualToBakProven": detail["sourceBackupSnapshotVerified"],
         "operationalARAPBankInvoiceChequeStockModulesMigrated": False,
         "canReplaceParsianWithoutFurtherWork": False,
     }
