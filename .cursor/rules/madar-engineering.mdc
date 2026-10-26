@@ -1,0 +1,8 @@
+---
+description: Scope-aware engineering policy for Madar Desk
+alwaysApply: true
+---
+
+Read root AGENTS.md, PROJECT_CONTEXT.md, LOCALFORGE_SOURCE_OF_TRUTH.md and agent-standards/README.md before substantive implementation. Use agent-standards/core/ and agent-standards/projects/madar-desk.md only where compatible with binding project decisions.
+
+Make minimal testable edits; preserve parallel workers' changes. Never treat synthetic accounting fixtures as real migration or alter private Parsian backups without approval and reversible reconciliation. Record observed test and Git/deployment states separately.
