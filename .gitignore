@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 build/
 release/
@@ -45,3 +45,8 @@ preview.png
 *.7z
 *.tar
 *.gz
+
+# Local QA run directories and generated preview snapshots
+/v1-gui-smoke-*/
+/preview-final.png
+/preview-v02-dark.png
