@@ -22,6 +22,8 @@ from standalone_accounting_backup import _readonly_sqlite, _check_snapshot
 _ACTOR = "legacy-party-registration"
 _ACCOUNTS = {_ACTOR: {"username": _ACTOR, "role": "admin"}}
 _NOW = "2026-10-24T12:00:00Z"
+_R19_SOURCE = "RESTORED_BAK_ISOLATED_VERIFIED_20261026"
+_R19_BACKUP_SHA = "EAF55D9A4C2CF2EF28C9C5AF01B57E61C1773E8A33F16F09174D1E41967B6946"
 
 
 class PartyMigrationError(ValueError):
@@ -55,7 +57,18 @@ def register_historic_customers(source_book, export_file, destination):
             before["view"]["parties"]):
         raise PartyMigrationError("Expected original RIAL Parsian trial with no parties")
     source = json.loads(export_path.read_text("utf8"))
-    if source.get("sourceType") != "ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT":
+    source_type=source.get("sourceType")
+    if source_type == _R19_SOURCE:
+        if source.get("backupCopySha256", "").upper() != _R19_BACKUP_SHA:
+            raise PartyMigrationError("Unexpected restored Parsian source hash")
+        manifest_path=original.parent/"parsian-archive-manifest.json"
+        if not manifest_path.is_file():
+            raise PartyMigrationError("Missing restored source archive")
+        manifest=json.loads(manifest_path.read_text("utf8"))
+        if (manifest.get("sourceBackupSha256", "").upper() != _R19_BACKUP_SHA
+                or manifest.get("snapshotMatchesBackup") is not True):
+            raise PartyMigrationError("Restored archived source not attested")
+    elif source_type != "ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT":
         raise PartyMigrationError("Unexpected Parsian export class")
     source_tafsili = source["tables"]["tbl_Tafsili"]
     parties = {}
@@ -72,7 +85,7 @@ def register_historic_customers(source_book, export_file, destination):
         parties[pid] = {"id": pid, "name":name.strip(), "sourceAccountId":aid}
     if not parties:
         raise PartyMigrationError("No historical customers available")
-    # Populate all 49 historic named customer identities for NEW invoicing,
+    # Populate named historic customer identities for NEW invoicing,
     # not just customers with a historic amount currently outstanding.
     dest.mkdir(exist_ok=False)
     book = dest/"standalone-accounting.sqlite3"
