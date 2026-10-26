@@ -161,8 +161,10 @@ class AutomaticStandaloneBackups:
                     # when the operator has saved templates. Never pretend the
                     # SQLite-only backup covers this sidecar.
                     from standalone_accounting_template_store import StandaloneAccountingTemplateStore
+                    from standalone_accounting_identity import LocalCompanyIdentity
                     templates = StandaloneAccountingTemplateStore(self.root)
                     companion = created.with_suffix('.templates.json')
+                    user_companion = created.with_suffix('.users.json')
                     try:
                         if templates.path.exists() or templates.path.is_symlink():
                             document = templates._read()
@@ -174,8 +176,22 @@ class AutomaticStandaloneBackups:
                                 os.fsync(stream.fileno())
                             if json.loads(companion.read_text(encoding='utf-8')) != document:
                                 raise AutomaticBackupError('Template companion validation failed')
+                        identities=LocalCompanyIdentity(self.root)
+                        if identities.path.exists() or identities.path.is_symlink():
+                            identity_document=identities._read()
+                            if not identity_document['users']:
+                                raise AutomaticBackupError('Protected identity registry has no users')
+                            identity_bytes=json.dumps(identity_document,ensure_ascii=False,
+                                separators=(',',':')).encode('utf-8')
+                            with user_companion.open('xb') as stream:
+                                stream.write(identity_bytes)
+                                stream.flush()
+                                os.fsync(stream.fileno())
+                            if user_companion.read_bytes()!=identity_bytes:
+                                raise AutomaticBackupError('User registry backup verification failed')
                     except BaseException:
                         companion.unlink(missing_ok=True)
+                        user_companion.unlink(missing_ok=True)
                         created.unlink(missing_ok=True)
                         raise
                     candidates = self._managed_files()
@@ -188,6 +204,7 @@ class AutomaticStandaloneBackups:
                         # Only companion names derived from our own strict
                         # managed filename are eligible for rotation.
                         obsolete.with_suffix('.templates.json').unlink(missing_ok=True)
+                        obsolete.with_suffix('.users.json').unlink(missing_ok=True)
                         obsolete.unlink()
                 self.last_success = created
                 self.last_error = None

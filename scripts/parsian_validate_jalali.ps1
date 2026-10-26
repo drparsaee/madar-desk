@@ -14,7 +14,7 @@ if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
     throw 'Expected an existing private source export and a new output filename.'
 }
 $raw = Get-Content -LiteralPath $source -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($raw.sourceType -ne 'ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT') {
+if ($raw.sourceType -notin @('ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT','RESTORED_BAK_ISOLATED_VERIFIED_20261026')) {
     throw 'Unrecognized source format'
 }
 $seen = New-Object 'System.Collections.Generic.HashSet[string]'
@@ -44,7 +44,7 @@ foreach ($value in ($seen | Sort-Object)) {
                                     [System.Globalization.CultureInfo]::InvariantCulture)
 }
 $result = [ordered]@{
-    sourceClass = 'ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT'
+    sourceClass = [string]$raw.sourceType
     calendar = 'System.Globalization.PersianCalendar'
     schemaVersion = 1
     dates = $mapping

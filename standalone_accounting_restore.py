@@ -61,6 +61,32 @@ def preview_template_companion(source: Path, destination: Path | None = None) ->
             "source": companion, "bytes": content}
 
 
+def preview_identity_companion(source: Path, destination: Path | None = None) -> dict:
+    """Require a valid isolated user registry before restoring it with a book."""
+    from standalone_accounting_identity import validate_identity_document
+    companion=source.with_suffix('.users.json')
+    _check_path_components(companion)
+    if not companion.exists() and not companion.is_symlink():
+        return {"present":False,"count":0,"source":companion}
+    if companion.is_symlink() or not stat.S_ISREG(companion.lstat().st_mode):
+        raise StandaloneRestoreError('Invalid user backup companion file')
+    if companion.stat().st_size > 1024*1024:
+        raise StandaloneRestoreError('User backup companion too large')
+    try:
+        raw=companion.read_bytes()
+        users=validate_identity_document(json.loads(raw.decode('utf-8')))['users']
+    except (OSError,ValueError,UnicodeDecodeError,TypeError,PermissionError) as exc:
+        raise StandaloneRestoreError('User backup companion damaged') from exc
+    if not users:
+        raise StandaloneRestoreError('Protected user backup has no accounts')
+    if destination is not None:
+        target=destination.parent/'local-users.json'
+        _check_path_components(target)
+        if os.path.lexists(target):
+            raise FileExistsError('User restore destination already exists')
+    return {"present":True,"count":len(users),"source":companion,"bytes":raw}
+
+
 def _is_link_or_junction(path: Path) -> bool:
     """Reject existing symlinks, Windows junctions and their ancestors."""
     return path.is_symlink() or (
@@ -161,11 +187,15 @@ def restore_standalone_accounting(
     _check_new_destination(source, destination)
     original_head = _check_input(source)
     template_companion = preview_template_companion(source, destination)
+    identity_companion = preview_identity_companion(source, destination)
     temporary = None
     published = False
     companion_published = False
     companion_temp = None
     template_target = destination.parent / 'invoice-templates.json'
+    identity_published = False
+    identity_temp = None
+    identity_target = destination.parent / 'local-users.json'
     prior_error = None
     try:
         fd, name = tempfile.mkstemp(
@@ -192,12 +222,24 @@ def restore_standalone_accounting(
             current_companion['present'] and current_companion['bytes'] != template_companion['bytes']
         ):
             raise StandaloneRestoreError('Template backup companion changed during restore')
+        current_identity=preview_identity_companion(source,destination)
+        if (current_identity['present']!=identity_companion['present'] or
+            (current_identity['present'] and current_identity['bytes']!=identity_companion['bytes'])):
+            raise StandaloneRestoreError('User backup companion changed during restore')
         if template_companion['present']:
             descriptor, companion_name = tempfile.mkstemp(
                 dir=str(destination.parent), prefix='.invoice-templates.restore-', suffix='.json')
             companion_temp = Path(companion_name)
             with os.fdopen(descriptor, 'wb') as stream:
                 stream.write(template_companion['bytes'])
+                stream.flush()
+                os.fsync(stream.fileno())
+        if identity_companion['present']:
+            descriptor,identity_name=tempfile.mkstemp(
+                dir=str(destination.parent),prefix='.local-users.restore-',suffix='.json')
+            identity_temp=Path(identity_name)
+            with os.fdopen(descriptor,'wb') as stream:
+                stream.write(identity_companion['bytes'])
                 stream.flush()
                 os.fsync(stream.fileno())
         # os.link is an atomic CREATE-IF-ABSENT on the *destination filesystem*.
@@ -208,10 +250,19 @@ def restore_standalone_accounting(
         if companion_temp is not None:
             os.link(str(companion_temp), str(template_target))
             companion_published = True
+        if identity_temp is not None:
+            os.link(str(identity_temp),str(identity_target))
+            identity_published=True
         _sync_directory(destination.parent)  # best-effort Windows directory fsync
         return destination
     except BaseException as exc:
         prior_error = exc
+        if identity_published and identity_temp is not None:
+            try:
+                if os.path.samefile(identity_temp,identity_target):
+                    identity_target.unlink()
+            except OSError as cleanup_exc:
+                exc.add_note('Could not revoke restored user file: '+str(cleanup_exc))
         if companion_published and companion_temp is not None:
             try:
                 if os.path.samefile(companion_temp, template_target):
@@ -230,6 +281,8 @@ def restore_standalone_accounting(
                              str(cleanup_exc))
         raise
     finally:
+        if identity_temp is not None:
+            identity_temp.unlink(missing_ok=True)
         if companion_temp is not None:
             companion_temp.unlink(missing_ok=True)
         if temporary is not None:

@@ -24,7 +24,9 @@ class FullArchiveError(ValueError):
 
 _ALLOWED_TYPES = {"null", "integer", "float", "decimal", "datetime",
                   "text", "bit", "binary"}
-_NAME = re.compile(r"tbl_[A-Za-z0-9_]+\Z")
+_LIVE_SOURCE = "ATTACHED_LIVE_SQL_NOT_RESTORED_BACKUP"
+_RESTORED_SOURCE = "ISOLATED_RESTORED_BAK_VERIFIED_20261026"
+_NAME = re.compile(r"tbl_[A-Za-z0-9_]+\Z", re.IGNORECASE)
 MAX_RAW_FILE = 120 * 1024 * 1024
 MAX_LINE = 3 * 1024 * 1024
 MAX_ROWS = 150000
@@ -94,9 +96,11 @@ def create_archive(raw_jsonl, source_manifest, archive_db):
         raise FullArchiveError("Unsafe source/target path")
     manifest = _strict_json(manifest_path.read_bytes().decode("utf-8"))
     if (type(manifest) is not dict or
-            manifest.get("source") != "ATTACHED_LIVE_SQL_NOT_RESTORED_BACKUP" or
-            manifest.get("snapshotMatchesBackup") is not False or
-            manifest.get("sourceCurrency") != "RIAL_OWNER_CONFIRMED" or
+        manifest.get("source") not in (_LIVE_SOURCE, _RESTORED_SOURCE) or
+        manifest.get("snapshotMatchesBackup") is not
+            (manifest.get("source") == _RESTORED_SOURCE) or
+        manifest.get("sourceCurrency") not in (
+            "RIAL_OWNER_CONFIRMED", "UNKNOWN_RAW_LEGACY_UNITS") or
             type(manifest.get("tableCounts")) is not dict or
             manifest.get("vendorTableCount") != len(manifest["tableCounts"]) or
             type(manifest.get("vendorRowCount")) is not int or
@@ -133,7 +137,8 @@ def create_archive(raw_jsonl, source_manifest, archive_db):
                     "source_class": manifest["source"],
                     "source_archive_sha256": source_hash.hexdigest(),
                     "financial_posting_authorized": "false",
-                    "bak_snapshot_equivalence_verified": "false",
+                    "bak_snapshot_equivalence_verified": (
+                        "true" if manifest["source"] == _RESTORED_SOURCE else "false"),
                     "vendor_login_data_not_installed": "true",
                     "encoding": "UTF-8, JSON typed values",
                 }.items():
@@ -179,7 +184,7 @@ def create_archive(raw_jsonl, source_manifest, archive_db):
         "archiveIntegrity": "OK",
         "sourceProvenance": manifest["source"],
         "financialOperationalDataImported": False,
-        "sourceBackupSnapshotProven": False,
+        "sourceBackupSnapshotProven": manifest["source"] == _RESTORED_SOURCE,
         "userCredentialsMigratedToMadar": False,
     }
 

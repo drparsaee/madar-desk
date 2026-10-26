@@ -6,14 +6,17 @@ import './standalone_accounting_ux20.css';
 import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone_invoice_export.js';
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';
+import ParsianRawArchiveExplorer from './parsian_raw_archive_explorer.jsx';
 import {buildAccountingInvoiceEntryTemplate,parseAccountingInvoiceEntryTemplate}
   from './accounting_invoice_entry_templates.js';
 import AccountingPrintDesigner from './accounting_print_designer.jsx';
+import {filterInvoiceRows,invoiceStatusCounts} from './accounting_invoice_quick_filter.js';
 import {DEFAULT_PRINT_TEMPLATE,validatePrintTemplate,buildCustomPrintExport}
   from './accounting_print_template.js';
 import {buildAccountingStructuredExport} from './accounting_structured_invoice_export.js';
 import {formatAccountingJalali,parseAccountingJalali,displayAccountingDate} from './accounting_jalali_dates.js';
 import AccountingJalaliField from './accounting_jalali_field.jsx';
+import AccountingManagementDashboard from './accounting_management_dashboard.jsx';
 import {accountingPeriodRows} from './accounting_period_report.js';
 import {LiveCheques,LiveInventory,BankReconciliation,
   InstalmentPlans,PayrollAndTax,FiscalYearClose,
@@ -208,7 +211,13 @@ export function validateStandaloneResponse(payload){
     !['accounts','parties','items','invoices','bills','receipts','payments'].every(
       k=>view[k]&&typeof view[k]==='object'&&!Array.isArray(view[k])))
     throw new Error('پاسخ میزبان با قرارداد حسابداری مستقل سازگار نیست.');
-  return {revision:payload.revision,view};
+  const currentUser=payload.currentUser;
+  if(currentUser!==undefined&&(
+    !currentUser||typeof currentUser.username!=='string'||
+    !['admin','editor','viewer'].includes(currentUser.role)||
+    typeof currentUser.jobTitle!=='string'||currentUser.jobTitle.length>80))
+    throw new Error('هویت نمایشی کاربر در پاسخ میزبان نامعتبر است.');
+  return {...(currentUser?{currentUser}:{}),revision:payload.revision,view};
 }
 
 const T=()=>standaloneToday();
@@ -250,7 +259,8 @@ const newId=()=>{
 const isConflict=e=>/conflict|stale|version|revision|409|تعارض|نسخه/i.test(String(e?.message||''));
 function Field({label,children,wide=false}){return <label className={'sac-field'+(wide?' sac-wide':'')}>
   <span>{label}</span>{children}</label>;}
-function Panel({title,description,children}){return <section className="sac-panel">
+function Panel({title,description,children,compact=false}){return <section
+  className={'sac-panel'+(compact?' sac-panel-invoice-compose':'')}>
   <div className="sac-panel-title"><h2>{title}</h2>{description&&<p>{description}</p>}</div>{children}</section>;}
 function Empty({children}){return <p className="sac-empty">{children}</p>;}
 const textOf=node=>{
@@ -299,9 +309,13 @@ function Action({children,disabled}){return <button type="submit" className="sac
 
 /** Entirely independent accounting desk. Host authenticates; UI never passes actor/company/proof. */
 export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false,
-  onSwitchCompany=null,canDraft=canManage,canAdmin=canManage}){
+  onSwitchCompany=null,onManageUsers=null,canDraft=canManage,canAdmin=canManage}){
   const [tab,setTab]=useState('overview');
+  const [invoiceComposerOpen,setInvoiceComposerOpen]=useState(false);
+  const [invoiceListSearch,setInvoiceListSearch]=useState('');
+  const [invoiceListStatus,setInvoiceListStatus]=useState('all');
   const [snapshot,setSnapshot]=useState(null);
+  const [taxPreflight,setTaxPreflight]=useState(null);
   const [state,setState]=useState({loading:true,error:'',notice:''});
   const [busy,setBusy]=useState(false);
   const [pendingRetry,setPendingRetry]=useState(false);
@@ -471,20 +485,51 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       blob:new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})});
     setState(p=>({...p,error:'',notice:'خروجی مانده اول دوره و پایان دوره آماده شد.'}));
   };
-  const gotoTab=name=>{setTab(name);setCancelTarget('');setEditTarget('');
+  const suggestedInvoiceId=nextAccountingNumber(view?.invoices||{},'INV',
+    formatAccountingJalali(today,{digits:'ascii'}).slice(0,4));
+  const hasUnsavedInvoice=Boolean(editTarget||correctionTarget||
+    (forms.document.documentId.trim()&&forms.document.documentId!==suggestedInvoiceId)||
+    forms.document.partyId||forms.document.note.trim()||forms.document.dueDate||
+    forms.document.discount!=='0'||forms.document.tax!=='0'||
+    forms.document.taxRuleId||forms.document.documentDate!==today||
+    rows.length!==1||rows.some(row=>row.description.trim()||
+      String(row.unitPrice).trim()||row.quantity!=='1'||row.accountId||row.itemId));
+  const closeInvoiceComposer=({force=false}={})=>{
+    if(!force&&hasUnsavedInvoice&&!window.confirm(
+      'اطلاعات واردشده در فاکتور هنوز ذخیره نشده است. بدون ذخیره به فهرست بازگردیم؟'))return false;
+    setInvoiceComposerOpen(false);setEditTarget('');setCorrectionTarget('');
+    setCorrectionReason('');setPartyQuery('');setRows([makeLine()]);reset('document');
+    return true;
+  };
+  const gotoTab=name=>{
+    if(busy||pendingRetry)return;
+    if(name===tab&&name==='invoice'&&invoiceComposerOpen){
+      closeInvoiceComposer();
+      return;
+    }
+    if(name!==tab&&tab==='invoice'&&invoiceComposerOpen&&!closeInvoiceComposer())return;
+    if(name!==tab)setInvoiceComposerOpen(false);
+    setTab(name);setCancelTarget('');setEditTarget('');
     setDetailTarget('');setReopenReason('');setCorrectionTarget('');
     setCorrectionReason('');setReturnTarget('');setReturnReason('');
     setReturnMode('full');setReturnQuantities({});
     setPartyEditing('');setPartyEditReason('');
     setProformaEditing('');};
   const openQuickInvoice=()=>{
-    gotoTab('invoice');
-    window.setTimeout(()=>{
-      document.querySelector('.sac-invoice-editor')?.scrollIntoView({
-        behavior:'smooth',block:'start'});
-      document.querySelector('.sac-invoice-editor input[aria-label="شناسه یکتا"]')?.focus();
-    },100);
+    if(tab==='invoice'&&invoiceComposerOpen&&hasUnsavedInvoice&&
+      !window.confirm('فاکتور فعلی هنوز ذخیره نشده است. فاکتور تازه باز شود؟'))return;
+    setForms(p=>({...p,document:{...DEFAULTS.document,documentDate:today,
+      documentId:suggestedInvoiceId}}));
+    setRows([makeLine()]);setEditTarget('');setCorrectionTarget('');
+    setPartyQuery('');
+    setCorrectionReason('');setInvoiceComposerOpen(true);setTab('invoice');
   };
+  useEffect(()=>{
+    if(tab!=='invoice'||!invoiceComposerOpen)return;
+    window.requestAnimationFrame(()=>{
+      document.querySelector('.sac-invoice-editor input[aria-label="جست‌وجوی مشتری یا تأمین‌کننده"]')?.focus();
+    });
+  },[tab,invoiceComposerOpen]);
   useEffect(()=>{document.querySelector('.sac-body')?.scrollTo({top:0,behavior:'instant'});},[tab]);
   useEffect(()=>{
     if(tab==='accounts'&&selectedHistoricAccount)
@@ -613,6 +658,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const accountSelect=(group,name,choices=activeCash)=><select required value={forms[group][name]}
     onChange={e=>f(group,name,e.target.value)}>{options(choices,'انتخاب حساب')}</select>;
   const docKind=tab==='bill'?'bill':'invoice',currentDocs=view?.[tab==='bill'?'bills':'invoices']||{};
+  const filteredInvoiceDocs=useMemo(()=>tab==='invoice'?
+    filterInvoiceRows(currentDocs,parties,invoiceListSearch,invoiceListStatus):
+    sortMap(currentDocs),[tab,currentDocs,parties,invoiceListSearch,invoiceListStatus]);
+  const invoiceCounts=useMemo(()=>invoiceStatusCounts(view?.invoices||{}),[view?.invoices]);
   const detailedDocument=currentDocs[detailTarget]||null;
   const returnedLines=useMemo(()=>{
     const result={};
@@ -678,7 +727,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     }
     if(e.key==='Enter'&&!e.shiftKey&&!e.altKey&&!e.ctrlKey){
       e.preventDefault();
-      if(col===4){
+      const advancedVisible=e.currentTarget.querySelector('.sac-row-advanced')?.open;
+      if(col===4||(col===2&&!advancedVisible)){
         if(index===rows.length-1)addInvoiceRow();
         else focusInvoiceCell(index+1,0);
       }else focusInvoiceCell(index,col+1);
@@ -688,6 +738,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const blocked=!canManage||busy||pendingRetry;
   const draftBlocked=(!canManage&&!canDraft)||busy||pendingRetry;
   const startEditingDocument=d=>{
+    setInvoiceComposerOpen(true);
     setEditTarget(d.id);
     setCorrectionTarget('');
     setForms(p=>({...p,document:{
@@ -699,6 +750,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       accountId:l.accountId||'',itemId:l.itemId||''})));
   };
   const startCorrectingDocument=d=>{
+    setInvoiceComposerOpen(true);
     const prefix=(docKind==='invoice'?'INV':'BILL')+'-COR';
     const year=formatAccountingJalali(today,{digits:'ascii'}).slice(0,4);
     const newNumber=nextAccountingNumber(currentDocs,prefix,year);
@@ -821,15 +873,22 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     }catch(err){setState(p=>({...p,error:err.message,notice:''}));}
   };
 
-  return <div dir="rtl" className="sac-root" aria-label="حسابداری مستقل مدار">
+  return <div dir="rtl" className={'sac-root'+(tab==='invoice'?' sac-invoice-work-mode':
+    tab==='overview'?' sac-overview-work-mode':'')}
+    aria-label="حسابداری مستقل مدار">
     <AccountingTopRibbon tab={tab} sections={SECTIONS}
       onNavigate={gotoTab} onNewInvoice={openQuickInvoice}
+      onBack={()=>tab==='invoice'&&invoiceComposerOpen?
+        closeInvoiceComposer():gotoTab('overview')}
+      backLabel={tab==='invoice'&&invoiceComposerOpen?'بازگشت به فاکتورها':'بازگشت به صفحه اصلی'}
       onPrint={()=>detailedDocument&&void exportDocument(detailedDocument,'pdf','invoice')}
       hasPrintableInvoice={tab==='invoice'&&!!detailedDocument}
-      canManage={canManage} canDraft={canManage||canDraft}
+      canManage={canManage} canDraft={canManage||canDraft} canAdmin={canAdmin}
+      currentUser={snapshot?.currentUser}
       currency={unitLabel} companyName={view?.companyProfile?.legalName||
         view?.companyWorkspaceLabel||''}
       onRefresh={()=>void refresh()} onExit={onExit} onSwitchCompany={onSwitchCompany}
+      onManageUsers={onManageUsers}
       disabled={busy||state.loading||pendingRetry}/>
     <aside className="sac-sidebar">
       <div className="sac-brand"><div className="sac-brand-icon"><Building2 size={24}/></div>
@@ -858,6 +917,26 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           <button type="button" onClick={()=>void refresh()} disabled={busy||state.loading}>
             <RefreshCw size={16}/> بازخوانی</button></div></header>
       <div className="sac-body">
+        {tab==='invoice'&&<nav className="sac-workflow-nav" aria-label="مسیر فاکتور فروش">
+          <button type="button" onClick={()=>gotoTab('overview')} disabled={busy||pendingRetry}>صفحه اصلی</button>
+          <span aria-hidden="true">/</span>
+          <button type="button" onClick={()=>invoiceComposerOpen?
+            closeInvoiceComposer():undefined} disabled={!invoiceComposerOpen||busy||pendingRetry}>
+            فاکتورهای فروش
+          </button>
+          {invoiceComposerOpen&&<><span aria-hidden="true">/</span>
+            <strong>{editTarget?'ویرایش فاکتور':correctionTarget?'اصلاح فاکتور':'فاکتور جدید'}</strong></>}
+          <div className="sac-workflow-actions">
+            {invoiceComposerOpen?<button type="button" className="sac-back-button"
+              disabled={busy||pendingRetry} onClick={()=>closeInvoiceComposer()}>
+              <ArrowRight size={16}/> بازگشت به فهرست فاکتورها
+            </button>:
+            (canManage||canDraft)&&<button type="button" className="sac-primary"
+              onClick={openQuickInvoice} disabled={busy||pendingRetry}>
+              <Plus size={16}/> ثبت فاکتور جدید
+            </button>}
+          </div>
+        </nav>}
         {!canManage&&<div role="alert" className="sac-alert">
           <ShieldAlert size={18}/>{canDraft?
             'دسترسی ثبت اولیه: ایجاد مشتری، پیش‌فاکتور و پیش‌نویس فروش/خرید مجاز است. تأیید، صدور و تغییر اسناد قطعی فقط با مدیر انجام می‌شود.':
@@ -1101,6 +1180,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             </Panel>}
           </>}
           {tab==='overview'&&<>
+            <AccountingManagementDashboard view={view} currency={ledgerCurrency}
+              onNavigate={gotoTab}/>
+            <details className="sac-dashboard-legacy-details">
+              <summary>جزئیات دفترکل، مانده‌های قبلی و سوابق انتقالی</summary>
             {historical&&<Panel title="حسابداری منتقل‌شده از پارسیان"
               description="مانده‌ها از دفترکل واقعی منتقل‌شده محاسبه شده‌اند؛ اسناد تاریخی فاکتور دوباره ثبت نشده‌اند.">
               <div className="sac-metrics">
@@ -1132,10 +1215,17 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <td dir="ltr">{j.id}</td><td>{displayAccountingDate(j.date)}</td><td>{humanSource(j.sourceType)}</td>
                   <td>{debitText(j.lines.reduce((s,x)=>s+x.debit,0))}</td>
                   <td>{creditText(j.lines.reduce((s,x)=>s+x.credit,0))}</td></tr>)}/></Panel>
+            </details>
           </>}
           {['invoice','bill'].includes(tab)&&<>
-            <Panel title={tab==='invoice'?'فاکتورهای فروش':'صورتحساب‌های خرید'}
+            {(tab==='bill'||!invoiceComposerOpen)&&<Panel title={tab==='invoice'?'فاکتورهای فروش':'صورتحساب‌های خرید'}
               description="پیش‌نویس، تأیید و صدور مراحل جداگانه‌اند؛ مبلغ صرفاً با صدور وارد دفترکل می‌شود.">
+              {tab==='invoice'&&<p className="sac-invoice-list-help">
+                فاکتورهای شما در همین صفحه‌اند. برای شروع «ثبت فاکتور جدید» را بزنید.
+                فاکتور ابتدا پیش‌نویس می‌شود و بعداً قابل ویرایش و تأیید است.
+              </p>}
+              <details className="sac-disclosure sac-list-settings">
+                <summary>تنظیمات بیشتر چاپ و صدور فاکتور</summary>
               {canManage&&tab==='invoice'&&<Field label="قالب چاپ و خروجی فاکتور فروش">
                 <select aria-label="قالب چاپ فاکتور" value={invoicePrintLayout}
                   onChange={e=>setInvoicePrintLayout(e.target.value)}>
@@ -1157,9 +1247,29 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     onChange={setIssueDate}/></Field>
                 <span>تاریخ باید از تاریخ سند و مرز دوره بسته‌شده عقب‌تر نباشد.</span>
               </div>}
+              </details>
+              {tab==='invoice'&&<div className="sac-invoice-list-toolbar"
+                aria-label="جست‌وجو و وضعیت فاکتورها">
+                <label className="sac-invoice-list-search">جست‌وجوی فاکتور یا مشتری
+                  <input type="search" value={invoiceListSearch}
+                    placeholder="شماره فاکتور، نام مشتری..."
+                    onChange={e=>setInvoiceListSearch(e.target.value)}/>
+                </label>
+                <div className="sac-invoice-status-filters" role="group"
+                  aria-label="فیلتر وضعیت فاکتور">
+                  {[['all','همه'],['draft','پیش‌نویس'],['approved','تأییدشده'],
+                    ['issued','صادرشده']].map(([key,label])=>
+                    <button key={key} type="button" aria-pressed={invoiceListStatus===key}
+                      onClick={()=>setInvoiceListStatus(key)}>
+                      {label} <span>{invoiceCounts[key].toLocaleString('fa-IR')}</span>
+                    </button>)}
+                </div>
+              </div>}
               <DataTable cols={['شناسه','طرف‌حساب','تاریخ','کل','مانده','وضعیت','اقدامات']}
-                empty="هنوز سندی در این بخش ثبت نشده است."
-                rows={sortMap(currentDocs).map(d=><tr key={d.id}>
+                empty={tab==='invoice'&&(invoiceListSearch||invoiceListStatus!=='all')?
+                  'فاکتوری مطابق فیلتر پیدا نشد؛ جست‌وجو یا وضعیت را تغییر دهید.':
+                  'هنوز سندی در این بخش ثبت نشده است.'}
+                rows={filteredInvoiceDocs.map(d=><tr key={d.id}>
                   <td><strong dir="ltr">{d.id}</strong>
                     <small>{d.number?'شماره: '+d.number:'بدون شماره'}</small>
                     {d.sourceType==='proforma'&&<small>از پیش‌فاکتور {d.sourceId}</small>}
@@ -1172,14 +1282,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <td><span className={'sac-pill '+d.status}>{STATES[d.status]||d.status}</span></td>
                   <td className="sac-actions">
                     <button type="button" onClick={()=>{
-                      setDetailTarget(d.id);setReopenReason('');
+                      setDetailTarget(d.id);setReopenReason('');setTaxPreflight(null);
                     }}>مشاهده جزئیات</button>
-                    {canManage&&<><button type="button" disabled={busy}
-                      onClick={()=>void exportDocument(d,'pdf')}>PDF</button>
-                      <button type="button" disabled={busy}
-                        onClick={()=>void exportDocument(d,'png')}>PNG</button>
-                      <button type="button" disabled={busy} onClick={()=>void exportDocument(d,'xlsx')}>Excel</button>
-                      <button type="button" disabled={busy} onClick={()=>void exportDocument(d,'rtf')}>RTF</button></>}
+                    {canManage&&<button type="button" disabled={busy}
+                      onClick={()=>void exportDocument(d,'pdf')}>PDF</button>}
                     {canManage&&d.status==='draft'&&!d.contractorJobIds&&<button type="button"
                       disabled={busy} onClick={()=>startEditingDocument(d)}>ویرایش پیش‌نویس</button>}
                     {canManage&&d.status==='draft'&&<button type="button" disabled={busy}
@@ -1190,14 +1296,40 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       onClick={()=>void execute(id=>({command:{type:docKind+'.issue',
                         eventId:id,[docKind+'Id']:d.id,postingDate:issueDate}}),
                         'سند صادر و در دفترکل ثبت شد.')}>صدور سند</button>}
-                    {canManage&&['draft','approved'].includes(d.status)&&<button type="button" disabled={busy}
-                      onClick={()=>{setCancelTarget(d.id);setCancelReason('');}}>لغو</button>}
                     {d.status==='issued'&&d.total>d.allocated+(d.returnedAmount||0)&&<button type="button" onClick={()=>{
                       setForms(p=>({...p,settlement:{...p.settlement,
                         kind:docKind==='invoice'?'receipt':'payment',documentId:d.id}}));
                       setTab('settlements');}}>تسویه</button>}
+                    <details className="sac-invoice-row-menu">
+                      <summary aria-label={'عملیات بیشتر فاکتور '+d.id}>بیشتر</summary>
+                      <div className="sac-invoice-row-menu-items">
+                        {docKind==='invoice'&&typeof api?.standaloneAccountingTaxPreflight==='function'&&
+                          <button type="button" disabled={busy} onClick={()=>{
+                            setDetailTarget(d.id);setTaxPreflight(null);
+                            void api.standaloneAccountingTaxPreflight(d.id).then(result=>{
+                              setTaxPreflight({invoiceId:d.id,...result});
+                            }).catch(err=>setState(p=>({...p,error:err.message||String(err)})));
+                          }}>مشاور مالیاتی (پیش‌بررسی)</button>}
+                        {canManage&&<>
+                          <button type="button" disabled={busy} onClick={()=>void exportDocument(d,'png')}>خروجی PNG</button>
+                          <button type="button" disabled={busy} onClick={()=>void exportDocument(d,'xlsx')}>خروجی Excel</button>
+                          <button type="button" disabled={busy} onClick={()=>void exportDocument(d,'rtf')}>خروجی RTF</button>
+                        </>}
+                        {canManage&&['draft','approved'].includes(d.status)&&
+                          <button type="button" disabled={busy}
+                            onClick={()=>{setCancelTarget(d.id);setCancelReason('');}}>
+                            لغو سند</button>}
+                      </div>
+                    </details>
                   </td></tr>)} />
               {detailedDocument&&<section className="sac-document-detail" aria-label="مشاهده فاکتور">
+                {taxPreflight?.invoiceId===detailedDocument.id&&<aside className="sac-tax-preflight" role="status">
+                  <h4>مشاور مالیاتی مدار | ارزیابی مقدماتی</h4>
+                  <p>وضعیت: نیازمند بررسی انسانی. ارسال رسمی از این بخش امکان‌پذیر نیست.</p>
+                  <ul>{taxPreflight.issues.map((issue,i)=><li key={i}>
+                    {issue.field}: {issue.message}</li>)}</ul>
+                  <small>منابع ذکرشده هنوز از نظر به‌روز بودن در تاریخ صدور تأیید نشده‌اند.</small>
+                </aside>}
                 <div className="sac-document-detail-header">
                   <h3>جزئیات {docKind==='invoice'?'فاکتور فروش':'صورتحساب خرید'}: <b dir="ltr">{detailedDocument.id}</b></h3>
                   <button type="button" onClick={()=>setDetailTarget('')}>بستن جزئیات</button>
@@ -1405,10 +1537,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <Action disabled={blocked}>ثبت لغو سند</Action>
                   <button type="button" onClick={()=>setCancelTarget('')}>انصراف</button>
                 </form>}
-              </Panel>
-            {(canManage||canDraft)&&<Panel title={correctionTarget?'سند اصلاحی برای '+correctionTarget:
-              editTarget?'اصلاح پیش‌نویس '+editTarget:'ساخت پیش‌نویس مستقل'}
-              description="مبالغ مالیات و تخفیف صریح‌اند، موجودی یا مالیات خودکار محاسبه نمی‌شود.">
+              </Panel>}
+            {(canManage||canDraft)&&(tab==='bill'||invoiceComposerOpen)&&<Panel compact={tab==='invoice'} title={correctionTarget?'اصلاح فاکتور '+correctionTarget:
+              editTarget?'ویرایش فاکتور '+editTarget:tab==='invoice'?'ثبت فاکتور جدید':'ثبت صورتحساب خرید'}
+              description="۱. مشتری و تاریخ را مشخص کنید. ۲. شرح، تعداد و قیمت اقلام را بنویسید. ۳. پیش‌نویس را ذخیره کنید.">
               <form className="sac-invoice-editor" onSubmit={submit(async()=>{
                 if(await execute(id=>{
                   const built=buildStandaloneInvoiceCommand({
@@ -1433,10 +1565,35 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   'پیش‌نویس سند در میزبان ثبت شد.')){
                     reset('document');setRows([makeLine()]);setEditTarget('');
                     setCorrectionTarget('');setCorrectionReason('');
+                    if(tab==='invoice')setInvoiceComposerOpen(false);
                   }
               })}>
+                {tab==='invoice'&&<div className="sac-invoice-commandbar"
+                  role="toolbar" aria-label="عملیات سریع فاکتور">
+                  <div className="sac-invoice-commandbar-title">
+                    <strong>{editTarget?'ویرایش پیش‌نویس':correctionTarget?
+                      'پیش‌نویس اصلاحی':'فاکتور فروش جدید'}</strong>
+                    <small>سند تا قبل از تأیید و صدور، فقط پیش‌نویس است.</small>
+                  </div>
+                  <div className="sac-invoice-commandbar-actions">
+                    <button type="button" onClick={()=>addInvoiceRow()}
+                      disabled={busy||pendingRetry||rows.length>=1000}>
+                      <Plus size={16}/> ردیف جدید
+                    </button>
+                    <button type="submit" className="sac-primary"
+                      disabled={draftBlocked|| (!!correctionTarget&&
+                        (!validText(correctionReason,1000)||!validPostingDate(correctionDate)||
+                          correctionDate<currentDocs[correctionTarget]?.postingDate))}>
+                      {editTarget?'ذخیره ویرایش':correctionTarget?'ثبت اصلاحیه':'ذخیره پیش‌نویس'}
+                    </button>
+                    <button type="button" className="sac-back-button"
+                      onClick={()=>closeInvoiceComposer()} disabled={busy||pendingRetry}>
+                      <ArrowRight size={16}/> فهرست فاکتورها
+                    </button>
+                  </div>
+                </div>}
                 <div className="sac-grid">
-                  <Field label="شناسه یکتا">{editTarget?
+                  <Field label="شماره داخلی فاکتور">{editTarget?
                     <input readOnly dir="ltr" value={editTarget}/>:
                     idInput('document','documentId','INV-001')}</Field>
                   <Field label={docKind==='invoice'?'مشتری':'تأمین‌کننده'}>
@@ -1447,10 +1604,6 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       onChange={e=>f('document','partyId',e.target.value)}>
                       {options(partyOptions(docKind==='invoice'?customers:vendors),'انتخاب طرف‌حساب')}</select></Field>
                   <Field label="تاریخ سند">{dateInput('document','documentDate')}</Field>
-                  <Field label="سررسید پرداخت (اختیاری)"><AccountingJalaliField
-                    max="9999-12-31" required={false}
-                    value={forms.document.dueDate||''}
-                    onChange={dueDate=>f('document','dueDate',dueDate)}/></Field>
                   {correctionTarget&&<>
                     <Field label="تاریخ برگشت قطعی"><AccountingJalaliField
                       max={today} value={correctionDate} onChange={setCorrectionDate}/></Field>
@@ -1458,6 +1611,14 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}
                       placeholder="دلیل اصلاح سند صادرشده"/></Field>
                   </>}
+                </div>
+                <details className="sac-disclosure">
+                  <summary>جزئیات بیشتر: تخفیف، مالیات، سررسید و توضیحات</summary>
+                  <div className="sac-grid">
+                  <Field label="سررسید پرداخت (اختیاری)"><AccountingJalaliField
+                    max="9999-12-31" required={false}
+                    value={forms.document.dueDate||''}
+                    onChange={dueDate=>f('document','dueDate',dueDate)}/></Field>
                   <Field label={`تخفیف (${unitLabel})`}>{amountInput('document','discount')}</Field>
                   <Field label="سیاست مالیاتی"><select value={forms.document.taxRuleId}
                     onChange={e=>f('document','taxRuleId',e.target.value)}>
@@ -1476,11 +1637,15 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   </Field>
                   <Field label="یادداشت (اختیاری)" wide><input maxLength={1000}
                     value={forms.document.note} onChange={e=>f('document','note',e.target.value)}/></Field>
-                </div>
+                  </div>
+                </details>
                 <div className="sac-subheading"><h3>جدول ثبت کالا و خدمات</h3><button type="button"
                   onClick={()=>addInvoiceRow()}>
                   <Plus size={15}/> افزودن ردیف</button></div>
-                <p className="sac-invoice-shortcuts">Enter: سلول بعد | Tab / Shift+Tab: حرکت معمول | Ctrl+Insert: سطر جدید | Alt+Shift+D: کپی سطر | Ctrl+Delete: حذف سطر</p>
+                <p className="sac-invoice-shortcuts">شرح، تعداد و قیمت را بنویسید. برای رفتن به سلول بعدی Enter بزنید.</p>
+                <details className="sac-disclosure sac-invoice-extras">
+                  <summary>ابزارهای بیشتر: جست‌وجوی کالا، قالب‌های آماده و میانبرها</summary>
+                  <p className="sac-invoice-shortcuts">Tab / Shift+Tab: حرکت بین سلول‌ها | Ctrl+Insert: سطر جدید | Alt+Shift+D: کپی سطر | Ctrl+Delete: حذف سطر</p>
                 <div className="sac-catalog-search">
                   <label>جست‌وجوی سریع کاتالوگ (نام، شناسه یا SKU)
                     <input type="search" aria-label="جست‌وجوی قلم کاتالوگ فاکتور"
@@ -1530,9 +1695,12 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <button type="button" disabled={!entryTemplateId} onClick={()=>void libraryAction('entry','delete',entryTemplateId)}>حذف قالب</button>
                   <button type="button" onClick={()=>{setEntryTemplateId('');setInvoiceTemplateTitle('قالب جدید');}}>ایجاد قالب دیگر</button>
                 </div>}
+                </details>
+                <div className="sac-invoice-canvas">
+                <div className="sac-invoice-lines">
                 <div className="sac-invoice-columns" aria-hidden="true">
                   <span>شرح کالا یا خدمات</span><span>تعداد</span><span>قیمت واحد</span>
-                  <span>سرفصل</span><span>کاتالوگ</span><span>جمع ردیف</span><span>عملیات</span>
+                  <span>جمع ردیف</span><span>عملیات</span>
                 </div>
                 {rows.map((row,i)=><div key={i} className="sac-doc-line sac-invoice-line" onKeyDown={invoiceKeyDown}>
                   <Field label="شرح"><input data-invoice-row={i} data-invoice-col={0} required maxLength={300} value={row.description}
@@ -1542,18 +1710,6 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     value={row.quantity} onChange={e=>rowUpdate(i,'quantity',e.target.value)}/></Field>
                   <Field label={`قیمت واحد (${unitLabel})`}><input data-invoice-row={i} data-invoice-col={2} required dir="ltr" inputMode="numeric"
                     value={row.unitPrice} onChange={e=>rowUpdate(i,'unitPrice',e.target.value)}/></Field>
-                  <Field label="سرفصل حساب"><select data-invoice-row={i} data-invoice-col={3} required value={row.accountId|| (docKind==='invoice'?'4000':'5000')}
-                    onChange={e=>rowUpdate(i,'accountId',e.target.value)}>
-                    {candidates.map(a=><option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}</select></Field>
-                  <Field label="قلم کاتالوگ (اختیاری)"><select data-invoice-row={i} data-invoice-col={4} value={row.itemId}
-                    onChange={e=>{const item=items[e.target.value];setRows(p=>p.map((l,idx)=>
-                      idx===i?{...l,itemId:e.target.value,
-                        description:item?.name||l.description}:l));}}>
-                    {options([
-                      ...(row.itemId&&items[row.itemId]&&!invoiceCatalogMatches.slice(0,150)
-                        .some(x=>x.id===row.itemId)?[items[row.itemId]]:[]),
-                      ...invoiceCatalogMatches.slice(0,150)
-                    ],'بدون قلم کاتالوگ')}</select></Field>
                   <output className="sac-invoice-line-total" aria-label={'جمع ردیف '+(i+1)}>
                     {(()=>{
                       const qty=parse(row.quantity),unit=parse(row.unitPrice,true);
@@ -1568,12 +1724,54 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     <button type="button" disabled={rows.length===1} className="sac-remove"
                       onClick={()=>removeInvoiceRow(i)}>حذف</button>
                   </div>
+                  <details className="sac-row-advanced">
+                    <summary>حساب / کاتالوگ ردیف {Number(i+1).toLocaleString('fa-IR')}</summary>
+                    <div className="sac-row-advanced-fields">
+                      <Field label="سرفصل حساب"><select data-invoice-row={i}
+                        data-invoice-col={3} required
+                        value={row.accountId||(docKind==='invoice'?'4000':'5000')}
+                        onChange={e=>rowUpdate(i,'accountId',e.target.value)}>
+                        {candidates.map(a=><option key={a.id} value={a.id}>
+                          {a.name} ({a.id})</option>)}</select></Field>
+                      <Field label="قلم کاتالوگ (اختیاری)"><select
+                        data-invoice-row={i} data-invoice-col={4} value={row.itemId}
+                        onChange={e=>{const item=items[e.target.value];setRows(p=>p.map((l,idx)=>
+                          idx===i?{...l,itemId:e.target.value,
+                            description:item?.name||l.description}:l));}}>
+                        {options([
+                          ...(row.itemId&&items[row.itemId]&&!invoiceCatalogMatches.slice(0,150)
+                            .some(x=>x.id===row.itemId)?[items[row.itemId]]:[]),
+                          ...invoiceCatalogMatches.slice(0,150)
+                        ],'بدون قلم کاتالوگ')}</select></Field>
+                    </div>
+                  </details>
                 </div>)}
-                <div className="sac-live-total" role="status">
-                  <span>جمع اقلام: {documentPreview?moneyText(documentPreview.subtotal):'قیمت یا تعداد ناقص'}</span>
-                  <span>تخفیف: {documentPreview?moneyText(documentPreview.discount):'—'}</span>
-                  <span>مالیات: {documentPreview?moneyText(documentPreview.tax):'—'}</span>
-                  <strong>جمع نهایی: {documentPreview?moneyText(documentPreview.total):'—'}</strong>
+                <div className="sac-invoice-addline">
+                  <button type="button" onClick={()=>addInvoiceRow()} disabled={rows.length>=1000}>
+                    <Plus size={15}/> افزودن ردیف
+                  </button>
+                </div>
+                </div>
+                <aside className="sac-invoice-summary" aria-label="خلاصه مالی فاکتور">
+                  <div className="sac-invoice-summary-heading">
+                    <span>خلاصه فاکتور</span>
+                    <strong>{rows.length.toLocaleString('fa-IR')} ردیف</strong>
+                  </div>
+                  <div className="sac-live-total" role="status">
+                    <span><span>جمع اقلام</span><b>{documentPreview?moneyText(documentPreview.subtotal):'—'}</b></span>
+                    <span><span>تخفیف</span><b>{documentPreview?moneyText(documentPreview.discount):'—'}</b></span>
+                    <span><span>مالیات</span><b>{documentPreview?moneyText(documentPreview.tax):'—'}</b></span>
+                    <strong><span>مبلغ نهایی</span><b>{documentPreview?moneyText(documentPreview.total):'—'}</b></strong>
+                  </div>
+                  <p className="sac-invoice-summary-note">مبالغ بر اساس مقادیر همین فرم محاسبه می‌شوند؛
+                    ذخیره پیش‌نویس به معنی صدور قطعی نیست.</p>
+                  <button type="submit" className="sac-primary sac-summary-save"
+                    disabled={draftBlocked|| (!!correctionTarget&&
+                      (!validText(correctionReason,1000)||!validPostingDate(correctionDate)||
+                        correctionDate<currentDocs[correctionTarget]?.postingDate))}>
+                    {editTarget?'ذخیره ویرایش':'ذخیره پیش‌نویس'}
+                  </button>
+                </aside>
                 </div>
                 <div className="sac-form-actions"><Action disabled={draftBlocked||
                   (!!correctionTarget&&(!validText(correctionReason,1000)||
@@ -1581,13 +1779,16 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     correctionDate<currentDocs[correctionTarget]?.postingDate))}>
                   {correctionTarget?'برگشت سند و ساخت پیش‌نویس اصلاحی':
                     editTarget?'ثبت اصلاح پیش‌نویس':'ثبت پیش‌نویس'}</Action>
-                  {(editTarget||correctionTarget)&&<button type="button" onClick={()=>{
-                    setEditTarget('');setCorrectionTarget('');setCorrectionReason('');
-                    reset('document');setRows([makeLine()]);
-                  }}>انصراف از اصلاح</button>}
+                  <button type="button" className="sac-back-button" disabled={busy||pendingRetry}
+                    onClick={()=>tab==='invoice'?closeInvoiceComposer():gotoTab('overview')}>
+                    <ArrowRight size={16}/> بازگشت بدون ثبت
+                  </button>
                 </div>
               </form></Panel>}
-            {canManage&&tab==='invoice'&&<Panel title="هویت‌های صادرکننده و سربرگ"
+            {canManage&&tab==='invoice'&&!invoiceComposerOpen&&
+              <details className="sac-disclosure sac-admin-tools">
+                <summary>قالب‌ها و سربرگ فاکتور (ابزارهای پیشرفته)</summary>
+              <Panel title="هویت‌های صادرکننده و سربرگ"
               description="صادرکننده چاپی از دفتر حسابداری مستقل است؛ انتخاب آن فقط سربرگ و فایل خروجی را تغییر می‌دهد، نه ثبت حسابداری را.">
               {templateBridge&&<div className="sac-template-library">
                 <label>انتخاب صادرکننده <select aria-label="انتخاب صادرکننده چاپی" value={issuerId}
@@ -1620,8 +1821,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                 </Field>)}
               </div>
               <small>تا پیش از ذخیره، تغییرات هویت در پیش‌نمایش و خروجی اعمال نمی‌شوند؛ هویت دفتر اصلی باقی می‌ماند.</small>
-            </Panel>}
-            {canManage&&tab==='invoice'&&<Panel title="طراح بصری قالب فاکتور"
+            </Panel>
+              <Panel title="طراح بصری قالب فاکتور"
               description="قالب چاپ، بدون ایجاد رویداد مالی، فقط برای شرکت انتخاب‌شده ذخیره می‌شود. پس از انتخاب قالب سفارشی، خروجی PDF/PNG از همین طرح ساخته می‌شود.">
               <div className="sac-template-library">
                 <button type="button" onClick={()=>setPrintDesignerOpen(p=>!p)}>
@@ -1659,7 +1860,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                 disabled={busy} context={{kind:'invoice',doc:detailedDocument,
                   party:detailedDocument?parties[detailedDocument.partyId]?.name:'مشتری نمونه',
                   company:printCompanyProfile,currency:ledgerCurrency}}/>}
-            </Panel>}
+            </Panel></details>}
           </>}
           {tab==='parties'&&<>
             {historical&&<Panel title="بدهکاران منتقل‌شده از پارسیان"
@@ -1800,6 +2001,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             </form></Panel>}
           </>}
           {tab==='migration'&&<>
+            <ParsianRawArchiveExplorer api={api} canAdmin={canAdmin}/>
             {!historical?<Panel title="سوابق پارسیان"
               description="این دفتر فاقد بسته معتبر اطلاعات تاریخی پارسیان است.">
               <Empty>فقط در دفتر آزمایشی انتقال، آرشیو تاریخی نمایش داده می‌شود.</Empty>

@@ -42,6 +42,11 @@ function AuthenticatedAccounting(){
   },[]);
   return <StandaloneAccountingWorkspace api={api} canManage={canManage}
     canDraft={canDraft} canAdmin={canAdmin}
+    onManageUsers={canAdmin&&typeof api.standaloneAccountingManageUsers==='function'?
+      async()=>{
+        try{await api.standaloneAccountingManageUsers();}
+        catch(error){window.alert('مدیریت کاربران انجام نشد: '+(error?.message||String(error)));}
+      }:null}
     onSwitchCompany={typeof api.standaloneAccountingRequestCompanySwitch==='function'?
       async()=>{
         if(!window.confirm('تغییر شرکت، فرم‌های ذخیره‌نشده را کنار می‌گذارد. دفتر فعلی پس از بکاپ ایمن بسته می‌شود. ادامه دهید؟'))return;

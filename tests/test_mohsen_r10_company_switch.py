@@ -8,6 +8,7 @@ import unittest
 
 from standalone_accounting_company_registry import StandaloneCompanyRegistry
 from standalone_accounting_desktop import main, AccountingDesktopAPI
+from standalone_accounting_identity import LocalCompanyIdentity
 
 
 class CloseEvent:
@@ -34,6 +35,11 @@ class CompanySwitchTests(unittest.TestCase):
             a=registry.create_company('شرکت الف')
             b=registry.create_company('شرکت ب')
             books=[registry.company_data_directory(a['id']),registry.company_data_directory(b['id'])]
+            def authenticate(store):
+                if not store.initialized():
+                    store.add_user('synthetic_admin','SyntheticAdminSecurePass2026','admin')
+                token=store.login('synthetic_admin','SyntheticAdminSecurePass2026')
+                return store.require_session(token),token
             selection=[{'name':a['name'],'path':books[0]},
                        {'name':b['name'],'path':books[1]}]
             windows=[]
@@ -55,7 +61,9 @@ class CompanySwitchTests(unittest.TestCase):
             webview.start=run_webview
             with patch.dict(sys.modules,{'webview':webview}), patch(
                     'standalone_accounting_company_registry.pick_company_dialog',
-                    side_effect=selection) as chosen:
+                    side_effect=selection) as chosen, patch(
+                    'standalone_accounting_desktop._native_accounting_login',
+                    side_effect=authenticate):
                 self.assertEqual(main(['--companies-dir',str(hub),
                     '--site-dir',str(root)]),0)
             self.assertEqual(chosen.call_count,2)
@@ -64,6 +72,7 @@ class CompanySwitchTests(unittest.TestCase):
             self.assertEqual(windows[1].api.path.parent,books[1])
             for book in books:
                 self.assertTrue((book/'standalone-accounting.sqlite3').is_file())
+                self.assertTrue((book/'local-users.json').is_file())
                 self.assertGreaterEqual(len(list((book/'standalone-accounting-backups').glob('*.sqlite3'))),2)
                 self.assertEqual(AccountingDesktopAPI(book).standaloneAccountingRead()['revision'],0)
 

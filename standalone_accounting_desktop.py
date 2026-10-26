@@ -24,10 +24,13 @@ JS_BRIDGE = """<script>
 window.__madarStandaloneOnly = true;
 window.madar = Object.fromEntries(
   ['standaloneAccountingRead', 'standaloneAccountingCommand',
+   'standaloneAccountingParsianArchiveIndex', 'standaloneAccountingParsianArchiveRows',
    'standaloneAccountingTemplateList', 'standaloneAccountingTemplateSave',
    'standaloneAccountingTemplateDelete', 'standaloneAccountingTemplateDefault',
    'standaloneAccountingTemplateDuplicate',
-   'standaloneAccountingRequestCompanySwitch'].map(
+   'standaloneAccountingRequestCompanySwitch',
+   'standaloneAccountingTaxPreflight',
+   'standaloneAccountingManageUsers'].map(
     key => [key, (...args) => new Promise((resolve, reject) => {
       // WebView2 can expose an api object before populating the methods.
       // Checking only window.pywebview.api caused a TypeError/blank GUI on
@@ -59,7 +62,8 @@ window.madar = Object.fromEntries(
 class AccountingDesktopAPI:
     """Single local desktop principal; not a multi-user authentication server."""
 
-    def __init__(self, explicit_data_root, *, company_name=""):
+    def __init__(self, explicit_data_root, *, company_name="", authenticated_user=None,
+                 identity_store=None, identity_token=None):
         path = Path(explicit_data_root)
         if not path.is_absolute():
             raise ValueError("Accounting data directory must be explicit and absolute")
@@ -68,12 +72,35 @@ class AccountingDesktopAPI:
         self.path = path / ACCOUNTING_FILE
         self._lock = RLock()
         self._exit_backed_up = False
-        self._accounts = {"local": {"username": "local", "role": "admin"}}
+        self._identity_store = identity_store
+        self._identity_token = identity_token
+        if identity_store is not None:
+            if not isinstance(identity_token,str) or not identity_token:
+                raise PermissionError('Authentication is required before accessing company ledger')
+            checked=identity_store.require_session(identity_token)
+            if not isinstance(authenticated_user,dict) or checked != authenticated_user:
+                raise PermissionError('Invalid or mismatched accounting identity')
+            self._actor=checked['username']
+            self._accounts=identity_store.accounting_accounts()
+            if self._actor not in self._accounts:
+                raise PermissionError('Inactive accounting identity')
+        else:
+            self._actor='local'
+            self._accounts = {"local": {"username": "local", "role": "admin"}}
         # Only a display hint from an explicitly selected private company
         # directory. This never becomes an accounting event or ledger field.
         self.company_name = company_name if isinstance(company_name,str) else ""
         self._switch_requested = False
         self._native_window = None
+
+    def _require_authenticated(self,required='viewer'):
+        if self._identity_store is not None:
+            checked=self._identity_store.require_session(self._identity_token,required)
+            if checked['username'] != self._actor:
+                raise PermissionError('Active accounting identity changed')
+            self._accounts=self._identity_store.accounting_accounts()
+            return checked
+        return self._accounts[self._actor]
 
     def standaloneAccountingRequestCompanySwitch(self):
         """Only the native company chooser may switch the active ledger.
@@ -82,6 +109,7 @@ class AccountingDesktopAPI:
         after the current WebView has closed, backed up and released its lock.
         """
         with self._lock:
+            self._require_authenticated()
             if not self.company_name:
                 raise RuntimeError("Company switching requires a selected company registry")
             if self._exit_backed_up:
@@ -134,13 +162,34 @@ class AccountingDesktopAPI:
 
     def standaloneAccountingRead(self):
         with self._lock:
+            self._require_authenticated()
             from standalone_financial_report_host import attach_verified_reports
             result = self._with_migration(attach_verified_reports(self._store().read(
-                actor="local", accounts=self._accounts)))
+                actor=self._actor, accounts=self._accounts)))
+            role=self._accounts[self._actor]['role']
             result["capabilities"] = {
-                "canView": True, "canManage": True, "canDraft": True,
-                "canAdmin": True}
+                "canView": True, "canManage": role in ('admin','editor'),
+                "canDraft": role in ('admin','editor'), "canAdmin": role=='admin'}
+            identity=(self._identity_store.require_session(self._identity_token)
+                      if self._identity_store is not None else
+                      {"username":self._actor,"role":role,"jobTitle":""})
+            result["currentUser"]={"username":identity['username'],
+                                   "jobTitle":identity.get('jobTitle',''),"role":role}
             return result
+
+    def standaloneAccountingParsianArchiveIndex(self):
+        """Admin-only catalogue of verified, immutable Parsian year archives."""
+        with self._lock:
+            self._require_authenticated('admin')
+            from parsian_source_year_browser import list_year_archives
+            return list_year_archives(self.path.parent)
+
+    def standaloneAccountingParsianArchiveRows(self, year, table, offset=0):
+        """Paginated, redacted read-only values; no arbitrary filesystem path."""
+        with self._lock:
+            self._require_authenticated('admin')
+            from parsian_source_year_browser import source_table_page
+            return source_table_page(self.path.parent, year, table, offset)
 
     def standaloneAccountingCommand(self, request):
         if (type(request) is not dict or
@@ -150,11 +199,12 @@ class AccountingDesktopAPI:
                 request["expectedRevision"] < 0):
             raise ValueError("Invalid accounting CAS request")
         with self._lock:
+            self._require_authenticated('editor')
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing; financial changes are locked")
             from standalone_financial_report_host import attach_verified_reports
             return self._with_migration(attach_verified_reports(self._store().command(
-                request["command"], actor="local", accounts=self._accounts,
+                request["command"], actor=self._actor, accounts=self._accounts,
                 expected_revision=request["expectedRevision"],
                 now=datetime.now(timezone.utc).isoformat(),
             )))
@@ -163,33 +213,72 @@ class AccountingDesktopAPI:
         from standalone_accounting_template_store import StandaloneAccountingTemplateStore
         return StandaloneAccountingTemplateStore(self.path.parent)
 
+    def _require_template_permission(self,write=False):
+        self._require_authenticated('editor' if write else 'viewer')
+
     def standaloneAccountingTemplateList(self, kind):
         with self._lock:
+            self._require_template_permission()
             return self._template_store().list(kind)
 
     def standaloneAccountingTemplateSave(self, kind, title, data, template_id=""):
         with self._lock:
+            self._require_template_permission(True)
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing")
             return self._template_store().save(kind, title, data, template_id)
 
     def standaloneAccountingTemplateDelete(self, kind, template_id):
         with self._lock:
+            self._require_template_permission(True)
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing")
             return self._template_store().delete(kind, template_id)
 
     def standaloneAccountingTemplateDefault(self, kind, template_id):
         with self._lock:
+            self._require_template_permission(True)
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing")
             return self._template_store().set_default(kind, template_id)
 
     def standaloneAccountingTemplateDuplicate(self, kind, template_id):
         with self._lock:
+            self._require_template_permission(True)
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing")
             return self._template_store().duplicate(kind, template_id)
+
+    def standaloneAccountingTaxPreflight(self, invoice_id):
+        """Read-only advisory; never submits, changes or signs tax invoices."""
+        if not isinstance(invoice_id,str) or len(invoice_id)>96:
+            raise ValueError('Invalid invoice identifier')
+        with self._lock:
+            self._require_authenticated()
+            from standalone_accounting_tax_advisor import preflight_einvoice
+            result=self.standaloneAccountingRead()
+            view=result['view']
+            invoice=view.get('invoices',{}).get(invoice_id)
+            if not invoice:raise ValueError('Invoice not found in active company ledger')
+            company=view.get('companyProfile') or {}
+            return preflight_einvoice({
+                'invoiceId':invoice_id,'issueDate':invoice.get('documentDate'),
+                'kind':'original','lines':[
+                    {'productServiceId':line.get('taxProductServiceId') or '',
+                     'quantity':line.get('quantity'), 'unitPrice':line.get('unitPrice')}
+                    for line in invoice.get('lines',[])]},company)
+
+    def standaloneAccountingManageUsers(self):
+        """Native-only credential prompts; no password enters the React DOM."""
+        with self._lock:
+            self._require_authenticated('admin')
+            if self._identity_store is None or self._identity_token is None:
+                raise PermissionError('User management requires authenticated company mode')
+            from standalone_accounting_user_dialog import manage_local_users
+            store=self._identity_store
+            token=self._identity_token
+        manage_local_users(store,token)
+        return {'status':'closed'}
 
 
 def serve_accounting_page(site):
@@ -232,13 +321,47 @@ def serve_accounting_page(site):
     return ThreadingHTTPServer(("127.0.0.1", 0), Handler)
 
 
+def _native_accounting_login(store):
+    """Open native premium credentials gate before serving accounting UI."""
+    if not store.initialized() and (store.root/ACCOUNTING_FILE).exists():
+        raise PermissionError('Existing ledger has no identity file: restore its backup before login')
+    from standalone_accounting_secure_login import prompt_premium_accounting_login
+    return prompt_premium_accounting_login(store)
+
+
 def _run_company_session(data_dir, selected_company_name, args):
     company_guard = None
-    if args.companies_dir:
-        from standalone_accounting_company_registry import CompanySessionGuard
+    identity_store = None
+    logged_in_user = None
+    identity_token = None
+    from standalone_accounting_company_registry import (
+        CompanySessionGuard, StandaloneCompanyRegistry)
+    directory=Path(data_dir)
+    registered=False
+    if directory.parent.name=='books' and (directory.parent.parent/'companies.json').exists():
+        registry=StandaloneCompanyRegistry(directory.parent.parent)
+        registered=directory==registry.company_data_directory(directory.name)
+    if args.companies_dir or registered:
         company_guard = CompanySessionGuard(Path(data_dir)).acquire()
     try:
-        api = AccountingDesktopAPI(data_dir, company_name=selected_company_name)
+        identity_path=Path(data_dir)/'local-users.json'
+        if (args.companies_dir or registered or identity_path.exists() or
+            identity_path.is_symlink() or (Path(data_dir)/ACCOUNTING_FILE).exists()):
+            from standalone_accounting_identity import LocalCompanyIdentity
+            identity_store=LocalCompanyIdentity(Path(data_dir))
+            # Never let a missing identity registry convert an existing book
+            # into a new local-admin account, regardless of launch switches.
+            if not identity_store.initialized() and (Path(data_dir)/ACCOUNTING_FILE).exists():
+                raise PermissionError('Existing ledger has no user registry; restore identity backup before login')
+            login=_native_accounting_login(identity_store)
+            if login is None:
+                if company_guard:
+                    company_guard.release()
+                return False
+            logged_in_user,identity_token=login
+        api = AccountingDesktopAPI(data_dir, company_name=selected_company_name,
+            authenticated_user=logged_in_user,identity_store=identity_store,
+            identity_token=identity_token)
         from standalone_accounting_auto_backup import AutomaticStandaloneBackups
         backups = AutomaticStandaloneBackups(
             api.path.parent, plaintext_acknowledged=True)
@@ -309,6 +432,8 @@ def _run_company_session(data_dir, selected_company_name, args):
                 server_thread.join(timeout=5)
             if company_guard:
                 company_guard.release()
+            if identity_store is not None and identity_token is not None:
+                identity_store.logout(identity_token)
 
     return bool(api._switch_requested and exit_backup_saved)
 

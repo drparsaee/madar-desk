@@ -36,6 +36,7 @@ _TABLES = {
     "tbl_Goods": ("Code", "CName", "GroupCode", "UnitName_1"),
 }
 _EXPECTED_TYPE = "ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT"
+_RESTORED_TYPE = "RESTORED_BAK_ISOLATED_VERIFIED_20261026"
 _HASH_RE = re.compile(r"[0-9a-fA-F]{64}\Z")
 _JALALI_DATE = re.compile(r"(1[234]\d\d)/(0[1-9]|1[0-2])/(0[1-9]|[12]\d|3[01])\Z")
 MAX_ROWS = 20000
@@ -95,7 +96,7 @@ def profile_export(export):
         raise QuarantineError("Unknown source export shape")
     if (type(export["schemaVersion"]) is not int or
             export["schemaVersion"] != 1 or
-            export["sourceType"] != _EXPECTED_TYPE or
+            export["sourceType"] not in (_EXPECTED_TYPE, _RESTORED_TYPE) or
             type(export["backupCopySha256"]) is not str or
             not _HASH_RE.fullmatch(export["backupCopySha256"])):
         raise QuarantineError("Untrusted export schema or missing source digest")
@@ -161,8 +162,8 @@ def profile_export(export):
     unmatched_factors = sum(
         x["Sanad_Num"] not in known_sanads for x in tables["tbl_Factor"])
     return {
-        "sourceType": _EXPECTED_TYPE,
-        "sourceSnapshotProven": False,
+        "sourceType": export["sourceType"],
+        "sourceSnapshotProven": export["sourceType"] == _RESTORED_TYPE,
         "sourceCurrencyVerified": False,
         "sourceDateCalendarReviewed": False,
         "sourceChartAccountTypesReviewed": False,
@@ -231,11 +232,11 @@ def create_quarantine(export_file: str | Path, output: str | Path, *,
                        "raw_json BLOB NOT NULL, sha256 TEXT NOT NULL,"
                        "PRIMARY KEY(source_table, source_key))")
             meta = {
-                "source_type": _EXPECTED_TYPE,
+                "source_type": export["sourceType"],
                 "backup_copy_sha256": digest.hexdigest(),
                 "source_export_sha256": sha256(data).hexdigest(),
                 "financial_posting_allowed": "false",
-                "source_snapshot_proven": "false",
+                "source_snapshot_proven": ("true" if export["sourceType"] == _RESTORED_TYPE else "false"),
                 "schema_version": "1",
             }
             cn.executemany("INSERT INTO metadata VALUES (?,?)", meta.items())

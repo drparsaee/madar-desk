@@ -34,6 +34,9 @@ ACTOR = "trial-importer"
 ACCOUNTS = {ACTOR: {"username": ACTOR, "role": "admin"}}
 NOW = "2026-10-24T12:00:00Z"
 SOURCE_CLASS = "ATTACHED_LIVE_SQL_READ_ONLY_NOT_BAK_SNAPSHOT"
+RESTORED_CLASS = "RESTORED_BAK_ISOLATED_VERIFIED_20261026"
+RESTORED_SHA = "65E85D8BED539C4CB98D2A3F20416637524E5133CB7B940D6A4015A7CA368441"
+RESTORED_SHA_1405_R19 = "EAF55D9A4C2CF2EF28C9C5AF01B57E61C1773E8A33F16F09174D1E41967B6946"
 ACCOUNT_KIND_BY_GROUP = {
     11: "asset", 12: "asset", 21: "liability", 22: "liability",
     31: "equity", 41: "revenue", 51: "expense", 61: "expense",
@@ -136,8 +139,11 @@ def stage_trial_gl(*, source_path, date_path, quarantine_path,
         raise TrialMigrationError("Only a new disposable migration folder is allowed")
     source = _strict_decode(source_path)
     dates = _strict_decode(date_path)
-    if source.get("sourceType") != SOURCE_CLASS:
+    if source.get("sourceType") not in (SOURCE_CLASS, RESTORED_CLASS):
         raise TrialMigrationError("Refusing unknown source provenance")
+    if source["sourceType"] == RESTORED_CLASS and source.get("backupCopySha256",'').upper() not in (
+            RESTORED_SHA, RESTORED_SHA_1405_R19):
+        raise TrialMigrationError("Restored backup source hash mismatch")
     profile_export(source)
     with closing(sqlite3.connect(
             "file:" + quarantine_path.as_posix() + "?mode=ro", uri=True)) as archive:
@@ -148,7 +154,7 @@ def stage_trial_gl(*, source_path, date_path, quarantine_path,
             num_rows != sum(len(rows) for rows in source["tables"].values())):
         raise TrialMigrationError("Source disagrees with immutable quarantine")
     detail, preview = build_financial_plan(source, dates)
-    if (detail["sourceClass"] != SOURCE_CLASS or
+    if (detail["sourceClass"] != source["sourceType"] or
             preview["unbalancedDocuments"] or
             preview["sourceJournalRows"] != len(source["tables"]["tbl_Document"])):
         raise TrialMigrationError("Source financial preview is inconsistent")
@@ -188,7 +194,8 @@ def stage_trial_gl(*, source_path, date_path, quarantine_path,
     state = empty_rial_accounting_state()
     for command in event_commands:
         result = apply_accounting_command(
-            state, command, actor=ACTOR, accounts=ACCOUNTS, now=NOW)
+            state, command, actor=ACTOR, accounts=ACCOUNTS,
+            now="2026-10-26T20:00:00Z" if source["sourceType"] == RESTORED_CLASS else NOW)
         if not result["changed"]:
             raise TrialMigrationError("Duplicate accounting event")
         state = result["state"]
@@ -246,9 +253,9 @@ def stage_trial_gl(*, source_path, date_path, quarantine_path,
         raise TrialMigrationError("Independent SQLite replay validation failed")
     summary = {
         "status": "TRIAL_GL_POSTED_AND_RECONCILED_NOT_OPERATIONAL_ERP",
-        "source": SOURCE_CLASS,
+        "source": source["sourceType"],
         "sourceCurrency": "RIAL_OWNER_CONFIRMED",
-        "bakSnapshotEquivalenceVerified": False,
+        "bakSnapshotEquivalenceVerified": source["sourceType"] == RESTORED_CLASS,
         "journalGroupsImported": len(document_list),
         "journalLinesImported": sum(len(x["rows"]) for x in document_list),
         "distinctAccountsImported": len(classified),

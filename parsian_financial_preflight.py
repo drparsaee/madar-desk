@@ -109,13 +109,15 @@ def build_financial_plan(source: dict, date_mapping: dict) -> tuple[dict, dict]:
         })
     factor_rows = source["tables"]["tbl_Factor"]
     absent = sum(factor["Sanad_Num"] not in groups for factor in factor_rows)
+    restored = source["sourceType"] == "RESTORED_BAK_ISOLATED_VERIFIED_20261026"
     blockers = [
-        "the_attached_live_database_is_not_proven_equal_to_the_copied_backup",
         "the_source_currency_unit_has_not_been_independently_verified",
         "the_parsian_kol_moeen_tafsili_to_madar_account_types_are_not_reviewed",
         "opening_balances_and_account_party_allocation_are_not_reconciled",
         "full_document_factors_receipts_cheques_inventory_semantics_unmapped",
     ]
+    if not restored:
+        blockers.insert(0,"the_attached_live_database_is_not_proven_equal_to_the_copied_backup")
     if group_orphans:
         blockers.append("some_kol_groups_have_no_matching_group_reference")
     if absent:
@@ -123,7 +125,7 @@ def build_financial_plan(source: dict, date_mapping: dict) -> tuple[dict, dict]:
     detail = {
         "formatVersion": 1,
         "sourceClass": source["sourceType"],
-        "sourceBackupSnapshotVerified": False,
+        "sourceBackupSnapshotVerified": restored,
         "sourceCurrencyUnit": "UNVERIFIED_NO_RIAL_OR_TOMAN_ASSUMPTION",
         "accountClassMappingVerified": False,
         "financialPostingAuthorized": False,
@@ -145,7 +147,7 @@ def build_financial_plan(source: dict, date_mapping: dict) -> tuple[dict, dict]:
         "kolGroupEntriesMissingReference": len(group_orphans),
         "factorRowsWithoutMatchedJournal": absent,
         "unbalancedDocuments": 0,
-        "sourceBackupSnapshotVerified": False,
+        "sourceBackupSnapshotVerified": restored,
         "sourceCurrencyUnitVerified": False,
         "readyToPostToMadarTrial": False,
         "migrationStatus": "PREPARED_RECONCILABLE_PREVIEW_FINANCIAL_POSTING_BLOCKED",

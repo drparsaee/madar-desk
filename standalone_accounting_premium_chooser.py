@@ -7,7 +7,7 @@ Nothing in this UI opens or modifies a company ledger before confirmation.
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, font as tkfont
 from pathlib import Path
 from standalone_accounting_company_registry import normalized_company_label
 
@@ -21,6 +21,21 @@ SEA_LIGHT = '#E4F9F5'
 WHITE = '#FFFFFF'
 SURFACE = '#F4F7FA'
 LINE = '#DAE4EC'
+PERSIAN_FACE = 'Tahoma'
+
+
+def _use_installed_persian_font(root):
+    """Use a locally installed typeface, without distributing commercial fonts."""
+    try:
+        available = {name.casefold(): name for name in tkfont.families(root)}
+        face = next((available[name.casefold()]
+                     for name in ('Estedad', 'Vazirmatn', 'Dana', 'Tahoma')
+                     if name.casefold() in available), 'Tahoma')
+        for name in ('TkDefaultFont', 'TkTextFont', 'TkHeadingFont', 'TkMenuFont'):
+            tkfont.nametofont(name, root=root).configure(family=face)
+        return face
+    except (tk.TclError, AttributeError, TypeError):
+        return 'Tahoma'
 
 
 def rounded(canvas, x1, y1, x2, y2, radius, *, fill, outline='', width=1):
@@ -73,7 +88,7 @@ class ActionButton(tk.Canvas):
         rounded(self,2,2,w-2,h-2,12,fill=fill,
                 outline=LINE if not self.primary else fill)
         self.create_text(w/2,h/2,text=self.label,fill=fg,
-                         font=('Tahoma',10,'bold'))
+                         font=(PERSIAN_FACE,10,'bold'))
 
     def invoke(self):
         if not self.disabled:
@@ -82,8 +97,10 @@ class ActionButton(tk.Canvas):
 
 class PremiumCompanyChooser:
     def __init__(self, registry, *, root=None):
+        global PERSIAN_FACE
         self.registry=registry
         self.root=root or tk.Tk()
+        PERSIAN_FACE = _use_installed_persian_font(self.root)
         self.root.title('مدار | انتخاب شرکت و ورود به دفتر')
         self.root.geometry('1000x680')
         self.root.minsize(800,575)
@@ -111,25 +128,25 @@ class PremiumCompanyChooser:
         self.page.pack(side='right',fill='both',expand=True)
         header=tk.Frame(self.page,bg=SURFACE)
         header.pack(fill='x',padx=34,pady=(28,10))
-        tk.Label(header,text='حسابداری مستقل مدار',font=('Tahoma',11,'bold'),
+        tk.Label(header,text='حسابداری مستقل مدار',font=(PERSIAN_FACE,11,'bold'),
                  bg=SURFACE,fg=INK,anchor='e').pack(side='right')
         tk.Label(header,text='LOCAL WORKSPACE  /  V1',font=('Segoe UI',8),
                  bg=SURFACE,fg=MUTED).pack(side='left')
 
-        tk.Label(self.page,text='انتخاب محیط کار',font=('Tahoma',23,'bold'),
+        tk.Label(self.page,text='انتخاب محیط کار',font=(PERSIAN_FACE,23,'bold'),
                  bg=SURFACE,fg=INK,anchor='e').pack(fill='x',padx=34,pady=(20,5))
         tk.Label(self.page,text='شرکت موردنظر را انتخاب کنید یا دفتر جدیدی بسازید.',
-                 font=('Tahoma',10),bg=SURFACE,fg=MUTED,
+                 font=(PERSIAN_FACE,10),bg=SURFACE,fg=MUTED,
                  anchor='e').pack(fill='x',padx=36)
 
-        tk.Label(self.page,text='جست‌وجوی شرکت‌ها',font=('Tahoma',9,'bold'),
+        tk.Label(self.page,text='جست‌وجوی شرکت‌ها',font=(PERSIAN_FACE,9,'bold'),
                  bg=SURFACE,fg=INK,anchor='e').pack(fill='x',padx=36,pady=(22,5))
         search_frame=tk.Frame(self.page,bg=WHITE,highlightthickness=1,
                               highlightbackground=LINE)
         search_frame.pack(fill='x',padx=36)
         tk.Label(search_frame,text='⌕',font=('Segoe UI',18),bg=WHITE,fg=SEA
                  ).pack(side='right',padx=(10,17))
-        self.search=tk.Entry(search_frame,textvariable=self.query,font=('Tahoma',11),
+        self.search=tk.Entry(search_frame,textvariable=self.query,font=(PERSIAN_FACE,11),
                              bg=WHITE,fg=INK,bd=0,justify='right',
                              insertbackground=SEA)
         self.search.pack(side='right',fill='x',expand=True,pady=13)
@@ -138,10 +155,10 @@ class PremiumCompanyChooser:
 
         info=tk.Frame(self.page,bg=SURFACE)
         info.pack(fill='x',padx=36,pady=(16,9))
-        self.count_label=tk.Label(info,text='',font=('Tahoma',9,'bold'),
+        self.count_label=tk.Label(info,text='',font=(PERSIAN_FACE,9,'bold'),
                                   bg=SURFACE,fg=MUTED)
         self.count_label.pack(side='right')
-        tk.Label(info,text='دفترهای ثبت‌شده',font=('Tahoma',9),
+        tk.Label(info,text='دفترهای ثبت‌شده',font=(PERSIAN_FACE,9),
                  bg=SURFACE,fg=INK).pack(side='right',padx=8)
 
         self.list_shell=tk.Frame(self.page,bg=WHITE,
@@ -166,12 +183,12 @@ class PremiumCompanyChooser:
         self.new_frame=tk.Frame(self.page,bg=SURFACE)
         self.new_frame.pack(fill='x',padx=36,pady=(12,0))
         self.new_entry=tk.Entry(self.new_frame,textvariable=self.company_name,
-                                bg=WHITE,fg=INK,justify='right',font=('Tahoma',11),
+                                bg=WHITE,fg=INK,justify='right',font=(PERSIAN_FACE,11),
                                 relief='solid',bd=1)
         self.new_entry.bind('<Return>',lambda _:self._create())
         self.new_entry.bind('<Escape>',lambda _:self._toggle_create(False))
         self.create_help=tk.Label(self.new_frame,text='نام شرکت، حداکثر ۱۲۰ نویسه',
-                                  font=('Tahoma',8),bg=SURFACE,fg=MUTED)
+                                  font=(PERSIAN_FACE,8),bg=SURFACE,fg=MUTED)
 
         self.footer=tk.Frame(self.page,bg=SURFACE)
         self.footer.pack(fill='x',padx=32,pady=(12,6))
@@ -184,7 +201,7 @@ class PremiumCompanyChooser:
         self.cancel_btn=ActionButton(self.footer,'انصراف',self.cancel,width=95)
         self.cancel_btn.pack(side='left')
         self.status_label=tk.Label(self.page,textvariable=self.status,
-                                   font=('Tahoma',8),bg=SURFACE,fg=MUTED,
+                                   font=(PERSIAN_FACE,8),bg=SURFACE,fg=MUTED,
                                    anchor='e',wraplength=530)
         self.status_label.pack(fill='x',padx=38,pady=(0,16))
         self.root.bind('<Escape>',lambda _:self.cancel() if not self.create_open
@@ -206,16 +223,16 @@ class PremiumCompanyChooser:
         c.create_text(57,74,text='M',font=('Segoe UI',30,'bold'),fill=DEEP)
         c.create_text(w-32,145,text='M A D A R   /   D E S K',
                       font=('Segoe UI',12,'bold'),fill='#64CEC6',anchor='e')
-        c.create_text(w-32,201,text='حسابداری،',font=('Tahoma',24,'bold'),
+        c.create_text(w-32,201,text='حسابداری،',font=(PERSIAN_FACE,24,'bold'),
                       fill=WHITE,anchor='e')
-        c.create_text(w-32,247,text='با تمرکز بیشتر.',font=('Tahoma',20,'bold'),
+        c.create_text(w-32,247,text='با تمرکز بیشتر.',font=(PERSIAN_FACE,20,'bold'),
                       fill=WHITE,anchor='e')
         c.create_text(w-32,303,text='هر شرکت، اطلاعات و دفتر مستقل خودش را دارد.',
-                      width=w-62,font=('Tahoma',10),fill='#B5C8D4',anchor='e',justify='right')
+                      width=w-62,font=(PERSIAN_FACE,10),fill='#B5C8D4',anchor='e',justify='right')
         rounded(c,27,365,w-27,432,14,fill=MID,outline='#24536B')
         c.create_oval(w-65,382,w-45,402,fill=SEA,outline='')
-        c.create_text(w-76,392,text='مدیر محلی  •  نسخه آفلاین',
-                      font=('Tahoma',9,'bold'),fill=WHITE,anchor='e')
+        c.create_text(w-76,392,text='ورود رمزدار  •  نسخه آفلاین',
+                      font=(PERSIAN_FACE,9,'bold'),fill=WHITE,anchor='e')
         c.create_text(w-32,h-53,text='PRIVATE  •  WINDOWS  •  OFFLINE',
                       font=('Segoe UI',9),fill='#7193A7',anchor='e')
 
@@ -232,9 +249,9 @@ class PremiumCompanyChooser:
             empty.pack(fill='both',expand=True,pady=(42,50))
             tk.Label(empty,text='◈',font=('Segoe UI',35),bg=WHITE,fg=SEA).pack()
             tk.Label(empty,text='هنوز شرکتی برای نمایش وجود ندارد' if not term else 'نتیجه‌ای پیدا نشد',
-                     font=('Tahoma',12,'bold'),bg=WHITE,fg=INK).pack(pady=(5,6))
+                     font=(PERSIAN_FACE,12,'bold'),bg=WHITE,fg=INK).pack(pady=(5,6))
             tk.Label(empty,text='با «شرکت جدید» اولین دفتر را بسازید.' if not term else 'نام شرکت را اصلاح کنید.',
-                     font=('Tahoma',9),bg=WHITE,fg=MUTED).pack()
+                     font=(PERSIAN_FACE,9),bg=WHITE,fg=MUTED).pack()
         for i,company in enumerate(self.visible):
             chosen=self.selected==company['id']
             card=tk.Canvas(self.list_inside,height=71,bg=WHITE,
@@ -255,11 +272,11 @@ class PremiumCompanyChooser:
                 outline=SEA if chosen else LINE,width=1 if not chosen else 2)
         rounded(canvas,w-55,13,w-13,55,12,fill=SEA if chosen else '#E4EDF3')
         canvas.create_text(w-34,34,text=company['name'][:1],
-                           fill=DEEP if chosen else MID,font=('Tahoma',17,'bold'))
+                           fill=DEEP if chosen else MID,font=(PERSIAN_FACE,17,'bold'))
         canvas.create_text(w-69,25,text=company['name'][:33],anchor='e',
-                           fill=INK,font=('Tahoma',10,'bold'))
+                           fill=INK,font=(PERSIAN_FACE,10,'bold'))
         canvas.create_text(w-69,46,text='دفتر مالی مستقل  •  '+str(index+1),
-                           anchor='e',fill=MUTED,font=('Tahoma',8))
+                           anchor='e',fill=MUTED,font=(PERSIAN_FACE,8))
         canvas.create_text(24,35,text='✓' if chosen else '○',
                            fill=SEA if chosen else '#A9B9C5',font=('Segoe UI',18))
 
@@ -324,7 +341,7 @@ class PremiumCompanyChooser:
         self._toggle_create(False)
         self.query.set('')
         self.refresh(company['id'])
-        self.status.set('شرکت جدید ثبت شد. برای ورود به دفتر، دکمه ورود را انتخاب کنید.')
+        self.status.set('شرکت جدید ثبت شد. برای ورود، اعتبارسنجی رمز این شرکت انجام می‌شود.')
 
     def _confirm(self):
         if self.create_open:

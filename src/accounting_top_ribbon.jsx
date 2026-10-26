@@ -1,5 +1,5 @@
 import React from 'react';
-import {BookOpen,Building2,FilePlus2,FileText,Landmark,Layers3,
+import {ArrowRight,BookOpen,Building2,FilePlus2,FileText,Landmark,Layers3,
   Printer,RefreshCw,Settings2,ShieldCheck,Users,Wallet} from 'lucide-react';
 import './accounting_top_ribbon.css';
 
@@ -23,8 +23,9 @@ export const accountingRibbonGroupFor=tab=>{
 };
 
 export default function AccountingTopRibbon({tab,sections,onNavigate,onNewInvoice,
-  onPrint,canDraft=false,canManage=false,hasPrintableInvoice=false,
-  currency='ریال',companyName='',onRefresh,onExit,onSwitchCompany,disabled=false}){
+  onPrint,canDraft=false,canManage=false,canAdmin=false,hasPrintableInvoice=false,
+  currency='ریال',companyName='',currentUser=null,onRefresh,onExit,onSwitchCompany,onManageUsers,
+  onBack=null,backLabel='بازگشت به صفحه اصلی',disabled=false}){
   const [chosen,setChosen]=React.useState('');
   React.useEffect(()=>setChosen(''),[tab]);
   const active=ACCOUNTING_RIBBON_GROUPS.find(g=>g.id===(chosen||accountingRibbonGroupFor(tab)))||
@@ -44,6 +45,14 @@ export default function AccountingTopRibbon({tab,sections,onNavigate,onNewInvoic
           <small>محیط کار مالی · {companyName||'دفتر مستقل'}</small></span>
       </div>
       <div className="sac-ribbon-quick" aria-label="دسترسی سریع حسابداری">
+        {currentUser?.username&&<span className="sac-ribbon-user"
+          title="نام کاربری و عنوان سازمانی؛ مجوز فنی مستقل است">
+          <Users size={14}/>{currentUser.username}
+          {currentUser.jobTitle&&<b>· {currentUser.jobTitle}</b>}</span>}
+        {tab!=='overview'&&onBack&&<button type="button" className="sac-ribbon-back"
+          onClick={onBack} disabled={disabled} title={backLabel}>
+          <ArrowRight size={17}/> {backLabel}
+        </button>}
         {canDraft&&<button type="button" onClick={()=>{setChosen('documents');onNewInvoice();}}
           disabled={disabled} title="باز کردن صفحه ورود اطلاعات فاکتور">
           <FilePlus2 size={17}/> فاکتور جدید</button>}
@@ -53,6 +62,9 @@ export default function AccountingTopRibbon({tab,sections,onNavigate,onNewInvoic
         <button type="button" onClick={onRefresh} disabled={disabled}
           title="بازخوانی اطلاعات ثبت‌شده"><RefreshCw size={16}/> بازخوانی</button>
         <span className="sac-ribbon-unit" title="واحد واقعی دفتر حسابداری">{currency}</span>
+        {canAdmin&&onManageUsers&&<button type="button" disabled={disabled}
+          onClick={onManageUsers} title="مدیریت کاربران و نقش‌های همین شرکت">
+          <ShieldCheck size={16}/> کاربران</button>}
         {onSwitchCompany&&<button type="button" disabled={disabled} onClick={onSwitchCompany}
           title="بستن ایمن دفتر فعلی و بازکردن انتخاب‌گر شرکت، بدون خروج از برنامه">
           <Building2 size={16}/> تغییر شرکت</button>}

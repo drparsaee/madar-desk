@@ -15,6 +15,7 @@ from pathlib import Path
 import sqlite3
 
 _SCHEMA = "ATTACHED_LIVE_SQL_NOT_RESTORED_BACKUP"
+_RESTORED_SCHEMA = "ISOLATED_RESTORED_BAK_VERIFIED_20261026"
 _TABLES = ("tbl_Factor","tbl_FactorKind","tbl_Goods","tbl_Check",
            "tbl_TopCheck","tbl_Tafsili","tbl_Moeen")
 _MAX_ROWS = 20000
@@ -99,8 +100,9 @@ def legacy_views(view, *, archive_path: Path, manifest_path: Path):
         raise HistoricalDataError("Incomplete or unsafe historical source package")
     manifest = json.loads(manifest_path.read_text("utf-8"))
     if (type(manifest) is not dict
-            or manifest.get("source") != _SCHEMA
-            or manifest.get("snapshotMatchesBackup") is not False
+            or manifest.get("source") not in (_SCHEMA,_RESTORED_SCHEMA)
+            or manifest.get("snapshotMatchesBackup") is not
+                (manifest.get("source") == _RESTORED_SCHEMA)
             or manifest.get("sourceCurrency") != "RIAL_OWNER_CONFIRMED"
             or type(manifest.get("tableCounts")) is not dict
             or manifest.get("vendorTableCount") != len(manifest["tableCounts"])
@@ -113,8 +115,10 @@ def legacy_views(view, *, archive_path: Path, manifest_path: Path):
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise HistoricalDataError("Historical archive SQLite is damaged")
         meta = dict(db.execute("SELECT key,value FROM archive_meta"))
-        if (meta.get("source_class") != _SCHEMA
+        if (meta.get("source_class") != manifest["source"]
                 or meta.get("financial_posting_authorized") != "false"
+                or meta.get("bak_snapshot_equivalence_verified") !=
+                   ("true" if manifest["source"] == _RESTORED_SCHEMA else "false")
                 or meta.get("source_archive_sha256") !=
                 manifest.get("archiveSha256", "").lower()):
             raise HistoricalDataError("Historical archive provenance mismatch")
@@ -232,7 +236,9 @@ def legacy_views(view, *, archive_path: Path, manifest_path: Path):
         for x in tables["tbl_Goods"]
     ]
     return {
-        "sourceStatus": "منبع: دیتابیس متصل پارسیان؛ تطبیق با فایل بکاپ تأیید نشده",
+        "sourceStatus": ("منبع: فایل بکاپ بازیابی‌شده در دیتابیس آزمایشی مستقل؛ رکوردها آرشیوی‌اند"
+                         if manifest["source"] == _RESTORED_SCHEMA else
+                         "منبع: دیتابیس متصل پارسیان؛ تطبیق با فایل بکاپ تأیید نشده"),
         "readOnlyHistory": True,
         "notOperationalInvoicesOrPayments": True,
         "currency": "RIAL",
