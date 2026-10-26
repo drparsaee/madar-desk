@@ -1,5 +1,7 @@
 # مدار | Madar Desk
 
+**Development continuity:** Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) before choosing the next implementation task. It links owner decisions, incomplete obligations, ideas and evidence; [LOCALFORGE_SOURCE_OF_TRUTH.md](LOCALFORGE_SOURCE_OF_TRUTH.md) remains the Git policy.
+
 An independent Windows task manager. Entirely separate from ForgeOS and Chat On Steroids. Persian RTL, personal offline mode and optional LAN host/client collaboration. Custom Kanban columns, projects, checklists, task notes, manually entered agent updates, optional per-step/project accounting, dark mode, bundled Vazirmatn font and Google Drive backup/restore.
 
 **Windows portable preview build:** `D:\CoS-Test\madar-desk\release\Madar-Desk-v0.3-preview.exe`.
