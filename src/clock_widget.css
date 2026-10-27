@@ -87,6 +87,10 @@
 .clock-widget__menu-header strong{font-size:13px}
 .clock-widget__menu-header button{border:0;background:transparent;color:inherit;font-size:22px;line-height:1;border-radius:7px;min-width:28px;min-height:28px}
 .widget-settings{display:grid;gap:12px;min-width:0}
+.widget-settings--panel{padding:16px;border:1px solid rgba(127,153,182,.24);border-radius:14px;
+  background:rgba(124,159,206,.06)}
+.widget-settings--panel h3{display:flex;align-items:center;gap:8px;margin:0;font-size:15px;color:inherit}
+.widget-settings__intro{margin:0;color:var(--widget-muted,#718398);font-size:12px;line-height:1.8}
 .widget-settings__group{margin:0;padding:0;border:0;min-width:0}
 .widget-settings__group legend,.widget-settings__position>span{
   padding:0;margin-bottom:7px;color:inherit;font-size:12px;font-weight:750;

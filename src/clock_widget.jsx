@@ -43,11 +43,14 @@ function SettingChoices({label, value, items, onChange, disabled}) {
  * onChange receives a complete, normalized, JSON-serializable settings object.
  * Persistence is owned by the parent, never by this component.
  */
-export function WidgetSettings({settings, onChange, disabled = false}) {
+export function WidgetSettings({settings, onChange, disabled = false, embedded = false}) {
   const value = normalizeWidgetSettings(settings);
   const update = patch => onChange?.(normalizeWidgetSettings({...value, ...patch}));
   const move = direction => update({position: nudgeWidgetPosition(value.position, direction, 0.06)});
-  return <div className="widget-settings" dir="rtl" aria-label="شخصی‌سازی ساعت و تاریخ">
+  return <div className={'widget-settings' + (embedded ? '' : ' widget-settings--panel')}
+    dir="rtl" role="group" aria-label="شخصی‌سازی ساعت و تاریخ">
+    {!embedded && <><h3><Clock3 size={17}/> ویجت ساعت و تاریخ</h3>
+      <p className="widget-settings__intro">قالب و جای ویجت شخصی است و روی تاریخ واقعی کارها تأثیری ندارد.</p></>}
     <SettingChoices label="نمایش" items={CLOCK_WIDGET_CHOICES} value={value.mode} disabled={disabled}
       onChange={mode => update({mode})}/>
     <SettingChoices label="پوسته" items={THEME_CHOICES} value={value.theme} disabled={disabled}
@@ -207,7 +210,7 @@ export function ClockWidget({calendar = 'jalali', settings, mode = 'both', onCha
       {settings === undefined
         ? <SettingChoices label="نمایش" items={CLOCK_WIDGET_CHOICES} value={value.mode} disabled={disabled}
             onChange={nextMode => {commit({...value, mode: nextMode}); setOpen(false);}}/>
-        : <WidgetSettings settings={value} onChange={commit} disabled={disabled}/>}
+        : <WidgetSettings settings={value} onChange={commit} disabled={disabled} embedded/>}
     </div>}
   </div>;
 }
