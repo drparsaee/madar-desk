@@ -136,3 +136,44 @@ test('vitrea theme keeps light, dark, mobile, focus, RTL and original system flo
   assert.match(css,/@media print/);
   assert(!/\.sac-vtr-home\s*\{[^}]*display\s*:\s*none/.test(css));
 });
+
+test('dark accounting ribbon overrides inherited light tab/tool surfaces without touching light mode',()=>{
+  const ribbonCss=fs.readFileSync(path.join(root,'src/accounting_top_ribbon.css'),'utf8');
+  assert.match(ribbonCss,/\.sac-ribbon-tabs\{[^}]*background:#f5f8f9/);
+  assert.match(ribbonCss,/\.sac-ribbon-tools\{[^}]*background:#fff/);
+  const source=css.slice(css.indexOf('/* The ribbon is imported through AccountingTopRibbon'));
+  assert(source.length>1000,'dark ribbon overrides must be present');
+  assert.match(source,/:root\[data-theme="dark"\] \.sac-root > \.sac-ribbon-shell/);
+  for(const part of ['sac-ribbon-titlebar','sac-ribbon-tabs','sac-ribbon-tools',
+    'sac-ribbon-tabs button.active','sac-ribbon-tools button.selected',
+    'sac-ribbon-tools button.sac-ribbon-highlight',
+    'sac-ribbon-quick button','sac-ribbon-hint']){
+    assert(source.includes(part),part);
+  }
+  assert.match(source,/\.sac-ribbon-tabs\{[^}]*background:linear-gradient/);
+  assert.match(source,/\.sac-ribbon-tools\{[^}]*background:linear-gradient/);
+  // Every added ribbon selector is within :root[data-theme="dark"] and
+  // the independent accounting root. No unconditional light-theme regression.
+  const selectors=[...source.matchAll(/(^|\n)([^\n{}]+)\{/g)]
+    .map(([, ,selector])=>selector.trim())
+    .filter(selector=>!selector.startsWith('*')&&!selector.startsWith('/*'));
+  assert(selectors.length>10);
+  for(const selector of selectors){
+    assert.match(selector,/:root\[data-theme="dark"\] \.sac-root > \.sac-ribbon-shell/,
+      'unscoped ribbon rule: '+selector);
+  }
+});
+
+test('dark accounting home adopts verified graphite glass roles without changing light defaults',()=>{
+  const darkRule=css.match(/:root\[data-theme="dark"\] \.sac-root\.sac-vtr-overview\{([^}]+)\}/)?.[1];
+  assert.ok(darkRule,'expected dark accounting token override');
+  for(const token of ['--vtr-bg:#111113','--vtr-card:#1e1e226b',
+    '--vtr-text:#f6f8fc','--vtr-soft:#c9d1de',
+    '--vtr-line:#ffffff2e','--vtr-accent:#7aaef0']){
+    assert(darkRule.includes(token),token);
+  }
+  assert.match(css,/\.sac-root\.sac-vtr-overview \.sac-vtr-panel\{[^}]*border-radius:26px/);
+  assert.match(css,/\.sac-root\.sac-vtr-overview \.sac-vtr-panel\{[^}]*blur\(14px\)/);
+  assert.match(css,/\.sac-root\.sac-vtr-overview :is\(\.sac-vtr-overview-grid,\.sac-vtr-bottom-grid\)\{\s*gap:16px/);
+  assert.match(css,/\.sac-root\.sac-vtr-overview\{\s*--vtr-bg:#edf2f8/);
+});

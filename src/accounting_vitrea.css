@@ -9,11 +9,12 @@
     radial-gradient(ellipse 60% 45% at 5% 85%,#9dc0d844,transparent 80%),var(--vtr-bg);
 }
 :root[data-theme="dark"] .sac-root.sac-vtr-overview{
-  --vtr-bg:#111317;--vtr-card:#24262bd4;--vtr-text:#f3f5fa;--vtr-soft:#b7c0d0;
-  --vtr-line:#5a5b65;--vtr-rule:#484a52;--vtr-accent:#81b4f7;
-  --vtr-blue:#80b4fa;--vtr-green:#63c4af;--vtr-yellow:#e7b85e;
+  /* Verified Vitrea graphite design roles, scoped to dark accounting only. */
+  --vtr-bg:#111113;--vtr-card:#1e1e226b;--vtr-text:#f6f8fc;--vtr-soft:#c9d1de;
+  --vtr-line:#ffffff2e;--vtr-rule:#ffffff1a;--vtr-accent:#7aaef0;
+  --vtr-blue:#7aaef0;--vtr-green:#68c0b8;--vtr-yellow:#f3cd7e;
   background:radial-gradient(ellipse 80% 60% at 90% -10%,#56586588,transparent 67%),
-    radial-gradient(ellipse 65% 58% at -10% 75%,#47485277,transparent 76%),#111317;
+    radial-gradient(ellipse 65% 58% at -10% 75%,#47485277,transparent 76%),#111113;
 }
 .sac-vtr-overview .sac-main{background:transparent}
 .sac-vtr-overview .sac-body{background:transparent;scrollbar-color:var(--vtr-line) transparent}
@@ -45,6 +46,20 @@
 .sac-vtr-overview-grid,.sac-vtr-bottom-grid{display:grid;grid-template-columns:minmax(0,2.08fr) minmax(300px,.95fr);gap:13px;align-items:stretch;margin-bottom:13px}
 .sac-vtr-panel{position:relative;min-width:0;overflow:hidden;padding:17px 18px;border:1px solid var(--vtr-line);border-radius:24px;background:var(--vtr-card);box-shadow:inset 0 1px 1px #ffffff50,0 12px 32px #12131a17;backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)}
 :root[data-theme="dark"] .sac-vtr-panel{box-shadow:inset 0 1px 1px #ffffff34,0 18px 35px #00000032}
+:root[data-theme="dark"] .sac-root.sac-vtr-overview .sac-vtr-panel{
+  background:#1e1e226b;
+  border-color:#ffffff2e;
+  border-radius:26px;
+  box-shadow:inset 0 1px 1px #ffffff4d,inset 0 -1px 1px #ffffff1a,
+    0 24px 48px -22px #000000bf;
+  backdrop-filter:blur(14px) saturate(175%) brightness(.95);
+  -webkit-backdrop-filter:blur(14px) saturate(175%) brightness(.95);
+}
+:root[data-theme="dark"] .sac-root.sac-vtr-overview :is(.sac-vtr-overview-grid,.sac-vtr-bottom-grid){
+  gap:16px;
+  margin-bottom:16px;
+}
+:root[data-theme="dark"] .sac-root.sac-vtr-overview .sac-vtr-ring>div{background:#1d1d21}
 .sac-vtr-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:15px}
 .sac-vtr-panel-head h3{font-size:13px;font-weight:780;color:var(--vtr-text)}
 .sac-vtr-panel-head small{display:block;font-size:10px;line-height:1.65;color:var(--vtr-soft);margin-top:3px}
@@ -113,3 +128,119 @@
 @media(max-width:680px){.sac-vtr-heading{flex:1 1 100%}.sac-vtr-hero-stats{grid-template-columns:minmax(0,1fr);gap:8px}.sac-vtr-hero-stat{padding:8px;border:1px solid var(--vtr-line);border-radius:12px}.sac-vtr-hero{gap:9px}.sac-vtr-month-bars{gap:3px;min-height:180px}.sac-vtr-bars{min-height:155px;padding:0 2px;gap:1px}.sac-vtr-month small{font-size:8px}.sac-vtr-ring-panel{display:flex}.sac-vtr-ring{margin:4px auto 15px}.sac-vtr-ring-legend{width:100%}.sac-vtr-panel{border-radius:17px;padding:13px}.sac-vtr-table-footer{align-items:flex-start}.sac-vtr-account{flex-wrap:wrap}.sac-vtr-account b{max-width:100%;margin-inline-start:45px}}
 @media(prefers-reduced-motion:reduce){.sac-vtr-home *, .sac-vtr-home *::before,.sac-vtr-home *::after{transition:none!important}}
 @media print{.sac-vtr-home{color:#1b2430}.sac-vtr-panel{background:#fff;box-shadow:none;backdrop-filter:none}.sac-vtr-tabs,.sac-vtr-panel button{display:none!important}}
+
+/* The ribbon is imported through AccountingTopRibbon *after* this stylesheet.
+ * Scope dark overrides to the independent accounting root and use a more
+ * specific selector than the ribbon's default white tab/tool surfaces.
+ * Keep light mode, non-accounting surfaces, and all ribbon actions unchanged.
+ */
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell{
+  color-scheme:dark;
+  color:#f6f8fc;
+  background:linear-gradient(120deg,#1e1e22e8,#1c1c20db);
+  border-bottom:1px solid #ffffff2e;
+  box-shadow:0 4px 19px #0005,inset 0 1px 0 #ffffff1f;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-titlebar{
+  background:linear-gradient(100deg,#1d1d21f5,#1e1e22e9);
+  color:#f6f8fc;
+  border-bottom:1px solid #ffffff2e;
+  padding:7px 17px;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-app-icon{
+  background:#719deb38;
+  color:#b8d5ff;
+  border:1px solid #8eabdc59;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-identity small,
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-user{
+  color:#c3c9d9;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-user b{color:#b6d4ff}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-unit{
+  border-color:#626572;
+  background:#363945;
+  color:#d9e6ff;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tabs{
+  background:linear-gradient(115deg,#29292fbf,#1c1c20db);
+  border-bottom:1px solid #ffffff2e;
+  color:#f6f8fc;
+  align-items:center;
+  gap:7px;
+  padding:5px 17px;
+  scrollbar-color:#6a6e7c transparent;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tabs button{
+  color:#d9deea;
+  background:transparent;
+  border-color:transparent;
+  border-radius:18px;
+  padding:6px 12px;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tabs button:hover:not(:disabled){
+  color:#fff;
+  background:#819ac122;
+  border-color:#8295b14a;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tabs button.active{
+  color:#d8e9ff;
+  background:linear-gradient(180deg,#647d9f66,#3d43505e);
+  border-color:#8cacd073;
+  border-bottom-color:#59769d;
+  box-shadow:inset 0 1px 0 #ffffff29;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tools{
+  background:linear-gradient(125deg,#1e1e22e9,#1c1c20db);
+  border-top:1px solid #ffffff1a;
+  color:#f6f8fc;
+  min-height:46px;
+  gap:8px;
+  padding:6px 17px;
+  scrollbar-color:#6a6e7c transparent;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tools button{
+  background:#363942bd;
+  border:1px solid #777b8978;
+  color:#e1e5ef;
+  border-radius:18px;
+  min-height:34px;
+  padding:6px 12px;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tools button:hover:not(:disabled){
+  background:#51576b;
+  color:#fff;
+  border-color:#a4b5d0;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tools button.selected{
+  background:#7aaef0;
+  color:#071a33;
+  border-color:#a9cdfc;
+  font-weight:800;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-tools button.sac-ribbon-highlight{
+  background:#3c574f;
+  color:#b9f5df;
+  border-color:#639d86;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-hint{color:#ddc5a4}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-quick button,
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-quick .sac-ribbon-exit{
+  background:#343945;
+  color:#f0f4fc;
+  border-color:#6a7585;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-quick button:hover:not(:disabled){
+  background:#46546a;
+  border-color:#8ca7d1;
+  color:#fff;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell .sac-ribbon-quick button.sac-ribbon-back{
+  background:#31554d;
+  color:#d1f8e8;
+  border-color:#6a9e88;
+}
+:root[data-theme="dark"] .sac-root > .sac-ribbon-shell button:focus-visible{
+  outline:3px solid #94bfff;
+  outline-offset:2px;
+}
