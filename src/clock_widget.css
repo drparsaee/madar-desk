@@ -1,152 +1,118 @@
-.clock-widget{
-  --widget-ink:#244361;
-  --widget-muted:#5c7793;
-  --widget-glass:linear-gradient(135deg,rgba(255,255,255,.87),rgba(222,238,255,.59));
-  --widget-stroke:rgba(255,255,255,.9);
-  --widget-shadow:0 12px 30px rgba(31,60,101,.14),inset 0 1px 0 rgba(255,255,255,.8);
-  position:relative;display:inline-flex;align-items:center;gap:5px;min-width:0;flex:none;
-  isolation:isolate;color:var(--widget-ink);font-family:inherit;
+/* Fixed Fliqlo-inspired read-only clock. Controls, popovers, dragging and
+   user-defined placement were retired at the owner's request. */
+.clock-widget--fixed {
+  display:inline-flex;
+  position:relative;
+  flex:0 0 auto;
+  align-items:center;
+  min-width:0;
+  direction:rtl;
+  font-family:var(--madar-ui-font,"Estedad Variable",Vazirmatn,Tahoma,sans-serif);
+  pointer-events:none;
 }
-.clock-widget[data-widget-theme="dark"]{
-  --widget-ink:#f2f7ff;--widget-muted:#b6c9e1;
-  --widget-glass:linear-gradient(140deg,rgba(40,56,81,.94),rgba(18,34,57,.82));
-  --widget-stroke:rgba(190,210,246,.23);
-  --widget-shadow:0 16px 34px rgba(4,12,28,.33),inset 0 1px 0 rgba(255,255,255,.12);
+.clock-widget--fixed .clock-widget__display {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  margin:0;
+  padding:7px 12px 6px;
+  min-width:184px;
+  min-height:83px;
+  color:#f6f8fc;
+  background:linear-gradient(155deg,#30343d,#15171c 72%);
+  border:1px solid rgba(240,246,255,.24);
+  border-radius:17px;
+  box-shadow:inset 0 1px 1px #ffffff40,0 10px 24px #00000038;
+  text-align:center;
+  line-height:1.3;
 }
-.clock-widget[data-widget-theme="aurora"]{
-  --widget-ink:#e9faff;--widget-muted:#c9e8f9;
-  --widget-glass:linear-gradient(128deg,rgba(34,73,128,.94),rgba(91,61,151,.84) 52%,rgba(14,139,150,.86));
-  --widget-stroke:rgba(177,241,251,.42);
-  --widget-shadow:0 18px 36px rgba(34,53,109,.28),inset 0 1px 0 rgba(255,255,255,.2);
+.clock-widget--fixed .clock-widget__tiles {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
 }
-.clock-widget--floating,.clock-widget--top-left,.clock-widget--top-right,.clock-widget--bottom-left,.clock-widget--bottom-right{
-  position:fixed;z-index:65;padding:3px;border:1px solid var(--widget-stroke);border-radius:22px;
-  background:var(--widget-glass);box-shadow:var(--widget-shadow);
-  -webkit-backdrop-filter:blur(22px) saturate(1.45);backdrop-filter:blur(22px) saturate(1.45);
-  max-width:calc(100vw - 8px);touch-action:pan-y;
+.clock-widget--fixed .clock-widget__flip-page {
+  position:relative;
+  display:grid;
+  place-items:center;
+  width:61px;
+  height:50px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:7px;
+  background:linear-gradient(180deg,#36383e 0%,#292b31 49.5%,#15161a 50.5%,#202227 100%);
+  box-shadow:inset 0 1px 1px #ffffff38,0 3px 7px #0005;
+  color:#fff;
+  font-family:Arial,"Helvetica Neue",sans-serif;
+  font-size:38px;
+  font-weight:850;
+  line-height:1;
+  letter-spacing:-.03em;
+  font-feature-settings:"tnum" 1;
 }
-.clock-widget--top-left{top:16px;left:16px}
-.clock-widget--top-right{top:16px;right:16px}
-.clock-widget--bottom-left{bottom:16px;left:16px}
-.clock-widget--bottom-right{bottom:16px;right:16px}
-.clock-widget--dragging{z-index:90;user-select:none;cursor:grabbing}
-.clock-widget .clock-widget__display{
-  min-width:0;max-width:270px;gap:3px;border-inline-start:0;padding:9px 14px;
-  border-radius:17px;border:1px solid var(--widget-stroke);
-  color:var(--widget-muted);background:var(--widget-glass);
-  box-shadow:var(--widget-shadow);-webkit-backdrop-filter:blur(18px) saturate(1.5);
-  backdrop-filter:blur(18px) saturate(1.5);
-  text-align:center;white-space:normal;line-height:1.45;
+.clock-widget--fixed .clock-widget__flip-page::after {
+  content:"";
+  position:absolute;
+  z-index:1;
+  inset-inline:0;
+  top:50%;
+  height:1px;
+  background:#080a0e;
+  box-shadow:0 1px 0 #ffffff1a;
 }
-.clock-widget--floating .clock-widget__display,
-.clock-widget--top-left .clock-widget__display,
-.clock-widget--top-right .clock-widget__display,
-.clock-widget--bottom-left .clock-widget__display,
-.clock-widget--bottom-right .clock-widget__display{
-  background:rgba(255,255,255,.055);box-shadow:none;border-color:transparent;
+.clock-widget--fixed .clock-widget__separator {
+  display:block;
+  color:#dce5f2;
+  font-size:29px;
+  font-weight:650;
+  line-height:1;
+  margin-top:-4px;
 }
-.clock-widget .clock-widget__display strong{
-  color:var(--widget-ink);font-size:24px;font-weight:750;line-height:1.24;
-  font-variant-numeric:tabular-nums;letter-spacing:.1px;white-space:nowrap;
+.clock-widget--fixed .clock-widget__date {
+  display:block;
+  direction:rtl;
+  white-space:nowrap;
+  text-align:center;
+  font-size:11px;
+  line-height:1.3;
+  color:#d8e1ef;
+  font-weight:550;
 }
-.clock-widget .clock-widget__display span{color:var(--widget-muted);font-size:11px;white-space:normal;line-height:1.55}
-.clock-widget[data-widget-size="compact"] .clock-widget__display{padding:6px 9px}
-.clock-widget[data-widget-size="compact"] .clock-widget__display strong{font-size:17px}
-.clock-widget[data-widget-size="compact"] .clock-widget__display span{font-size:10px}
-.clock-widget[data-widget-size="large"] .clock-widget__display{padding:15px 21px;min-width:205px}
-.clock-widget[data-widget-size="large"] .clock-widget__display strong{font-size:36px}
-.clock-widget[data-widget-size="large"] .clock-widget__display span{font-size:13px}
-.clock-widget__trigger,.clock-widget__handle{
-  flex:none;display:inline-flex;align-items:center;justify-content:center;
-  width:32px;height:34px;border:1px solid transparent;border-radius:12px;
-  padding:4px;background:transparent;color:var(--widget-muted);cursor:pointer;
+@media (max-width:850px) {
+  .clock-widget--fixed .clock-widget__display {
+    min-width:162px;
+    min-height:74px;
+    padding:6px 9px;
+    gap:4px;
+  }
+  .clock-widget--fixed .clock-widget__tiles {gap:5px}
+  .clock-widget--fixed .clock-widget__flip-page {
+    width:53px;
+    height:45px;
+    font-size:30px;
+  }
+  .clock-widget--fixed .clock-widget__separator {font-size:26px}
+  .clock-widget--fixed .clock-widget__date {font-size:10px}
 }
-.clock-widget__trigger:hover,.clock-widget__handle:hover{background:rgba(111,156,201,.14)}
-.clock-widget__trigger{position:relative}
-.clock-widget__trigger svg:last-child{position:absolute;right:1px;bottom:1px;color:var(--widget-muted)}
-.clock-widget__handle{cursor:grab;touch-action:none;user-select:none}
-.clock-widget__handle:active{cursor:grabbing}
-.clock-widget__handle:disabled{cursor:not-allowed;opacity:.4}
-.clock-widget :is(button):focus-visible,.widget-settings :is(button):focus-visible{
-  outline:2px solid #3c85e0;outline-offset:2px;
+@media (max-width:480px) {
+  .clock-widget--fixed .clock-widget__display {
+    min-width:142px;
+    min-height:69px;
+    border-radius:13px;
+    padding:5px 7px;
+  }
+  .clock-widget--fixed .clock-widget__tiles {gap:4px}
+  .clock-widget--fixed .clock-widget__flip-page {
+    width:45px;
+    height:40px;
+    font-size:26px;
+    border-radius:5px;
+  }
+  .clock-widget--fixed .clock-widget__separator {font-size:22px}
+  .clock-widget--fixed .clock-widget__date {font-size:9.25px}
 }
-.clock-widget.clock-widget__menu{
-  position:fixed;z-index:90;display:block;box-sizing:border-box;
-  width:min(272px,calc(100vw - 16px));max-height:min(280px,calc(100dvh - 16px));
-  overflow-x:hidden;overflow-y:auto;min-width:0;margin:0;
-  padding:10px 11px;border-radius:16px;
-  border:1px solid var(--widget-stroke);background:var(--widget-glass);
-  color:var(--widget-ink);box-shadow:0 22px 55px rgba(13,37,78,.26);
-  -webkit-backdrop-filter:blur(30px) saturate(1.4);backdrop-filter:blur(30px) saturate(1.4);
-  overscroll-behavior:contain;touch-action:pan-y;
-}
-.clock-widget__menu-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
-.clock-widget__menu-header strong{font-size:12px}
-.clock-widget__menu-header button{border:0;background:transparent;color:inherit;font-size:20px;line-height:1;border-radius:7px;min-width:28px;min-height:28px;cursor:pointer}
-.clock-widget__quick{display:grid;gap:9px}
-.clock-widget__menu .widget-settings__group legend{font-size:11px;margin-bottom:5px}
-.clock-widget__menu .widget-settings__choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
-.clock-widget__menu .widget-settings__choices button{min-height:30px;padding:4px 5px;font-size:10px}
-.clock-widget__placement{display:grid;gap:5px;font-size:11px;font-weight:750}
-.clock-widget__placement select{
-  display:block;width:100%;min-height:33px;border:1px solid rgba(127,153,182,.33);
-  border-radius:9px;background:rgba(124,159,206,.12);color:inherit;font:inherit;
-  padding:5px 9px;cursor:pointer;
-}
-.clock-widget__placement select option{color:#233347;background:#f5f8fc}
-.clock-widget__placement select:disabled{opacity:.5;cursor:not-allowed}
-.clock-widget__more-button,.clock-widget__more>summary{
-  width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;
-  gap:8px;margin-top:9px;padding:7px 9px;font:inherit;font-size:11px;font-weight:700;
-  border:1px solid rgba(127,153,182,.3);border-radius:9px;
-  background:rgba(124,159,206,.13);color:inherit;cursor:pointer;
-}
-.clock-widget__more>summary{list-style:none}
-.clock-widget__more>summary::-webkit-details-marker{display:none}
-.clock-widget__more>summary::after{content:'⌄';font-size:14px}
-.clock-widget__more[open]>summary::after{transform:rotate(180deg)}
-.clock-widget__more>.widget-settings{padding-top:10px}
-.clock-widget__menu :is(button,select,summary):focus-visible{outline:2px solid #3c85e0;outline-offset:2px}
-.widget-settings{display:grid;gap:12px;min-width:0}
-.widget-settings--panel{padding:16px;border:1px solid rgba(127,153,182,.24);border-radius:14px;
-  background:rgba(124,159,206,.06)}
-.widget-settings--panel h3{display:flex;align-items:center;gap:8px;margin:0;font-size:15px;color:inherit}
-.widget-settings__intro{margin:0;color:var(--widget-muted,#718398);font-size:12px;line-height:1.8}
-.widget-settings__group{margin:0;padding:0;border:0;min-width:0}
-.widget-settings__group legend,.widget-settings__position>span{
-  padding:0;margin-bottom:7px;color:inherit;font-size:12px;font-weight:750;
-}
-.widget-settings__choices{display:flex;flex-wrap:wrap;gap:6px}
-.widget-settings__choices button{
-  display:inline-flex;align-items:center;justify-content:center;gap:4px;
-  min-height:33px;border-radius:10px;padding:6px 10px;font:inherit;font-size:11px;
-  background:rgba(132,164,199,.12);border:1px solid rgba(127,153,182,.27);
-  color:inherit;cursor:pointer;transition:background .15s ease,border-color .15s ease;
-}
-.widget-settings__choices button:hover{background:rgba(103,152,211,.2)}
-.widget-settings__choices button.is-active{
-  background:rgba(69,137,218,.21);border-color:rgba(75,144,224,.7);font-weight:700;
-}
-.widget-settings__choices button:disabled,.widget-settings__position-actions button:disabled{opacity:.45;cursor:not-allowed}
-.widget-settings__position{display:grid;gap:7px;border-top:1px solid rgba(123,153,189,.25);padding-top:12px}
-.widget-settings__position-actions{display:flex;gap:7px;flex-wrap:wrap}
-.widget-settings__position-actions button{
-  width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
-  border-radius:9px;border:1px solid rgba(125,154,185,.32);background:rgba(125,155,194,.1);
-  color:inherit;cursor:pointer;
-}
-.widget-settings__position small{font-size:10px;line-height:1.7;color:var(--widget-muted,#73859b)}
-@media(max-width:850px){
-  .clock-widget--topbar .clock-widget__display{max-width:135px;padding:6px 9px}
-  .clock-widget--topbar .clock-widget__display strong{font-size:17px}
-  .clock-widget--topbar .clock-widget__display span{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-}
-@media(max-width:480px){
-  .clock-widget--topbar .clock-widget__display{max-width:95px}
-  .clock-widget--topbar .clock-widget__display span{max-width:90px}
-  .clock-widget--top-left,.clock-widget--top-right{top:8px}
-  .clock-widget--bottom-left,.clock-widget--bottom-right{bottom:8px}
-  .clock-widget--top-left,.clock-widget--bottom-left{left:5px}
-  .clock-widget--top-right,.clock-widget--bottom-right{right:5px}
-}
-@media(prefers-reduced-motion:reduce){.widget-settings__choices button{transition:none}}
