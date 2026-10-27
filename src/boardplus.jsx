@@ -111,7 +111,7 @@ export function RichDescription({value='',direction='auto',onChange,onDirection,
      <button type="button" className="rich-preview-btn" onClick={()=>setPreview(x=>!x)}>{preview?'ویرایش':'پیش‌نمایش متن'}</button>
    </div>
    {preview?<MarkdownPreview value={value} direction={direction}/>:
-     <textarea ref={area} rows={5} placeholder="توضیحات کار؛ با نوار بالا متن را قالب‌بندی کنید." dir={direction} disabled={disabled} value={value} onChange={e=>onChange(e.target.value)}/>}
+     <textarea ref={area} rows={Math.min(8,Math.max(3,value.split('\n').length+1))} placeholder="توضیحات کار؛ با نوار بالا متن را قالب‌بندی کنید." dir={direction} disabled={disabled} value={value} onChange={e=>onChange(e.target.value)}/>}
    <small className="rich-hint">برای ذخیره نوشته‌ها از Markdown ساده استفاده می‌شود؛ HTML اجرا نمی‌شود.</small>
  </div>;
 }

@@ -2543,6 +2543,12 @@ def main():
                         time.sleep(0.4)
                     except Exception:
                         pass
+                elif os.environ.get("MADAR_QA_VIEW") == "task-detail":
+                    try:
+                        window.evaluate_js("document.querySelector('.task-card')?.click()")
+                        time.sleep(0.5)
+                    except Exception:
+                        pass
                 if os.environ.get("MADAR_QA_THEME") == "dark":
                     try:
                         window.evaluate_js("document.documentElement.dataset.theme='dark'")
@@ -2572,6 +2578,8 @@ def main():
                     "widgetPlacement": "document.querySelector('.clock-widget')?.className ?? ''",
                     "widgetSettingsShown": "!!document.querySelector('.settings-modal .widget-settings')",
                     "widgetSettingsSections": "document.querySelectorAll('.settings-modal .widget-settings__group').length",
+                    "taskLayout": "(()=>{const d=document.querySelector('.drawer');if(!d)return null;const r=d.getBoundingClientRect();return {width:Math.round(r.width),height:Math.round(r.height),quickButtons:d.querySelectorAll('.task-quick-actions button').length,sections:d.querySelectorAll('.edit-section').length,optionalGroups:d.querySelectorAll('.task-optional-block').length,openOptionalGroups:d.querySelectorAll('.task-optional-block[open]').length,scrollPadding:getComputedStyle(d.querySelector('.drawer-scroll')).padding,layoutColumns:getComputedStyle(d.querySelector('.edit-grid')).gridTemplateColumns};})()",
+                    "taskQuickJumpFocus": "(()=>{const b=document.querySelector('.task-quick-actions button[aria-controls=task-section-description]');b?.click();return document.activeElement?.id||'';})()",
                 }.items():
                     try:
                         values[name] = window.evaluate_js(script)

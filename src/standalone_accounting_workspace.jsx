@@ -3,6 +3,7 @@ import {ArrowRight,BookOpen,Building2,FileText,Landmark,Layers3,
   Plus,RefreshCw,ShieldAlert,Users,Wallet} from 'lucide-react';
 import './standalone_accounting_workspace.css';
 import './standalone_accounting_ux20.css';
+import './accounting_density.css';
 import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone_invoice_export.js';
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';

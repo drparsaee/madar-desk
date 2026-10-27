@@ -1,0 +1,260 @@
+/* Compact task-detail hierarchy. Scoped to the drawer so accounting and
+   ordinary application dialogs keep their independent layouts. */
+.drawer{
+  width:min(740px,calc(100vw - 12px));
+  max-width:100%;
+}
+.drawer .drawer-top{
+  min-height:48px;
+  padding:8px 22px;
+}
+.drawer .drawer-scroll{
+  padding:14px 22px 24px;
+  overscroll-behavior:contain;
+  scroll-padding-top:64px;
+}
+.drawer .task-edit-title{
+  min-height:42px;
+  padding:0 0 7px;
+  font-size:21px;
+  line-height:1.45;
+}
+.drawer .task-quick-actions{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+  position:sticky;
+  top:-14px;
+  z-index:6;
+  margin:2px -2px 11px;
+  padding:8px 2px;
+  border-bottom:1px solid var(--border,#e5eaf1);
+  background:var(--surface,#fff);
+}
+.drawer .task-quick-actions button{
+  min-height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  justify-content:center;
+  padding:6px 10px;
+  border-radius:9px;
+  border:1px solid var(--border,#dbe4ee);
+  background:var(--surface-soft,#f6f8fc);
+  color:var(--text,#344b69);
+  white-space:nowrap;
+  font-size:11px;
+  font-weight:680;
+  transition:background .15s, border-color .15s;
+}
+.drawer .task-quick-actions button:hover{
+  background:#e7f0ff;
+  border-color:#9ebceb;
+}
+.drawer .task-quick-actions button:focus-visible{
+  outline:2px solid #427fe2;
+  outline-offset:2px;
+}
+.drawer .task-inline-action{
+  min-height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  border-radius:8px;
+  border:1px solid var(--border,#dbe4ee);
+  background:var(--surface-soft,#f6f8fc);
+  color:var(--text,#344b69);
+  padding:5px 10px;
+  font-size:11px;
+  font-weight:700;
+}
+.drawer .task-inline-action:hover{background:#e7f0ff;border-color:#9ebceb}
+.drawer .task-section-heading{gap:10px}
+.drawer .task-section-heading h3{margin:0}
+.drawer .task-quick-count{
+  min-width:23px;
+  text-align:center;
+  border-radius:5px;
+  padding:1px 4px;
+  background:rgba(94,131,191,.12);
+  font-size:10px;
+  font-variant-numeric:tabular-nums;
+}
+.drawer .edit-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px 12px;
+  margin-top:2px;
+}
+.drawer .edit-grid label,
+.drawer .time-inputs label{
+  gap:4px;
+  min-width:0;
+}
+.drawer .edit-grid select,
+.drawer .edit-grid input,
+.drawer .time-inputs input,
+.drawer .calendar-field input{
+  min-height:36px;
+  padding:7px 9px;
+}
+.drawer .task-created-date{
+  display:inline-flex;
+  margin:9px 10px 0 0;
+  font-size:10px;
+}
+.drawer .edit-section{
+  margin-top:14px;
+}
+.drawer .drawer-scroll > .edit-section{
+  border-top:1px solid var(--border,#e8edf4);
+  padding-top:12px;
+}
+.drawer .edit-section > h3,
+.drawer .edit-section .section-header > h3{
+  margin-bottom:9px;
+  font-size:12px;
+}
+.drawer .edit-section > h3 svg,
+.drawer .edit-section .section-header > h3 svg{
+  width:16px;
+  height:16px;
+}
+.drawer :is(.step-list,.report-list){gap:5px;margin-bottom:8px}
+.drawer .step-row{gap:9px;padding:5px 2px}
+.drawer .step-check{width:22px;height:22px}
+.drawer .step-row span{font-size:12px;line-height:1.5}
+.drawer .inline-create{min-height:38px}
+.drawer .inline-create input{padding:9px 10px;font-size:12px}
+.drawer .report-entry{padding:10px 12px}
+.drawer .report-composer{padding:11px;gap:8px}
+.drawer .report-composer textarea{min-height:55px;padding:9px 11px}
+.drawer .empty-reports{padding:12px}
+.drawer .drawer-danger{margin-top:16px;padding-top:12px}
+.drawer .task-optional-block{
+  margin-top:12px;
+  border:1px solid var(--border,#e4eaf2);
+  border-radius:10px;
+  background:var(--surface-soft,#f8fafd);
+}
+.drawer .task-optional-block > summary{
+  cursor:pointer;
+  display:list-item;
+  list-style-position:inside;
+  padding:10px 12px;
+  min-height:37px;
+  color:var(--text,#4b6180);
+  font-weight:720;
+  font-size:12px;
+}
+.drawer .task-optional-block > summary:focus-visible{
+  outline:2px solid #467fd3;
+  outline-offset:1px;
+}
+.drawer .task-optional-block > summary span{display:inline}
+.drawer .task-optional-block > summary small{
+  margin-inline-start:8px;
+  color:#718cae;
+  font-size:10px;
+  font-weight:550;
+}
+.drawer .task-optional-block[open] > summary{
+  border-bottom:1px solid var(--border,#e4eaf2);
+}
+.drawer .task-optional-block > .edit-section,
+.drawer .task-optional-block > :not(summary){
+  margin:0;
+  padding:12px;
+}
+.drawer .task-optional-block > .edit-section .cardextras > h3{
+  margin-top:0;
+}
+.drawer .task-step-expenses > :not(summary){padding:10px 12px}
+.drawer .rich-description{gap:5px}
+.drawer .rich-description textarea{padding:10px 11px;line-height:1.7}
+.drawer .rich-toolbar{gap:5px;min-height:37px;padding:5px 6px}
+.drawer .assignee-picker{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}
+.drawer .assignee-picker label{padding:7px 9px;min-height:38px}
+.drawer :is(.step-cost-fields,.time-inputs){gap:8px}
+.drawer [id^="task-section-"]{
+  scroll-margin-top:80px;
+  outline-offset:3px;
+}
+:root[data-theme="dark"] .drawer .task-quick-actions{
+  background:#1c283a;
+  border-color:#31435b;
+}
+:root[data-theme="dark"] .drawer .task-quick-actions button{
+  background:#17263a;
+  color:#d9e6f7;
+  border-color:#39506b;
+}
+:root[data-theme="dark"] .drawer .task-quick-actions button:hover{
+  background:#263e59;
+  border-color:#7296c0;
+}
+:root[data-theme="dark"] .drawer .task-inline-action{
+  background:#17263a;color:#d9e6f7;border-color:#39506b;
+}
+:root[data-theme="dark"] .drawer .drawer-scroll > .edit-section{
+  border-color:#31435b;
+}
+:root[data-theme="dark"] .drawer .task-optional-block{
+  background:#17263a;
+  border-color:#39506b;
+}
+:root[data-theme="dark"] .drawer .task-optional-block > summary{
+  color:#cfdef1;
+}
+:root[data-theme="dark"] .drawer .task-optional-block[open] > summary{
+  border-color:#39506b;
+}
+@media(max-width:720px){
+  .drawer{width:min(100%,620px)}
+  .drawer .edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  .drawer{width:100%}
+  .drawer .drawer-top{padding:7px 13px;min-height:43px}
+  .drawer .drawer-scroll{padding:12px 13px 19px}
+  .drawer .task-edit-title{font-size:19px}
+  .drawer .task-quick-actions{top:-12px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin-inline:-4px;padding-inline:4px;scroll-snap-type:x proximity}
+  .drawer .task-quick-actions button{flex:none;scroll-snap-align:start}
+  .drawer .edit-grid{gap:7px}
+  .drawer .edit-grid :is(input,select){font-size:12px}
+  .drawer .assignee-picker{grid-template-columns:1fr}
+}
+@media(max-width:359px){
+  .drawer .edit-grid{grid-template-columns:minmax(0,1fr)}
+  .drawer .step-check{min-width:34px;min-height:34px}
+}
+@media(prefers-reduced-motion:reduce){
+  .drawer .task-quick-actions button{transition:none}
+}
+
+/* Project documents stay one accessible disclosure when empty. */
+.project-file-panel--compact{
+  padding:0;
+  overflow:hidden;
+}
+.project-file-panel--compact > summary{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 13px;
+  min-height:39px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:700;
+  color:var(--text,#4e6380);
+}
+.project-file-panel--compact > summary::-webkit-details-marker{display:none}
+.project-file-panel--compact > summary::after{
+  content:"⌄";
+  margin-inline-start:auto;
+  opacity:.7;
+}
+.project-file-panel--compact[open] > summary::after{transform:rotate(180deg)}
+.project-file-panel--compact > summary small{font-size:10px;color:#7b8fa8;font-weight:500}
+.project-file-panel--compact > :not(summary){margin:0 13px 12px}
+.project-file-panel--compact > summary:focus-visible{outline:2px solid #467fd3;outline-offset:-2px}

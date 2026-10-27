@@ -51,6 +51,7 @@ import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
 import './interface_mode.css';
 import './boardplus.css';
+import './task_editor_compact.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -203,6 +204,34 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false}
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
+  const drawerRef=useRef(null);
+  const onCloseRef=useRef(onClose);
+  onCloseRef.current=onClose;
+  useEffect(()=>{
+    const before=document.activeElement;
+    const drawer=drawerRef.current;
+    if(!drawer)return;
+    drawer.querySelector('.task-edit-title:not(:disabled),.task-quick-actions button')?.focus();
+    const handleKey=event=>{
+      if(event.key==='Escape'){
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if(event.key!=='Tab')return;
+      const controls=Array.from(drawer.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])'))
+        .filter(item=>item.getClientRects().length>0&&getComputedStyle(item).visibility!=='hidden');
+      if(!controls.length){event.preventDefault();drawer.focus();return;}
+      const first=controls[0],last=controls[controls.length-1];
+      if(event.shiftKey&&(document.activeElement===first||!drawer.contains(document.activeElement))){
+        event.preventDefault();last.focus();
+      }else if(!event.shiftKey&&(document.activeElement===last||!drawer.contains(document.activeElement))){
+        event.preventDefault();first.focus();
+      }
+    };
+    document.addEventListener('keydown',handleKey);
+    return()=>{document.removeEventListener('keydown',handleKey);if(before?.isConnected)before.focus();};
+  },[]);
   const [accountView,setAccountView]=useState(null);
   useEffect(()=>{
     if(!canManage)return;
@@ -212,18 +241,35 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   },[api,canManage]);
   const [agent,setAgent]=useState('');
   const [summary,setSummary]=useState('');
+  const [reportComposerOpen,setReportComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(false);
   const update=changes=>{if(canEdit)onUpdate(task.id,changes);};
   const addStep=()=>{if(!newStep.trim())return;update({checklist:[...task.checklist,{id:uid(),text:newStep.trim(),done:false}]});setNewStep('');};
-  const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');};
+  const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');setReportComposerOpen(false);};
   const total=task.checklist.length,done=task.checklist.filter(i=>i.done).length;
   const priceEnabled=canManage&&showCosts&&cardCostEnabled(task,projects.find(p=>p.id===task.projectId));
   const taskBoard=boards.find(b=>b.id===task.boardId);
-  return <div className="drawer-overlay" onMouseDown={onClose}><aside className="drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
+  const suggestedTasks=useMemo(()=>similarTasks(task.title,allTasks,task.id),[task.title,task.id,allTasks]);
+  const jumpToSection=section=>{
+    const target=document.getElementById('task-section-'+section);
+    if(!target)return;
+    target.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'instant':'smooth',block:'start'});
+    target.focus({preventScroll:true});
+  };
+  return <div className="drawer-overlay" onMouseDown={onClose}><aside ref={drawerRef} tabIndex={-1} className="drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
     <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div>
     <div className="drawer-scroll">
       <input className="task-edit-title" aria-label="عنوان کار" value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
-      <div className="edit-grid">
+      <nav className="task-quick-actions" aria-label="دسترسی سریع به بخش‌های کارت">
+        <button type="button" onClick={()=>jumpToSection('description')} aria-controls="task-section-description"><FileText size={15}/> توضیحات</button>
+        <button type="button" onClick={()=>jumpToSection('checklist')} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
+        <button type="button" onClick={()=>jumpToSection('assignees')} aria-controls="task-section-assignees"><Users size={15}/> مسئولان</button>
+        <button type="button" onClick={()=>jumpToSection('metadata')} aria-controls="task-section-metadata"><CalendarDays size={15}/> موعد</button>
+        <button type="button" onClick={()=>jumpToSection('tags')} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
+        <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
+        <button type="button" onClick={()=>{setReportComposerOpen(true);jumpToSection('reports');}} aria-controls="task-section-reports"><MessageCircle size={15}/> گزارش</button>
+      </nav>
+      <div className="edit-grid" id="task-section-metadata" tabIndex={-1}>
         <label>پروژه<select disabled={!canEdit} value={task.projectId} onChange={e=>update({projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         {boards.filter(b=>b.projectId===task.projectId&&!b.archived).length>1&&
           <label>برد<select disabled={!canEdit} value={task.boardId||''} onChange={e=>update({boardId:e.target.value})}>
@@ -237,37 +283,52 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       {!!task.orderCustomerName&&<div className="task-created-date">سفارش‌دهنده: {task.orderCustomerName}</div>}
       <OrderSaleFields task={task} api={api} onUpdate={update}
         onPrepare={onOpenSale} canEdit={canEdit} canManage={canManage}/>
-      <div className="edit-section"><h3><Users size={17}/> مسئولان کار</h3><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>
+      <div className="edit-section" id="task-section-assignees" tabIndex={-1}><h3><Users size={17}/> مسئولان کار</h3><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>
       {canManage&&showCosts&&<div className="edit-section"><h3>تنظیمات هزینه همین کارت</h3><label className="setting-toggle"><input type="checkbox" disabled={!canEdit} checked={priceEnabled} onChange={e=>update({costEnabled:e.target.checked})}/><span><strong>فعال‌کردن فیلد هزینه</strong><small>فقط همین کارت؛ تنظیم کلی پروژه را تغییر نمی‌دهد.</small></span></label>{task.costEnabled!==null&&task.costEnabled!==undefined&&canEdit&&<button className="subtle-action" onClick={()=>update({costEnabled:null})}>بازگشت به تنظیم پیش‌فرض پروژه</button>}</div>}
       {showOperations&&<div className="edit-section"><h3><Clock3 size={17}/> مدیریت زمان</h3><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>}
       {showOperations&&<CardDependencyPanel task={task} allTasks={allTasks} canEdit={canEdit} onChange={dependencies=>update({dependencies})}/>}
-      <div className="edit-section"><h3><FileText size={17}/> توضیحات و جهت متن</h3><RichDescription disabled={!canEdit} value={task.description||''} direction={task.textDirection||'auto'} onChange={description=>update({description})} onDirection={textDirection=>update({textDirection})}/></div>
-      <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
-      {showOperations&&taskBoard&&<div className="edit-section"><CardCustomFields task={task} board={taskBoard} calendar={calendar} disabled={!canEdit} onChange={update}/>{canManage&&<BoardFieldEditor board={taskBoard} tasks={allTasks} templates={allTemplates} disabled={!canManage} onChange={onBoardChange}/>}</div>}
+      <div className="edit-section" id="task-section-description" tabIndex={-1}><h3><FileText size={17}/> توضیحات و جهت متن</h3><RichDescription disabled={!canEdit} value={task.description||''} direction={task.textDirection||'auto'} onChange={description=>update({description})} onDirection={textDirection=>update({textDirection})}/></div>
+      <details className="task-optional-block" defaultOpen={Boolean(task.cover)}>
+        <summary><span>کاور کارت</span>{task.cover&&<small>فعال</small>}</summary>
+        <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
+      </details>
+      {showOperations&&taskBoard&&<details className="task-optional-block" defaultOpen={Boolean(taskBoard.customFields?.length)}>
+        <summary><span>فیلدهای سفارشی و تنظیمات برد</span>{!!taskBoard.customFields?.length&&<small>{taskBoard.customFields.length} فیلد</small>}</summary>
+        <div className="edit-section"><CardCustomFields task={task} board={taskBoard} calendar={calendar} disabled={!canEdit} onChange={update}/>{canManage&&<BoardFieldEditor board={taskBoard} tasks={allTasks} templates={allTemplates} disabled={!canManage} onChange={onBoardChange}/>}</div>
+      </details>}
       {priceEnabled&&<div className="edit-section"><h3>هزینه مستقیم کار</h3><MoneyField disabled={!canEdit} value={task.cost||0} label="هزینه مستقیم این کار" onChange={cost=>update({cost,costDate:task.costDate||(cost?todayISO():'')})}/><label className="expense-category-field">دسته هزینه<input maxLength={80} value={task.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک، چاپ، حمل‌ونقل" onChange={e=>update({costCategory:e.target.value})}/></label><CalendarField label="تاریخ هزینه مستقیم" calendar={calendar} value={task.costDate||''} disabled={!canEdit} onChange={costDate=>update({costDate})}/><p className="money-help">تاریخ واردشده برای گزارش هزینه در بازه زمانی استفاده می‌شود. هزینه‌های قدیمی بدون تاریخ اختصاصی با تاریخ آخرین ویرایش کارت گزارش می‌شوند.</p></div>}
-      <div className="edit-section"><h3><Tag size={17}/> برچسب</h3><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>
-      <div className="edit-section"><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
+      <div className="edit-section" id="task-section-tags" tabIndex={-1}><h3><Tag size={17}/> برچسب</h3><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>
+      <div className="edit-section" id="task-section-checklist" tabIndex={-1}><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
         <div className="step-list">{task.checklist.map(c=><div className="step-row" key={c.id}><button disabled={!canEdit} className={'step-check '+(c.done?'checked':'')} aria-label={'تغییر وضعیت '+c.text} onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>{c.done&&<Check size={14}/>}</button><span className={c.done?'completed':''}>{c.text}</span>{priceEnabled&&<div className="step-cost-fields"><MoneyField disabled={!canEdit} value={c.cost||0} label={'هزینه مرحله '+c.text} onChange={cost=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,cost,costDate:i.costDate||(cost?todayISO():'')}:i)})}/><input aria-label={'دسته هزینه مرحله '+c.text} maxLength={80} value={c.costCategory||''} disabled={!canEdit} placeholder="دسته هزینه؛ مثلاً پیک" onChange={e=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costCategory:e.target.value}:i)})}/><CalendarField label={'تاریخ هزینه مرحله '+c.text} calendar={calendar} value={c.costDate||''} disabled={!canEdit} onChange={costDate=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costDate}:i)})}/></div>}<button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button></div>)}</div>
-        {canManage&&task.checklist.map(step=><div key={step.id} className="edit-section">
-          <h4>هزینه‌های مستقل مرحله: {step.text}</h4>
+        {canManage&&task.checklist.map(step=><details key={step.id} className="task-optional-block task-step-expenses" defaultOpen={!!step.expenseItems?.length}>
+          <summary>هزینه‌های مستقل مرحله: {step.text}{!!step.expenseItems?.length&&<small>{step.expenseItems.length} مورد</small>}</summary>
           <StageExpenseFields task={task} step={step}
             parties={Object.values(accountView?.parties||{})}
             existingJobs={accountView?.contractorJobs||{}}
             accountReady={Boolean(accountView)}
             canEdit={canEdit} onUpdate={update} onPrepare={onOpenPurchase}/>
-        </div>)}
+        </details>)}
         {priceEnabled&&<div className="step-total">جمع هزینه‌های قدیمی این کار: <strong>{money((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))} تومان</strong></div>}
         {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
       </div>
-      <div className="edit-section"><CardChecklists task={task} hideLegacy disabled={!canEdit} onChange={update}/></div>
-      <div className="edit-section"><h3><MessageCircle size={17}/> گزارش پیشرفت</h3>
+      <details className="task-optional-block" defaultOpen={Boolean(task.checklistGroups?.length||task.checklists?.length)}>
+        <summary>چک‌لیست‌های بیشتر</summary>
+        <div className="edit-section"><CardChecklists task={task} hideLegacy disabled={!canEdit} onChange={update}/></div>
+      </details>
+      <div className="edit-section" id="task-section-reports" tabIndex={-1}>
+        <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت</h3>
+          {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
+        </div>
         <div className="report-list">{task.reports.length?task.reports.slice().reverse().map(r=><div className="report-entry" key={r.id}><div className="report-entry-top"><span className="agent-avatar"><Zap size={12}/></span><strong>{r.agent}</strong><small>{shortDate(r.createdAt)}</small></div><p>{r.summary}</p></div>):<div className="empty-reports">هنوز گزارشی ثبت نشده است.</div>}</div>
-        {canEdit&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام ایجنت یا مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="یک خط درباره آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
+        {canEdit&&reportComposerOpen&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام ایجنت یا مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="یک خط درباره آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
       </div>
       {showOperations&&<div className="edit-section"><CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/></div>}
-      <div className="edit-section"><h3><FolderOpen size={17}/> فایل‌های اشتراکی این کار</h3><SharedLinks links={task.fileLinks||[]} canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/></div>
-      <div className="edit-section"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
-      <div className="edit-section"><h3><Copy size={17}/> پیشنهاد کارهای مشابه</h3>{similarTasks(task.title,allTasks,task.id).length?similarTasks(task.title,allTasks,task.id).map(({task:t,score})=><div className="similar-row" key={t.id}><span>{t.title}<small>{Math.round(score*100)}٪ شباهت</small></span><button disabled={!canEdit} onClick={()=>onDuplicate(t)}>ساخت مشابه</button></div>):<p className="shared-empty">کار مشابهی با این عنوان پیدا نشد.</p>}</div>
+      <details className="task-optional-block" defaultOpen={!!task.fileLinks?.length}>
+        <summary><span>لینک فایل‌های اشتراکی</span>{!!task.fileLinks?.length&&<small>{task.fileLinks.length} لینک</small>}</summary>
+        <div className="edit-section"><SharedLinks links={task.fileLinks||[]} canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/></div>
+      </details>
+      <div className="edit-section" id="task-section-attachments" tabIndex={-1}><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
+      {!!suggestedTasks.length&&<div className="edit-section"><h3><Copy size={17}/> پیشنهاد کارهای مشابه</h3>{suggestedTasks.map(({task:t,score})=><div className="similar-row" key={t.id}><span>{t.title}<small>{Math.round(score*100)}٪ شباهت</small></span><button disabled={!canEdit} onClick={()=>onDuplicate(t)}>ساخت مشابه</button></div>)}</div>}
       {canEdit&&<div className="drawer-danger">{confirmDelete?<div className="delete-confirm"><span>کارت به زباله‌دان منتقل شود؟ تمام هزینه‌ها، فایل‌ها و گزارش‌ها حفظ می‌شوند.</span><button onClick={onDelete}>انتقال به زباله‌دان</button><button onClick={()=>setConfirmDelete(false)}>انصراف</button></div>:<button className="danger-link" onClick={()=>setConfirmDelete(true)}><Trash2 size={16}/> انتقال به زباله‌دان</button>}</div>}
     </div>
   </aside></div>;
@@ -932,16 +993,16 @@ export default function App(){
         <select id="madar-active-workspace" aria-label="انتخاب فضای کاری" value={activeWorkspaceId||''} onChange={e=>selectWorkspace(e.target.value)} style={{width:'100%',padding:'9px',borderRadius:9}}>
           {workspaces.filter(w=>!w.archived).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
-        {show('workspaceManagement')&&<button type="button" onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> مدیریت فضاهای کاری</button>}
+        {show('workspaceManagement')&&<button type="button" title="مدیریت فضاهای کاری" onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> مدیریت فضاهای کاری</button>}
       </div>
       <nav className="sidebar-nav" aria-label="پیمایش برنامه">
-        <button className={selected==='all'?'active':''} onClick={()=>{setSelected('all');setBoardId(null);}}><LayoutGrid size={18}/> همه کارها <span>{filtered.length}</span></button>
-        <button onClick={()=>{setSelected('all');setFilter('high');}}><Flag size={18}/> کارهای مهم</button>
-        <button type="button" onClick={()=>setTrashOpen(true)} aria-label="زباله‌دان کارت‌ها"><Trash2 size={18}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
-        {show('reporting')&&<button onClick={()=>setReportingOpen(true)}><BarChart3 size={18}/> گزارش و تحلیل</button>}
-        {show('planner')&&<button onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
-        {show('activity')&&<button onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
-        {show('timeDashboard')&&<button onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
+        <button title="همه کارها" className={selected==='all'?'active':''} onClick={()=>{setSelected('all');setBoardId(null);}}><LayoutGrid size={18}/> همه کارها <span>{filtered.length}</span></button>
+        <button title="کارهای مهم" onClick={()=>{setSelected('all');setFilter('high');}}><Flag size={18}/> کارهای مهم</button>
+        <button type="button" title="زباله‌دان کارت‌ها" onClick={()=>setTrashOpen(true)} aria-label="زباله‌دان کارت‌ها"><Trash2 size={18}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
+        {show('reporting')&&<button title="گزارش و تحلیل" onClick={()=>setReportingOpen(true)}><BarChart3 size={18}/> گزارش و تحلیل</button>}
+        {show('planner')&&<button title="برنامه‌ریزی شخصی" onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
+        {show('activity')&&<button title="تاریخچه فعالیت" onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
+        {show('timeDashboard')&&<button title="داشبورد زمان" onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
         {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={()=>{
           if(dirty.current||saving.current||blocked.current){
             setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
@@ -951,14 +1012,14 @@ export default function App(){
         {canManage&&show('accountingDashboard')&&<button type="button" onClick={()=>setRialJournalOpen(true)}
           aria-label="دفتر روزنامه ریالی V2 فقط خواندنی"><FileText size={18}/>
           دفتر ریالی V2 (آزمایشی)</button>}
-        {show('trelloImport')&&<button onClick={()=>setTrelloImportOpen(true)}><FileInput size={18}/> ورود فایل Trello</button>}
-        {show('trelloImport')&&<button onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={18}/> خروجی عملیاتی قابل‌انتقال</button>}
-        {show('calendarInterop')&&<button onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={18}/> تبادل فایل تقویم</button>}
-        {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={18}/> کلید API امن</button>}
+        {show('trelloImport')&&<button title="ورود فایل Trello" onClick={()=>setTrelloImportOpen(true)}><FileInput size={18}/> ورود فایل Trello</button>}
+        {show('trelloImport')&&<button title="خروجی عملیاتی قابل‌انتقال" onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={18}/> خروجی عملیاتی قابل‌انتقال</button>}
+        {show('calendarInterop')&&<button title="تبادل فایل تقویم" onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={18}/> تبادل فایل تقویم</button>}
+        {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button title="کلید API امن" onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={18}/> کلید API امن</button>}
       </nav>
       <div className="side-project-header"><span className="sidebar-section">پروژه‌های من</span>{canManage&&<button className="sidebar-plus" onClick={()=>setProjectModal(true)} aria-label="پروژه جدید"><Plus size={18}/></button>}</div>
       <nav className="sidebar-nav projects-nav" aria-label="پروژه‌ها">
-        {visibleProjects.map(p=><div className="project-entry" key={p.id}><button className={selected===p.id?'active':''} onClick={()=>{setSelected(p.id);setBoardId(null);setFilter('all');}}><span className="project-dot" style={{background:p.color}}/>{p.name}<span>{tasks.filter(t=>t.projectId===p.id&&!t.archived&&t.deleted!==true&&(!boards.length||workspaceBoards.some(b=>b.id===t.boardId))).length}</span></button>{show('projectAdministration')&&<button className="project-options" aria-label={'تنظیمات پروژه '+p.name} onClick={()=>{setProjectSettings(p.id);setProjectName(p.name);}}><MoreHorizontal size={15}/></button>}</div>)}
+        {visibleProjects.map(p=><div className="project-entry" key={p.id}><button title={'پروژه '+p.name} className={selected===p.id?'active':''} onClick={()=>{setSelected(p.id);setBoardId(null);setFilter('all');}}><span className="project-dot" style={{background:p.color}}/>{p.name}<span>{tasks.filter(t=>t.projectId===p.id&&!t.archived&&t.deleted!==true&&(!boards.length||workspaceBoards.some(b=>b.id===t.boardId))).length}</span></button>{show('projectAdministration')&&<button className="project-options" aria-label={'تنظیمات پروژه '+p.name} onClick={()=>{setProjectSettings(p.id);setProjectName(p.name);}}><MoreHorizontal size={15}/></button>}</div>)}
       </nav>
       {selected!=='all'&&<div className="workspace-board-nav">
         <div className="side-project-header"><span className="sidebar-section">بردهای پروژه</span>{canManage&&<button className="sidebar-plus" title="ساخت برد" onClick={()=>setBoardModal(true)}><Plus size={17}/></button>}</div>
@@ -985,7 +1046,10 @@ export default function App(){
       <div className="workspace-scroll">
         <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
-        {selectedProject&&<section className="project-file-panel"><h3><FolderOpen size={17}/> فایل‌های اشتراکی پروژه</h3><SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/></section>}
+        {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
+          <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
+          <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
+        </details>}
         {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
         <div className="stats">
           <div className="stat-card"><div className="stat-icon total"><LayoutDashboard size={19}/></div><span>کل کارها</span><strong>{counts.all.toLocaleString('fa-IR')}</strong><small>در این نما</small></div>
