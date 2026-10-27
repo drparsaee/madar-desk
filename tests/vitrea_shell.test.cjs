@@ -32,7 +32,8 @@ function matched(selector, media) {
 test('shell preserves existing view semantics and scopes chrome to App', () => {
   assert.ok(parseJsx(app,{sourceType:'module',plugins:['jsx']}).program.body.length);
   for (const classname of ['app-shell','sidebar','workspace','topbar','workspace-scroll','page-header','stats','list-mode'])
-    assert.ok(app.includes('className="'+classname+'"') ||
+    assert.ok((classname==='app-shell'&&/className="app-shell(?:\s[^\"]*)?"/.test(app)) ||
+      app.includes('className="'+classname+'"') ||
       (classname==='sidebar'&&app.includes("className={'sidebar'")),
       classname+' is still rendered');
   assert.equal(matched('.app-shell').isolation,'isolate');

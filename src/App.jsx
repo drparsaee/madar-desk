@@ -8,7 +8,7 @@ import {
   LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
   MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Tag,
   Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
-  Eye, EyeOff, Wallet, GripVertical, FileInput
+  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon
 } from 'lucide-react';
 import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
@@ -47,6 +47,7 @@ import {CardDependencyPanel} from './card_dependency_panel.jsx';
 import {resolvedDisplayScope,isManagedFeatureVisible} from './managed_display.js';
 import {ClockWidget} from './clock_widget.jsx';
 import {LaneActionsMenu} from './board_lane_actions.jsx';
+import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
@@ -54,6 +55,9 @@ import './interface_mode.css';
 import './boardplus.css';
 import './task_editor_compact.css';
 import './kanban_compact.css';
+import './vitrea_shell.css';
+import './vitrea_navigation.css';
+import './vitrea_design_tokens.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -72,9 +76,9 @@ const seed=()=>({
     {id:'demo-3',projectId:'p-sample',title:'بازبینی تجربه کاربری',description:'',status:'review',priority:'high',dueDate:'',labels:['بازبینی'],checklist:[],reports:[],createdAt:now(),updatedAt:now()},
     {id:'demo-4',projectId:'p-sample',title:'تعریف شیوه گزارش ایجنت',description:'',status:'planned',priority:'low',dueDate:'',labels:['ایجنت'],checklist:[],reports:[],createdAt:now(),updatedAt:now()}
   ],
-  stages:DEFAULT_STAGES,settings:{theme:'light',googleClientId:'',costDefault:false}
+  stages:DEFAULT_STAGES,settings:{theme:'dark',googleClientId:'',costDefault:false}
 });
-const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'light',costDefault:false,...s.settings}});
+const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'dark',costDefault:false,...s.settings}});
 const mockBridge={
   getState:async()=>JSON.parse(localStorage.getItem('madar-preview')||'null')||seed(),
   saveState:async s=>{localStorage.setItem('madar-preview',JSON.stringify(s));return true;},
@@ -503,11 +507,33 @@ export default function App(){
   useEffect(()=>{setAddingLane(false);setNewLaneName('');},[selected,boardId,workspaceId]);
   const [workspaceOpen,setWorkspaceOpen]=useState(false);
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
+  const [desktopNavOpen,setDesktopNavOpen]=useState(false);
+  const quickDockTrigger=useRef(null);
   useEffect(()=>{
-    const onResize=()=>{if(window.innerWidth>860)setMobileNavOpen(false);};
+    const onResize=()=>{if(window.innerWidth>860)setMobileNavOpen(false);else setDesktopNavOpen(false);};
     window.addEventListener('resize',onResize);
     return()=>window.removeEventListener('resize',onResize);
   },[]);
+  useEffect(()=>{
+    if(!desktopNavOpen)return;
+    const sidebar=document.getElementById('madar-sidebar');
+    sidebar?.querySelector('.mobile-nav-close')?.focus();
+    const onKey=event=>{
+      if(event.key==='Escape'){
+        event.preventDefault();setDesktopNavOpen(false);quickDockTrigger.current?.focus();
+        return;
+      }
+      if(event.key!=='Tab'||!sidebar)return;
+      const items=Array.from(sidebar.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href],input:not(:disabled)'))
+        .filter(node=>node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden');
+      if(!items.length)return;
+      const first=items[0],last=items[items.length-1];
+      if(event.shiftKey&&(document.activeElement===first||!sidebar.contains(document.activeElement))){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&(document.activeElement===last||!sidebar.contains(document.activeElement))){event.preventDefault();first.focus();}
+    };
+    document.addEventListener('keydown',onKey,true);
+    return()=>document.removeEventListener('keydown',onKey,true);
+  },[desktopNavOpen]);
   useEffect(()=>{
     if(!mobileNavOpen)return;
     const sidebar=document.getElementById('madar-sidebar');
@@ -644,6 +670,13 @@ export default function App(){
     return()=>clearInterval(timer);
   },[]);
   useEffect(()=>{document.documentElement.dataset.theme=data?.settings?.theme==='dark'?'dark':'light';},[data?.settings?.theme]);
+  useEffect(()=>{
+    if(!data)return;
+    // The standalone finance route uses the same display preference, without
+    // receiving task state or authorization through localStorage.
+    try{localStorage.setItem('madar-ui-theme',data.settings?.theme==='light'?'light':'dark');}
+    catch(_error){/* Private storage may be disabled in a hardened WebView. */}
+  },[data?.settings?.theme]);
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
   const tasks=data?.tasks||[];
   const projects=data?.projects||[];
@@ -1005,6 +1038,13 @@ export default function App(){
     dirty.current=false;blocked.current=false;setPendingRecovery(false);setSavingError('');
     await refresh(true).catch(e=>{blocked.current=true;setPendingRecovery(true);setSavingError(e.message);});
   };
+  const openStandaloneDashboard=()=>{
+    if(!canViewStandalone||!show('accountingDashboard'))return;
+    if(dirty.current||saving.current||blocked.current){
+      setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
+    }
+    window.location.assign('./accounting.html');
+  };
   const openAccounting=source=>{
     if(!canManage)return;
     if(dirty.current||saving.current||blocked.current){
@@ -1066,10 +1106,34 @@ export default function App(){
       fiscalPeriodId={rialFiscalPeriodId} canView={canManage} canPreview={false}
       onExit={()=>setRialJournalOpen(false)}/>
   </div>;
-  return <div className="app-shell">
+  return <div className="app-shell vitrea-layout">
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
-    <aside id="madar-sidebar" role={mobileNavOpen?'dialog':undefined} aria-modal={mobileNavOpen?'true':undefined} aria-label={mobileNavOpen?'فهرست پیمایش مدار':undefined} className={'sidebar'+(mobileNavOpen?' sidebar--mobile-open':'')} onClickCapture={event=>{if(event.target.closest('button'))setMobileNavOpen(false);}}>
-      <button type="button" className="mobile-nav-close" aria-label="بستن فهرست" onClick={()=>setMobileNavOpen(false)}><X size={20}/></button>
+    {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
+    <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
+      <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
+        aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
+        onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(value=>!value)}><Menu size={20}/></button>
+      {canEdit&&visibleProjects.length>0&&<button type="button" className="vitrea-quickdock__create" aria-label="ایجاد کار جدید" title="ایجاد کار جدید"
+        onClick={()=>openAdd(viewStages[0].id)}><Plus size={21}/></button>}
+      {show('planner')&&<button type="button" title="برنامه‌ریزی" aria-label="برنامه‌ریزی"
+        onClick={()=>setPlannerOpen(true)}><CalendarDays size={19}/></button>}
+      {show('reporting')&&<button type="button" title="گزارش و تحلیل" aria-label="گزارش و تحلیل"
+        onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/></button>}
+      {canManage&&<button type="button" title={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
+        aria-label={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
+        onClick={()=>changeAdmin(state=>({...state,settings:{...state.settings,
+          theme:state.settings?.theme==='dark'?'light':'dark'}}))}>
+        {data.settings?.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>}
+      <button type="button" title="تنظیمات" aria-label="تنظیمات مدار"
+        onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/></button>
+    </nav>
+    <aside id="madar-sidebar" role={mobileNavOpen||desktopNavOpen?'dialog':undefined}
+      aria-modal={mobileNavOpen||desktopNavOpen?'true':undefined}
+      aria-label={mobileNavOpen||desktopNavOpen?'فهرست پیمایش مدار':undefined}
+      inert={!mobileNavOpen&&!desktopNavOpen}
+      className={'sidebar'+(mobileNavOpen?' sidebar--mobile-open':'')+(desktopNavOpen?' sidebar--vitrea-open':'')}
+      onClickCapture={event=>{if(event.target.closest('button')){setMobileNavOpen(false);setDesktopNavOpen(false);}}}>
+      <button type="button" className="mobile-nav-close" aria-label="بستن فهرست" onClick={()=>{setMobileNavOpen(false);setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}><X size={20}/></button>
       <div className="brand"><div className="brand-mark"><span></span><i></i></div><div><strong>مدار</strong><small>فضای شخصی کارها</small></div></div>
       <div className="side-divider"/>
       <span className="sidebar-section">فضای کار</span>
@@ -1088,12 +1152,7 @@ export default function App(){
         {show('planner')&&<button title="برنامه‌ریزی شخصی" onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
         {show('activity')&&<button title="تاریخچه فعالیت" onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
         {show('timeDashboard')&&<button title="داشبورد زمان" onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
-        {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={()=>{
-          if(dirty.current||saving.current||blocked.current){
-            setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
-          }
-          window.location.assign('./accounting.html');
-        }} title="ورود به داشبورد و دفتر حسابداری مستقل"><Wallet size={18}/> مدیریت مالی</button>}
+        {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard} title="ورود به داشبورد و دفتر حسابداری مستقل"><Wallet size={18}/> مدیریت مالی</button>}
         {canManage&&show('accountingDashboard')&&<button type="button" onClick={()=>setRialJournalOpen(true)}
           aria-label="دفتر روزنامه ریالی V2 فقط خواندنی"><FileText size={18}/>
           دفتر ریالی V2 (آزمایشی)</button>}
@@ -1127,6 +1186,27 @@ export default function App(){
     </aside>
 
     <main className="workspace">
+      <div className="vitrea-top-row">
+      <button type="button" className="vitrea-brand-capsule" title="بازگشت به نمای کلی مدار"
+        onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}>
+        <span aria-hidden="true">م</span><strong>مدار</strong>
+      </button>
+      <nav className="vitrea-primary-nav" aria-label="بخش‌های اصلی مدار">
+        <button type="button" aria-current={selected==='all'&&mode==='board'?'page':undefined}
+          onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}><LayoutDashboard size={15}/> نمای کلی</button>
+        <button type="button" aria-current={selected!=='all'&&mode==='board'?'page':undefined}
+          onClick={()=>setMode('board')}><LayoutGrid size={15}/> برد کارها</button>
+        <button type="button" aria-current={mode==='list'?'page':undefined}
+          onClick={()=>setMode('list')}><ListChecks size={15}/> فهرست</button>
+        <button type="button" aria-expanded={desktopNavOpen||mobileNavOpen} aria-controls="madar-sidebar"
+          onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(true)}><FolderOpen size={15}/> پروژه‌ها</button>
+        {show('planner')&&<button type="button" onClick={()=>setPlannerOpen(true)}><CalendarDays size={15}/> برنامه‌ریزی</button>}
+        {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard}><Wallet size={15}/> حسابداری</button>}
+      </nav>
+      <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
+        aria-label="نمایش پروفایل من" title="پروفایل من"><Avatar user={lanStatus.user} size={32}/>
+        <span>{lanStatus.user?.displayName||lanStatus.user?.username||'حساب من'}</span></button>
+      </div>
       <header className="topbar"><button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar" aria-expanded={mobileNavOpen} aria-label="بازکردن فهرست پیمایش" onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><ClockWidget calendar={calendar} settings={widgetSettings} onOpenSettings={()=>setSettingsOpen(true)} onChange={async value=>{try{const saved=await api.setPreferences({calendar,widgetSettings:value});setWidgetSettings(normalizeWidgetSettings(saved.widgetSettings));}catch(error){setToast('تنظیم ویجت ذخیره نشد: '+String(error?.message||error));}}}/></div></header>
       <div className="workspace-scroll">
         <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
@@ -1136,12 +1216,14 @@ export default function App(){
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
         {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
-        <div className="stats">
+        {selected==='all'&&mode==='board'?<VitreaOverview tasks={filtered}
+          projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
+          onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>:<div className="stats">
           <div className="stat-card"><div className="stat-icon total"><LayoutDashboard size={19}/></div><span>کل کارها</span><strong>{counts.all.toLocaleString('fa-IR')}</strong><small>در این نما</small></div>
           <div className="stat-card"><div className="stat-icon ongoing"><Activity size={19}/></div><span>در حال انجام</span><strong>{counts.active.toLocaleString('fa-IR')}</strong><small>تسک فعال</small></div>
           <div className="stat-card"><div className="stat-icon waiting"><ClipboardCheck size={19}/></div><span>منتظر بررسی</span><strong>{counts.review.toLocaleString('fa-IR')}</strong><small>نیازمند توجه</small></div>
           <div className="stat-card"><div className="stat-icon completed"><CheckCheck size={19}/></div><span>انجام‌شده</span><strong>{counts.done.toLocaleString('fa-IR')}</strong><small>موفق و تمام</small></div>
-        </div>
+        </div>}
         <section className="board-section">
           <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={()=>setMode('board')}><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')}><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')}><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{

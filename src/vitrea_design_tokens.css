@@ -1,0 +1,102 @@
+/* Theme translation from the user's verified SkillUI Vitrea extraction.
+   Adapted for Persian Estedad and Madar components; no vendor CSS or assets. */
+.app-shell.vitrea-layout {
+  --vs-bg:#e4e6ea;
+  --vs-ink:#0b111c;
+  --vs-muted:#2f3a4c;
+  --vs-faint:#7d8796;
+  --vs-accent:#7fb3f5;
+  --vs-accent-soft:#7fb3f53b;
+  --vs-glass:#ffffff61;
+  --vs-rim:#ffffffd9;
+  --vs-edge:#14161e2e;
+  --vs-well:#1e202812;
+  --vs-hover:#86b5ed38;
+  --vs-shadow:inset 0 1px 1px #ffffffe0,inset 0 -1px 1px #ffffff73,
+    0 1px 2px #14161e14,0 22px 44px -22px #14161e5c;
+  --vs-round:26px;
+  --vtr-glass-thick:#fafafbd1;
+  --vtr-light-border:#ffffffd9;
+  --vtr-control-radius:999px;
+  --vtr-tile-radius:22px;
+  --vtr-spacing:16px;
+  --vtr-ease:cubic-bezier(.2,.8,.2,1);
+  background:
+    radial-gradient(ellipse 87% 50% at 22% -18%,#c6c9d1 0%,#d9dbe0 47%,transparent 48%),
+    radial-gradient(ellipse 99% 38% at 85% 62%,#b7bbc64a 0%,transparent 72%),
+    radial-gradient(ellipse 108% 55% at -12% 104%,#c4c6cd 0%,#dadddf 41%,transparent 42%),
+    linear-gradient(115deg,#eef0f3,#e4e6ea 55%,#d7d9df);
+}
+:root[data-theme="dark"] .app-shell.vitrea-layout {
+  --vs-bg:#111113;
+  --vs-ink:#f6f8fc;
+  --vs-muted:#c9d1de;
+  --vs-faint:#7d8696;
+  --vs-accent:#7aaef0;
+  --vs-accent-soft:#7aaef03b;
+  --vs-glass:#1e1e226b;
+  --vs-rim:#ffffff73;
+  --vs-edge:#ffffff2e;
+  --vs-well:#c8c8d71a;
+  --vs-hover:#7aaef030;
+  --vs-shadow:inset 0 1px 1px #ffffff4d,inset 0 -1px 1px #ffffff1a,
+    0 1px 2px #0000004d,0 24px 48px -22px #000000bf;
+  --vtr-glass-thick:#1c1c20db;
+  --vtr-light-border:#ffffff2e;
+  background:
+    radial-gradient(ellipse 102% 59% at 13% -21%,#303136 0%,#28292e 48%,transparent 49%),
+    radial-gradient(ellipse 92% 48% at 115% 35%,#44454b8c 0%,#28292c59 45%,transparent 46%),
+    radial-gradient(ellipse 88% 55% at -12% 115%,#35363c 0%,#29292f 47%,transparent 48%),
+    linear-gradient(118deg,#19191d 0%,#111113 51%,#17171a 100%);
+}
+/* Thin curved ellipses and refractive circles drawn as original CSS.
+   They do not occupy hit-testing space or affect scrolling. */
+.app-shell.vitrea-layout::before {
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle 31px at 12% 33%,#ffffff24 0%,#c3c8d228 70%,transparent 74%),
+    radial-gradient(circle 65px at 79% 62%,#ffffff16 0%,#5f667624 66%,transparent 71%),
+    radial-gradient(circle 24px at 65% 24%,#ffffff20 0%,transparent 72%),
+    radial-gradient(ellipse 123% 56% at 23% -39%,transparent 71.1%,#ffffff33 71.3%,transparent 71.5%),
+    radial-gradient(ellipse 110% 47% at 73% 113%,transparent 72%,#ffffff27 72.2%,transparent 72.4%);
+  opacity:.72;
+}
+.app-shell.vitrea-layout > :is(.workspace,.sidebar,.vitrea-quickdock,.vitrea-nav-backdrop) {position:relative;}
+.app-shell.vitrea-layout > .workspace {z-index:1;}
+.app-shell.vitrea-layout > .vitrea-quickdock,
+.app-shell.vitrea-layout > .vitrea-nav-backdrop,
+.app-shell.vitrea-layout > .sidebar {position:fixed;}
+.app-shell.vitrea-layout .vitrea-overview {
+  --vo-text:var(--vs-ink);
+  --vo-muted:var(--vs-muted);
+  --vo-border:var(--vs-edge);
+  --vo-accent:var(--vs-accent);
+}
+.app-shell.vitrea-layout .vitrea-overview-panel,
+.app-shell.vitrea-layout .vitrea-overview-kpi {
+  border-radius:26px;
+  border-color:var(--vs-edge);
+  background:linear-gradient(155deg,#ffffff1c,transparent 38%),var(--vs-glass);
+  box-shadow:var(--vs-shadow);
+  backdrop-filter:blur(14px) saturate(175%);
+  -webkit-backdrop-filter:blur(14px) saturate(175%);
+}
+.app-shell.vitrea-layout .vitrea-overview-project {border-radius:22px;}
+:root[data-theme="light"] .app-shell.vitrea-layout .vitrea-overview-panel,
+:root[data-theme="light"] .app-shell.vitrea-layout .vitrea-overview-kpi {
+  background:linear-gradient(165deg,#ffffff95,#ffffff3f 55%),var(--vs-glass);
+}
+@media (prefers-reduced-transparency:reduce) {
+  .app-shell.vitrea-layout .vitrea-overview-panel,
+  .app-shell.vitrea-layout .vitrea-overview-kpi {backdrop-filter:none;-webkit-backdrop-filter:none;}
+  .app-shell.vitrea-layout {--vs-glass:#f0f1f5;}
+  :root[data-theme="dark"] .app-shell.vitrea-layout {--vs-glass:#222329;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .app-shell.vitrea-layout .vitrea-overview-project,
+  .app-shell.vitrea-layout .vitrea-primary-nav button {transition:none;}
+}

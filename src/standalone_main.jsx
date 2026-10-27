@@ -5,6 +5,16 @@ import './styles.css';
 import {installFloatingLabels} from './floating_labels.js';
 import './floating_labels.css';
 
+// The accounting window can launch on its own. Default to the requested
+// graphite presentation, but preserve an explicit light preference previously
+// chosen in the task-manager shell. This key never carries finance data.
+try {
+  const choice=window.localStorage.getItem('madar-ui-theme');
+  document.documentElement.dataset.theme=choice==='light'?'light':'dark';
+} catch (_error) {
+  document.documentElement.dataset.theme='dark';
+}
+
 class AccountingErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={failed:false};}
   static getDerivedStateFromError(){return {failed:true};}

@@ -108,10 +108,16 @@ test('today: task-side finance panels remain role-gated; management finance open
     assert.ok(guardContains(element,/\bcanManage\b/)||displayFeature(element,key),
       `${name} missing admin policy guard`);
   }
-  const nav=exactOne('button',/window\.location\.assign\('\.\/accounting\.html'\)/);
-  assert.ok(guardContains(nav,/\bcanViewStandalone\b/),'standalone dashboard must require explicit finance viewing capability');
-  assert.ok(displayFeature(nav,'accountingDashboard'),'host-allowed dashboard is also restricted by assigned display role');
-  assert.match(nav.opening,/dirty\.current\|\|saving\.current\|\|blocked\.current/);
+  const navs=matching('button',/onClick=\{openStandaloneDashboard\}/);
+  assert.equal(navs.length,2,'dock navigation and sidebar must share the guarded accounting action');
+  for(const nav of navs){
+    assert.ok(guardContains(nav,/\bcanViewStandalone\b/),'standalone dashboard must require explicit finance viewing capability');
+    assert.ok(displayFeature(nav,'accountingDashboard'),'host-allowed dashboard is also restricted by assigned display role');
+  }
+  const route=app.match(/const openStandaloneDashboard=\(\)=>\{([\s\S]*?)\n  \};/);
+  assert.ok(route,'standalone route action must exist');
+  assert.match(route[1],/dirty\.current\|\|saving\.current\|\|blocked\.current/);
+  assert.match(route[1],/window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.match(app,/مدیریت مالی<\/button>/);
   assert.equal(matching('FinanceOverview').length,0,'legacy financial hub must not be mounted');
   const projectFinance=exactOne('button',/setFinanceOpen\(true\)/);

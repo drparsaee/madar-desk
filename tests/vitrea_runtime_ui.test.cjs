@@ -187,6 +187,9 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       await small.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
       await small.getByRole('button',{name:'نمایش منوی کامل مدار'}).click();
       assert.equal(await small.locator('#madar-sidebar').getAttribute('role'),'dialog');
+      // Mobile drawer animates its visibility/transform; under parallel Node
+      // test load, React state can settle before the CSS visibility transition.
+      await small.locator('#madar-sidebar').waitFor({state:'visible',timeout:6000});
       await screenshot(small,'madar-sidebar-mobile-open');
       if(!await small.locator('#madar-sidebar').isVisible()){
         console.log('Mobile sidebar diagnostic',JSON.stringify({
