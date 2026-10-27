@@ -182,6 +182,44 @@ class DisplayRolesTest(unittest.TestCase):
         self.assertEqual(updated["role"], "viewer")
         self.assert_status(403, lambda: self.request("/api/users", token=viewer_token))
 
+    def test_stale_account_overrides_are_clamped_only_when_omitted(self):
+        custom = {"id": "custom-manager", "label": "نمای مدیر", "displayMode": "finance",
+                  "features": ["cards", "planner", "projectFinance"]}
+        self.request("/api/display-roles", custom, self.admin)
+        self.add_user("reader", "viewer", displayRole="custom-manager",
+                      displayMode="finance", displayFeatures=["cards", "planner", "projectFinance"])
+        token = self.login("reader")["token"]
+        self.request("/api/display-roles", {**custom, "displayMode": "basic",
+                                             "features": ["cards"]}, self.admin)
+        self.assertEqual(self.request("/api/me", token=token)["user"]["displayFeatures"], ["cards"])
+
+        # A normal profile edit must not fail because the old overrides were
+        # granted when the custom role included more presentation features.
+        ordinary = {"username": "reader", "role": "viewer", "projects": None,
+                    "password": "", "displayName": "کارمند فروش"}
+        result = self.request("/api/user", ordinary, self.admin)["user"]
+        self.assertEqual((result["displayMode"], result["displayFeatures"]),
+                         ("basic", ["cards"]))
+        self.assertEqual(result["displayName"], "کارمند فروش")
+        self.assertNotIn("displayMode", self.server.users["reader"])
+        self.assertEqual(self.server.users["reader"]["displayFeatures"], ["cards"])
+
+        # When present in the payload, out-of-tier overrides remain errors.
+        for explicit in ({"displayMode": "finance"},
+                         {"displayMode": None},
+                         {"displayFeatures": ["planner"]},
+                         {"displayFeatures": None}):
+            with self.subTest(explicit=explicit):
+                self.assert_status(400, lambda: self.request("/api/user", {
+                    **ordinary, **explicit}, self.admin))
+        self.assertEqual(self.server.users["reader"]["displayFeatures"], ["cards"])
+
+        # An explicit valid mode does not force a caller to resubmit the old,
+        # now stale feature override. A valid explicit feature list also works.
+        self.request("/api/user", {**ordinary, "displayMode": "basic",
+                                   "displayFeatures": ["cards"]}, self.admin)
+        self.assertEqual(self.request("/api/me", token=token)["user"]["role"], "viewer")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -580,28 +580,47 @@ class LanService:
             display_role_profile = self.display_roles[display_role]
             base_mode = display_role_profile["displayMode"]
             role_changed = bool(old and old.get("displayRole", LEGACY_DISPLAY_ROLE.get(old.get("role"))) != display_role)
-            account_mode = payload.get("displayMode", None if role_changed else
-                                       old.get("displayMode") if old else None)
+            explicit_mode = "displayMode" in payload
+            account_mode = (payload["displayMode"] if explicit_mode else
+                            old.get("displayMode") if old and not role_changed else None)
             if account_mode is not None:
                 if (type(account_mode) is not str or account_mode not in MODE_RANK or
                         MODE_RANK[account_mode] > MODE_RANK[base_mode]):
-                    raise ValueError("User display mode exceeds assigned role")
+                    if explicit_mode:
+                        raise ValueError("User display mode exceeds assigned role")
+                    # Template shrank since this account was last edited.
+                    # Clear its stale override so the current role ceiling wins.
+                    account_mode = None
+            elif explicit_mode:
+                raise ValueError("User display mode must be valid")
+            if account_mode is not None:
                 account["displayMode"] = account_mode
             else:
                 account.pop("displayMode", None)
             allowed = [feature for feature in display_role_profile["features"]
                        if MODE_RANK[DISPLAY_FEATURE_TIERS[feature]] <=
                        MODE_RANK[account_mode or base_mode]]
-            account_features = payload.get("displayFeatures", None if role_changed else
-                                           old.get("displayFeatures") if old else None)
+            explicit_features = "displayFeatures" in payload
+            account_features = (payload["displayFeatures"] if explicit_features else
+                                old.get("displayFeatures") if old and not role_changed else None)
             if account_features is not None:
                 if (type(account_features) is not list or len(account_features) > len(allowed) or
                         any(type(feature) is not str or feature not in allowed
                             for feature in account_features) or
                         len(account_features) != len(set(account_features))):
-                    raise ValueError("User display features exceed assigned role")
+                    if explicit_features:
+                        raise ValueError("User display features exceed assigned role")
+                    # Only inherited stale overrides are intersected. A caller
+                    # attempting an explicit override outside the role still fails.
+                    if type(account_features) is list:
+                        account_features = [feature for feature in allowed
+                                            if feature in account_features]
+                    else:
+                        account_features = []
                 account["displayFeatures"] = [feature for feature in allowed
                                               if feature in account_features]
+            elif explicit_features:
+                raise ValueError("User display features must be a list")
             else:
                 account.pop("displayFeatures", None)
             # The admin API is the only place where finance grants are
