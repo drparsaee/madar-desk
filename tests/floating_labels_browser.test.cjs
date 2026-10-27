@@ -97,3 +97,100 @@ const frame = () => new Promise(resolve => setTimeout(resolve, 100));
     fs.rmSync(directory,{recursive:true,force:true});
   }
 });
+
+test('real Chromium DOM: deleting and reordering stages cleans orphan captions before paint', {skip:!chrome}, () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'madar-fl-stage-'));
+  try {
+    const fixture = `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<style>
+body{margin:0;font:14px sans-serif}
+.stages{width:400px;margin:24px;padding:8px;background:#eee}
+.stage{height:86px;padding:8px;box-sizing:border-box}
+.stage label{display:flex;flex-direction:column}
+.stage input{height:42px;width:240px;box-sizing:border-box}
+.spacer{height:12px}.spacer.expanded{height:75px}
+${cssSource}
+</style></head><body><div id="root"><div class="stages" id="stages">
+<div class="stage" id="stage-a"><label>مرحله اول<input id="a"></label></div>
+<div class="spacer" id="spacer"></div>
+<div class="stage" id="stage-b"><label>مرحله دوم<input id="b"></label></div>
+<div class="stage" id="stage-c"><label>مرحله سوم<input id="c"></label></div>
+</div></div>
+<script type="module">
+${jsSource}
+window.requestAnimationFrame = callback => setTimeout(() => callback(performance.now()), 0);
+const frame = () => new Promise(resolve => setTimeout(resolve, 85));
+const readTop = id => {
+  const input = document.getElementById(id);
+  const caption = Array.from(document.querySelectorAll('.madar-fl-caption'))
+    .find(node => node.textContent === input?.labels?.[0]?.textContent?.trim());
+  return caption ? parseFloat(caption.style.getPropertyValue('--madar-fl-top-y')) : NaN;
+};
+const aligned = id => Math.abs(readTop(id) - (document.getElementById(id).getBoundingClientRect().top + 7)) < 1;
+(async () => {
+  const dispose = installFloatingLabels(document);
+  await frame();
+  const layer = document.querySelector('.madar-fl-layer');
+  const stages = document.getElementById('stages');
+  const a = document.getElementById('stage-a');
+  const c = document.getElementById('stage-c');
+  const initial = aligned('a') && aligned('b') && aligned('c');
+  const beforeMove = readTop('a');
+  stages.insertBefore(c, a);
+  await Promise.resolve(); // deliver MutationObserver before its scheduled RAF
+  const hiddenDuringMove = layer.style.visibility === 'hidden';
+  await frame();
+  const movedAndAligned = readTop('a') > beforeMove && aligned('a') && aligned('b') && aligned('c');
+
+  const captionCountBeforeRemoval = document.querySelectorAll('.madar-fl-caption').length;
+  c.remove();
+  await Promise.resolve();
+  const removedSynchronously = document.querySelectorAll('.madar-fl-caption').length ===
+    captionCountBeforeRemoval - 1;
+  const hiddenDuringRemoval = layer.style.visibility === 'hidden';
+  await frame();
+  const shiftedAfterRemoval = aligned('a') && aligned('b') && readTop('a') === beforeMove;
+
+  const beforeClassChange = readTop('b');
+  document.getElementById('spacer').classList.add('expanded');
+  await Promise.resolve();
+  const hiddenDuringClassChange = layer.style.visibility === 'hidden';
+  await frame();
+  const shiftedAfterClassChange = aligned('b') && readTop('b') > beforeClassChange;
+
+  const plain = document.createElement('div');
+  plain.style.height = '50px';
+  stages.insertBefore(plain, document.getElementById('stage-b'));
+  await Promise.resolve();
+  const hiddenDuringPlainInsertion = layer.style.visibility === 'hidden';
+  await frame();
+  const movedAfterPlainInsertion = aligned('b') && readTop('b') > beforeClassChange + 50;
+
+  dispose();
+  document.body.dataset.results = encodeURIComponent(JSON.stringify({
+    initial,hiddenDuringMove,movedAndAligned,removedSynchronously,hiddenDuringRemoval,
+    shiftedAfterRemoval,hiddenDuringClassChange,shiftedAfterClassChange,
+    hiddenDuringPlainInsertion,movedAfterPlainInsertion,disposed:!document.querySelector('.madar-fl-layer'),
+  }));
+})().catch(error => {document.body.dataset.results = encodeURIComponent(JSON.stringify({error:String(error)}));});
+</script></body></html>`;
+    const file = path.join(directory, 'stage-mutations.html');
+    fs.writeFileSync(file, fixture, 'utf8');
+    const result = spawnSync(chrome, [
+      '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+      '--disable-extensions', '--virtual-time-budget=4000', '--window-size=900,700',
+      `--user-data-dir=${path.join(directory,'profile')}`, '--dump-dom', pathToFileURL(file).href,
+    ], {timeout:18000,maxBuffer:5*1024*1024,encoding:'utf8'});
+    assert.equal(result.error,undefined,`Chromium failed to start: ${result.error?.message}`);
+    assert.equal(result.status,0,`Chromium exited ${result.status}: ${result.stderr?.slice(0,500)}`);
+    const match = result.stdout.match(/data-results="([^"]+)"/);
+    assert.ok(match,`Chromium did not complete stage mutation scenario: ${result.stdout.slice(-1000)}`);
+    assert.deepEqual(JSON.parse(decodeURIComponent(match[1])),{
+      initial:true,hiddenDuringMove:true,movedAndAligned:true,removedSynchronously:true,
+      hiddenDuringRemoval:true,shiftedAfterRemoval:true,hiddenDuringClassChange:true,
+      shiftedAfterClassChange:true,hiddenDuringPlainInsertion:true,movedAfterPlainInsertion:true,disposed:true,
+    });
+  } finally {
+    fs.rmSync(directory,{recursive:true,force:true});
+  }
+});

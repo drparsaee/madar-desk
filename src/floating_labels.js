@@ -150,17 +150,79 @@ export function installFloatingLabels(root = globalThis.document) {
   let pending = false;
   let disposed = false;
   let dirty = true;
+  const observedAncestors = new Map();
 
   const observer = new view.MutationObserver(records => {
-    if (records.some(record => {
-      if (record.type === 'attributes') return true;
-      if (record.type === 'characterData') return !!record.target.parentElement?.closest('label');
-      return Array.from(record.addedNodes).concat(Array.from(record.removedNodes))
-        .some(node => node.nodeType === 1 &&
-          (node.matches?.(FIELD_SELECTOR + ', label') || node.querySelector?.(FIELD_SELECTOR + ', label')));
-    })) schedule(true);
+    if (disposed) return;
+    let needsScan = false;
+    let layoutChanged = false;
+    for (const record of records) {
+      if (record.type === 'childList') {
+        // A deleted stage can move other fields even when its nodes contain
+        // no inputs. React may also move an existing input to another row.
+        layoutChanged = true;
+        if (Array.from(record.addedNodes || []).concat(Array.from(record.removedNodes || []))
+          .some(node => node.nodeType === 1 &&
+            (node.matches?.(FIELD_SELECTOR + ', label') || node.querySelector?.(FIELD_SELECTOR + ', label')))) {
+          needsScan = true;
+        }
+      } else if (record.type === 'characterData') {
+        layoutChanged = true;
+        if (record.target.parentElement?.closest('label')) needsScan = true;
+      } else if (record.type === 'attributes') {
+        if (['class', 'style', 'hidden', 'dir', 'open'].includes(record.attributeName)) {
+          layoutChanged = true;
+        } else {
+          needsScan = true;
+        }
+      }
+    }
+    // MutationObserver callbacks run before the next paint. Remove orphaned
+    // portal captions here instead of leaving them over unrelated rows until
+    // the next animation frame.
+    for (const control of fields.keys()) {
+      if (control.isConnected === false || appRoot.contains?.(control) === false) {
+        remove(control);
+        layoutChanged = true;
+        needsScan = true;
+      }
+    }
+    if (needsScan || layoutChanged) {
+      // The old fixed coordinates must never be painted with a new row layout.
+      if (layoutChanged) layer.style.visibility = 'hidden';
+      schedule(needsScan);
+    }
   });
-  const resizeObserver = view.ResizeObserver ? new view.ResizeObserver(() => schedule(false)) : null;
+  const resizeObserver = view.ResizeObserver ? new view.ResizeObserver(() => {
+    layer.style.visibility = 'hidden';
+    schedule(false);
+  }) : null;
+
+  function syncObservedAncestors(state) {
+    if (!resizeObserver) return;
+    const next = [];
+    for (let node = state.control.parentElement; node; node = node.parentElement) {
+      next.push(node);
+      if (node === appRoot) break;
+    }
+    const previous = state.ancestors || [];
+    for (const node of previous) {
+      if (next.includes(node)) continue;
+      const remaining = observedAncestors.get(node) - 1;
+      if (remaining) observedAncestors.set(node, remaining);
+      else {
+        observedAncestors.delete(node);
+        resizeObserver.unobserve(node);
+      }
+    }
+    for (const node of next) {
+      if (previous.includes(node)) continue;
+      const uses = observedAncestors.get(node) || 0;
+      if (!uses) resizeObserver.observe(node);
+      observedAncestors.set(node, uses + 1);
+    }
+    state.ancestors = next;
+  }
 
   function remove(control) {
     const state = fields.get(control);
@@ -174,6 +236,16 @@ export function installFloatingLabels(root = globalThis.document) {
     if (state.nativeLabel) {
       state.nativeLabel.classList.remove('madar-fl-native-label');
       state.sourceSpan?.classList.remove('madar-fl-original-caption');
+    }
+    const ancestors = state.ancestors || [];
+    state.ancestors = [];
+    for (const node of ancestors) {
+      const remaining = observedAncestors.get(node) - 1;
+      if (remaining) observedAncestors.set(node, remaining);
+      else {
+        observedAncestors.delete(node);
+        resizeObserver?.unobserve(node);
+      }
     }
     resizeObserver?.unobserve(control);
     fields.delete(control);
@@ -209,6 +281,7 @@ export function installFloatingLabels(root = globalThis.document) {
     const state = {control, caption, label, nativeLabel:simple, sourceSpan, generatedAriaLabel};
     fields.set(control, state);
     resizeObserver?.observe(control);
+    syncObservedAncestors(state);
     syncCaption(state);
     positionCaption(state, activeModal);
   }
@@ -224,6 +297,7 @@ export function installFloatingLabels(root = globalThis.document) {
       const state = fields.get(control);
       if (!state) add(control, activeModal);
       else {
+        syncObservedAncestors(state);
         // An aria-label that we previously generated should not obscure
         // updates to the underlying placeholder or data-floating-label.
         const ownAriaLabel = state.generatedAriaLabel && control.getAttribute('aria-label') === state.label;
@@ -289,7 +363,7 @@ export function installFloatingLabels(root = globalThis.document) {
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['aria-label', 'aria-labelledby', 'data-floating-label', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled'],
+    attributeFilter: ['aria-label', 'aria-labelledby', 'data-floating-label', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled', 'class', 'style', 'hidden', 'dir', 'open'],
   });
   schedule(true);
 
