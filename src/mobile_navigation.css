@@ -1,0 +1,81 @@
+/* Small Windows panes and phone layouts need the workspace, not a permanently
+   visible sidebar that consumes a third of the viewport. All entries remain
+   available through an explicit off-canvas drawer. */
+.mobile-nav-toggle,.mobile-nav-close,.mobile-nav-backdrop{display:none}
+/* The floating caption portal normally rises above dialogs. While the clock
+   quick menu is open, keep captions behind that menu instead of painting
+   unrelated field text over its choices. */
+body:has(.clock-widget__menu) .madar-fl-layer{z-index:89}
+@media(max-width:860px){
+  .app-shell>.sidebar{
+    position:fixed;
+    inset-block:0;
+    inset-inline-start:0;
+    z-index:302;
+    width:min(300px,88vw);
+    max-width:88vw;
+    padding:15px 13px;
+    overflow-y:auto;
+    overflow-x:hidden;
+    transform:translateX(105%);
+    visibility:hidden;
+    pointer-events:none;
+    transition:transform .18s ease,visibility .18s;
+    box-shadow:-12px 0 45px #0002;
+  }
+  .app-shell>.sidebar.sidebar--mobile-open{transform:translateX(0);visibility:visible;pointer-events:auto}
+  .app-shell>.sidebar .brand{justify-content:flex-start;padding:0 8px 12px}
+  .app-shell>.sidebar .brand>div:last-child{display:block}
+  .app-shell>.sidebar .sidebar-section{display:block}
+  .app-shell>.sidebar .sidebar-nav button,
+  .app-shell>.sidebar .sidebar-settings{
+    min-height:38px;
+    padding:8px 10px;
+    justify-content:flex-start;
+    gap:9px;
+    font-size:12px;
+    text-align:right;
+  }
+  .app-shell>.sidebar .sidebar-nav button span:last-child:not(.project-dot){display:inline}
+  .app-shell>.sidebar .sidebar-nav .project-entry button span:last-child:not(.project-dot){display:inline}
+  .app-shell>.sidebar .sidebar-profile>div:not(.profile-avatar){display:block}
+  .app-shell>.sidebar .sidebar-profile .profile-online{display:block}
+  .app-shell>.sidebar .interface-mode-selector--compact{display:grid}
+  .app-shell>.sidebar .side-project-header{justify-content:space-between;padding:0 5px}
+  .app-shell>.sidebar .projects-nav button{justify-content:flex-start}
+  .app-shell>.sidebar .project-entry>button:first-child{padding-inline-end:12px}
+  .mobile-nav-close{
+    display:grid;place-items:center;
+    position:absolute;left:10px;top:12px;
+    width:36px;height:36px;border-radius:9px;
+    background:#263e59;color:#e9f4ff;
+  }
+  .mobile-nav-backdrop{
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:301;
+    background:rgba(9,20,35,.59);
+    width:100%;
+    height:100%;
+  }
+  .mobile-nav-toggle{
+    display:grid;place-items:center;
+    flex:none;
+    width:38px;height:38px;
+    background:transparent;
+    border:1px solid #dce4ed;
+    border-radius:9px;
+    color:#344b69;
+  }
+  .workspace{width:100%;min-width:0}
+  .topbar{align-content:center;gap:8px;min-height:55px}
+  .topbar .searchplus-shell{min-width:0;flex:1 1 160px}
+  .workspace-scroll{padding-inline:11px;min-width:0}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .page-header h1{overflow-wrap:anywhere}
+  :root[data-theme="dark"] .mobile-nav-toggle{color:#dbe7f6;border-color:#43526a}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell>.sidebar{transition:none}
+}

@@ -4,5 +4,6 @@ import App from './App.jsx';
 import './styles.css';
 import {installFloatingLabels} from './floating_labels.js';
 import './floating_labels.css';
+import './mobile_navigation.css';
 createRoot(document.getElementById('root')).render(<App />);
 installFloatingLabels(document);

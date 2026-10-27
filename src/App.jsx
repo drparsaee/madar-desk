@@ -497,6 +497,35 @@ export default function App(){
   const [boardId,setBoardId]=useState(null);
   const [workspaceId,setWorkspaceId]=useState(null);
   const [workspaceOpen,setWorkspaceOpen]=useState(false);
+  const [mobileNavOpen,setMobileNavOpen]=useState(false);
+  useEffect(()=>{
+    const onResize=()=>{if(window.innerWidth>860)setMobileNavOpen(false);};
+    window.addEventListener('resize',onResize);
+    return()=>window.removeEventListener('resize',onResize);
+  },[]);
+  useEffect(()=>{
+    if(!mobileNavOpen)return;
+    const sidebar=document.getElementById('madar-sidebar');
+    const trigger=document.querySelector('.mobile-nav-toggle');
+    sidebar?.querySelector('.mobile-nav-close')?.focus();
+    const onKey=event=>{
+      if(event.key==='Escape'){
+        event.preventDefault();setMobileNavOpen(false);return;
+      }
+      if(event.key!=='Tab'||!sidebar)return;
+      const items=Array.from(sidebar.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href],input:not(:disabled)'))
+        .filter(node=>node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden');
+      if(!items.length)return;
+      const first=items[0],last=items[items.length-1];
+      if(event.shiftKey&&(document.activeElement===first||!sidebar.contains(document.activeElement))){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&(document.activeElement===last||!sidebar.contains(document.activeElement))){event.preventDefault();first.focus();}
+    };
+    document.addEventListener('keydown',onKey);
+    return()=>{
+      document.removeEventListener('keydown',onKey);
+      if(sidebar?.contains(document.activeElement)&&trigger?.isConnected)trigger.focus();
+    };
+  },[mobileNavOpen]);
   const [trashOpen,setTrashOpen]=useState(false);
   const [boardModal,setBoardModal]=useState(false);
   const [boardName,setBoardName]=useState('');
@@ -984,13 +1013,15 @@ export default function App(){
       onExit={()=>setRialJournalOpen(false)}/>
   </div>;
   return <div className="app-shell">
-    <aside className="sidebar">
+    {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
+    <aside id="madar-sidebar" role={mobileNavOpen?'dialog':undefined} aria-modal={mobileNavOpen?'true':undefined} aria-label={mobileNavOpen?'فهرست پیمایش مدار':undefined} className={'sidebar'+(mobileNavOpen?' sidebar--mobile-open':'')} onClickCapture={event=>{if(event.target.closest('button'))setMobileNavOpen(false);}}>
+      <button type="button" className="mobile-nav-close" aria-label="بستن فهرست" onClick={()=>setMobileNavOpen(false)}><X size={20}/></button>
       <div className="brand"><div className="brand-mark"><span></span><i></i></div><div><strong>مدار</strong><small>فضای شخصی کارها</small></div></div>
       <div className="side-divider"/>
       <span className="sidebar-section">فضای کار</span>
       <div className="sidebar-nav" style={{padding:'0 12px 9px'}}>
         <label htmlFor="madar-active-workspace" className="sidebar-section">Workspace فعال</label>
-        <select id="madar-active-workspace" aria-label="انتخاب فضای کاری" value={activeWorkspaceId||''} onChange={e=>selectWorkspace(e.target.value)} style={{width:'100%',padding:'9px',borderRadius:9}}>
+        <select id="madar-active-workspace" aria-label="انتخاب فضای کاری" value={activeWorkspaceId||''} onChange={e=>{selectWorkspace(e.target.value);setMobileNavOpen(false);}} style={{width:'100%',padding:'9px',borderRadius:9}}>
           {workspaces.filter(w=>!w.archived).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
         {show('workspaceManagement')&&<button type="button" title="مدیریت فضاهای کاری" onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> مدیریت فضاهای کاری</button>}
@@ -1042,7 +1073,7 @@ export default function App(){
     </aside>
 
     <main className="workspace">
-      <header className="topbar"><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><ClockWidget calendar={calendar} settings={widgetSettings} onChange={async value=>{try{const saved=await api.setPreferences({calendar,widgetSettings:value});setWidgetSettings(normalizeWidgetSettings(saved.widgetSettings));}catch(error){setToast('تنظیم ویجت ذخیره نشد: '+String(error?.message||error));}}}/></div></header>
+      <header className="topbar"><button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar" aria-expanded={mobileNavOpen} aria-label="بازکردن فهرست پیمایش" onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><ClockWidget calendar={calendar} settings={widgetSettings} onOpenSettings={()=>setSettingsOpen(true)} onChange={async value=>{try{const saved=await api.setPreferences({calendar,widgetSettings:value});setWidgetSettings(normalizeWidgetSettings(saved.widgetSettings));}catch(error){setToast('تنظیم ویجت ذخیره نشد: '+String(error?.message||error));}}}/></div></header>
       <div className="workspace-scroll">
         <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}

@@ -2549,6 +2549,18 @@ def main():
                         time.sleep(0.5)
                     except Exception:
                         pass
+                elif os.environ.get("MADAR_QA_VIEW") == "workspace-manager":
+                    try:
+                        window.evaluate_js("Array.from(document.querySelectorAll('.sidebar button')).find(button=>button.textContent.includes('مدیریت فضاهای کاری'))?.click()")
+                        time.sleep(0.5)
+                    except Exception:
+                        pass
+                elif os.environ.get("MADAR_QA_VIEW") == "clock-quick":
+                    try:
+                        window.evaluate_js("document.querySelector('.clock-widget__trigger')?.click()")
+                        time.sleep(0.6)
+                    except Exception:
+                        pass
                 if os.environ.get("MADAR_QA_THEME") == "dark":
                     try:
                         window.evaluate_js("document.documentElement.dataset.theme='dark'")
@@ -2580,6 +2592,8 @@ def main():
                     "widgetSettingsSections": "document.querySelectorAll('.settings-modal .widget-settings__group').length",
                     "taskLayout": "(()=>{const d=document.querySelector('.drawer');if(!d)return null;const r=d.getBoundingClientRect();return {width:Math.round(r.width),height:Math.round(r.height),quickButtons:d.querySelectorAll('.task-quick-actions button').length,sections:d.querySelectorAll('.edit-section').length,optionalGroups:d.querySelectorAll('.task-optional-block').length,openOptionalGroups:d.querySelectorAll('.task-optional-block[open]').length,scrollPadding:getComputedStyle(d.querySelector('.drawer-scroll')).padding,layoutColumns:getComputedStyle(d.querySelector('.edit-grid')).gridTemplateColumns};})()",
                     "taskQuickJumpFocus": "(()=>{const b=document.querySelector('.task-quick-actions button[aria-controls=task-section-description]');b?.click();return document.activeElement?.id||'';})()",
+                    "workspaceModalStyle": "(()=>{const p=document.querySelector('.dialog > .workspaces-panel');if(!p)return null;const s=getComputedStyle(p);const h=p.querySelector('.workspaces-heading strong');const t=h?getComputedStyle(h):null;return {text:s.color,background:s.backgroundColor,heading:t?.color||null,rows:p.querySelectorAll('.workspaces-row').length};})()",
+                    "clockQuickPopup": "(()=>{const m=document.querySelector('.clock-widget__menu');if(!m)return null;const r=m.getBoundingClientRect();return {width:Math.round(r.width),height:Math.round(r.height),insideViewport:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,quickChoices:m.querySelectorAll('.widget-settings__choices button').length,fullSettingsLink:!!m.querySelector('.clock-widget__more-button')};})()",
                 }.items():
                     try:
                         values[name] = window.evaluate_js(script)

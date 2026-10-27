@@ -1,0 +1,20 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const app=fs.readFileSync(path.join(root,'src/App.jsx'),'utf8');
+const css=fs.readFileSync(path.join(root,'src/mobile_navigation.css'),'utf8');
+test('narrow navigation uses an accessible toggle and preserves all route buttons',()=>{
+  assert.match(app,/className="mobile-nav-toggle"/);
+  assert.match(app,/aria-controls="madar-sidebar"/);
+  assert.match(app,/aria-expanded=\{mobileNavOpen\}/);
+  assert.match(app,/id="madar-sidebar"/);
+  assert.match(app,/className="mobile-nav-backdrop"/);
+  assert.match(app,/event\.key==='Escape'/);
+  assert.match(css,/\.sidebar\.sidebar--mobile-open/);
+  assert.match(css,/visibility:hidden/);
+  assert.match(css,/pointer-events:none/);
+  assert.match(css,/max-width:860px/);
+  assert.match(css,/\.sidebar-nav button span:last-child:not\(\.project-dot\)\{display:inline\}/);
+});
