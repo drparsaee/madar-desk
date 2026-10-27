@@ -8,6 +8,11 @@ import {
  * drag, keyboard neighbors and counts; this component never changes task data. */
 export function ProgressiveLane({items,scopeKey,regionId,label,renderCard,empty,containerClassName='lane-cards'}){
   const root=useRef(null);
+  // Kanban columns now own their scrollport; list view still scrolls the page.
+  // Capturing/restoring on .workspace-scroll would jump the entire board when
+  // a long list extends past the progressive page limit.
+  const nearestScroller=()=>root.current?.closest('.kanban-lane')
+    ?root.current:root.current?.closest('.workspace-scroll');
   const [saved,setSaved]=useState(()=>({key:scopeKey,pager:createProgressiveLaneState(items)}));
   const pager=useMemo(()=>saved.key===scopeKey
     ?reconcileProgressiveLaneState(items,saved.pager)
@@ -22,7 +27,7 @@ export function ProgressiveLane({items,scopeKey,regionId,label,renderCard,empty,
     const itemFor=id=>wrappers.find(element=>element.getAttribute('data-progressive-card-id')===id);
     if(view.scrollRestore.cardId){
       const anchor=itemFor(view.scrollRestore.cardId);
-      const scroller=container.closest('.workspace-scroll');
+      const scroller=nearestScroller();
       if(anchor&&scroller){
         const currentOffset=anchor.getBoundingClientRect().top-scroller.getBoundingClientRect().top;
         const difference=currentOffset-view.scrollRestore.offsetPx;
@@ -38,7 +43,7 @@ export function ProgressiveLane({items,scopeKey,regionId,label,renderCard,empty,
     // Capture the first visible anchor before changing the window, so trimming
     // earlier pages does not unexpectedly jump the scroll viewport.
     const first=root.current?.querySelector('[data-progressive-card-id]');
-    const scroller=root.current?.closest('.workspace-scroll');
+    const scroller=nearestScroller();
     const anchorId=first?.getAttribute('data-progressive-card-id');
     let captured=pager;
     if(anchorId&&scroller){

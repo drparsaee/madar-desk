@@ -2530,7 +2530,24 @@ def main():
         if os.environ.get("MADAR_QA_REPORT"):
             def diagnostic():
                 time.sleep(2)
+                # First-run isolated profiles initialize the accounting bridge
+                # and board asynchronously; document.readyState alone may be
+                # complete while React's root is still empty. Bound the wait.
+                if os.environ.get("MADAR_QA_VIEW", "").startswith("board-"):
+                    for _ in range(32):
+                        try:
+                            if window.evaluate_js("!!document.querySelector('.kanban-lane')"):
+                                break
+                        except Exception:
+                            pass
+                        time.sleep(0.25)
                 values = {"port": server.server_port}
+                if os.environ.get("MADAR_QA_VIEW", "").startswith("board-"):
+                    try:
+                        values["preActionRootLength"] = window.evaluate_js("document.getElementById('root')?.innerHTML.length ?? -1")
+                        window.evaluate_js("window.__madarQaErrors=[];window.addEventListener('error',e=>window.__madarQaErrors.push(String(e.message)));window.addEventListener('unhandledrejection',e=>window.__madarQaErrors.push(String(e.reason)))")
+                    except Exception:
+                        pass
                 if os.environ.get("MADAR_QA_VIEW") == "sample-project":
                     try:
                         window.evaluate_js("document.querySelectorAll('.projects-nav .project-entry > button:first-child')[1]?.click()")
@@ -2559,6 +2576,30 @@ def main():
                     try:
                         window.evaluate_js("document.querySelector('.clock-widget__trigger')?.click()")
                         time.sleep(0.6)
+                    except Exception:
+                        pass
+                elif os.environ.get("MADAR_QA_VIEW") in ("board-list-menu", "board-add-list", "board-add-create"):
+                    try:
+                        control = (".lane-menu-trigger" if os.environ["MADAR_QA_VIEW"] == "board-list-menu"
+                                   else ".kanban-add-list__trigger")
+                        window.evaluate_js("document.querySelector(" + json.dumps(control) + ")?.click()")
+                        time.sleep(0.5)
+                        # Only the explicitly isolated QA profile may submit
+                        # a synthetic list; never mutate a normal user's data.
+                        if os.environ["MADAR_QA_VIEW"] == "board-add-create":
+                            qa_root = str(Path(os.environ.get("APPDATA", "")).resolve()).lower()
+                            if (os.environ.get("MADAR_QA_MUTATE_ISOLATED") != "1" or
+                                    "madar-qa-boards-" not in qa_root):
+                                raise PermissionError("Synthetic board mutation requires isolated QA profile")
+                            window.evaluate_js(
+                                "(()=>{const f=document.querySelector('.kanban-add-list__form input');"
+                                "if(!f)return false;"
+                                "Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,'QA list creation');"
+                                "f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()"
+                            )
+                            time.sleep(0.3)
+                            window.evaluate_js("document.querySelector('.kanban-add-list__form button[type=submit]')?.click()")
+                            time.sleep(0.7)
                     except Exception:
                         pass
                 if os.environ.get("MADAR_QA_THEME") == "dark":
@@ -2594,6 +2635,11 @@ def main():
                     "taskQuickJumpFocus": "(()=>{const b=document.querySelector('.task-quick-actions button[aria-controls=task-section-description]');b?.click();return document.activeElement?.id||'';})()",
                     "workspaceModalStyle": "(()=>{const p=document.querySelector('.dialog > .workspaces-panel');if(!p)return null;const s=getComputedStyle(p);const h=p.querySelector('.workspaces-heading strong');const t=h?getComputedStyle(h):null;return {text:s.color,background:s.backgroundColor,heading:t?.color||null,rows:p.querySelectorAll('.workspaces-row').length};})()",
                     "clockQuickPopup": "(()=>{const m=document.querySelector('.clock-widget__menu');if(!m)return null;const r=m.getBoundingClientRect();return {width:Math.round(r.width),height:Math.round(r.height),insideViewport:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,quickChoices:m.querySelectorAll('.widget-settings__choices button').length,fullSettingsLink:!!m.querySelector('.clock-widget__more-button')};})()",
+                    "kanbanGeometry": "(()=>{const b=document.querySelector('.kanban');if(!b)return null;const lanes=[...b.querySelectorAll(':scope > .kanban-lane')];const tile=b.querySelector(':scope > .kanban-add-list');const r=b.getBoundingClientRect();return {width:Math.round(r.width),lanes:lanes.map(x=>{const box=x.getBoundingClientRect(),css=getComputedStyle(x);return {width:Math.round(box.width),height:Math.round(box.height),flex:css.flex,caption:x.querySelector('.lane-heading strong')?.innerText||'',buttons:x.querySelectorAll('.lane-menu-trigger').length};}),addTileWidth:tile?Math.round(tile.getBoundingClientRect().width):null,boardScrollWidth:b.scrollWidth,boardClientWidth:b.clientWidth};})()",
+                    "laneMenuGeometry": "(()=>{const p=document.querySelector('.lane-actions-popover');if(!p)return null;const r=p.getBoundingClientRect();return {width:Math.round(r.width),height:Math.round(r.height),withinViewport:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,editorInputs:p.querySelectorAll('form input').length,menuActions:p.querySelectorAll('button').length};})()",
+                    "inlineListForm": "!!document.querySelector('.kanban-add-list__form')",
+                    "qaAddedList": "!![...document.querySelectorAll('.lane-heading strong')].find(node=>node.textContent.includes('QA list creation'))",
+                    "qaBrowserErrors": "window.__madarQaErrors || []",
                 }.items():
                     try:
                         values[name] = window.evaluate_js(script)

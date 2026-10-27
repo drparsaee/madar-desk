@@ -205,6 +205,9 @@
   direction: rtl;
   font-size: 11px;
 }
+/* React portals sit outside #root. Keep labels belonging to background forms
+   under this non-modal menu, while the menu retains its native label text. */
+body:has(.lane-actions-popover) .madar-fl-layer{z-index:94}
 .lane-actions-popover__head,
 .lane-actions-popover__color,
 .lane-actions-popover__action,

@@ -46,12 +46,14 @@ import {ProgressiveLane} from './progressive_lane.jsx';
 import {CardDependencyPanel} from './card_dependency_panel.jsx';
 import {resolvedDisplayScope,isManagedFeatureVisible} from './managed_display.js';
 import {ClockWidget} from './clock_widget.jsx';
+import {LaneActionsMenu} from './board_lane_actions.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
 import './interface_mode.css';
 import './boardplus.css';
 import './task_editor_compact.css';
+import './kanban_compact.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -495,7 +497,10 @@ export default function App(){
   const [data,setData]=useState(null);
   const [selected,setSelected]=useState('all');
   const [boardId,setBoardId]=useState(null);
+  const [addingLane,setAddingLane]=useState(false);
+  const [newLaneName,setNewLaneName]=useState('');
   const [workspaceId,setWorkspaceId]=useState(null);
+  useEffect(()=>{setAddingLane(false);setNewLaneName('');},[selected,boardId,workspaceId]);
   const [workspaceOpen,setWorkspaceOpen]=useState(false);
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
   useEffect(()=>{
@@ -759,11 +764,54 @@ export default function App(){
       {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?{...b,stages:reorderStageArray(b.stages,sourceId,targetId)}:b)}:
       {...s,stages:reorderStageArray(s.stages,sourceId,targetId)});
   };
-  const updateStageColor=(stageId,color)=>{
-    if(!canManage||!/^#[0-9a-f]{6}$/i.test(color))return;
+  const updateStagePresentation=(stageId,fields)=>{
+    if(!canManage||!viewStages.some(stage=>stage.id===stageId))return;
+    const patch={};
+    if(Object.hasOwn(fields,'label')){
+      if(typeof fields.label!=='string'||!fields.label.trim()||fields.label.trim().length>100)return;
+      patch.label=fields.label.trim();
+    }
+    if(Object.hasOwn(fields,'subtitle')){
+      if(typeof fields.subtitle!=='string'||fields.subtitle.length>180)return;
+      patch.subtitle=fields.subtitle.trim();
+    }
+    if(Object.hasOwn(fields,'color')){
+      if(!/^#[0-9a-f]{6}$/i.test(fields.color))return;
+      patch.color=fields.color;
+    }
+    if(!Object.keys(patch).length)return;
     changeAdmin(s=>activeBoard?
-      {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?{...b,stages:b.stages.map(stage=>stage.id===stageId?{...stage,color}:stage)}:b)}:
-      {...s,stages:s.stages.map(stage=>stage.id===stageId?{...stage,color}:stage)});
+      {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?
+        {...b,stages:b.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage)}:b)}:
+      {...s,stages:s.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage)});
+  };
+  const addLane=()=>{
+    const label=newLaneName.trim();
+    if(!canManage||!label||label.length>100)return;
+    const activeCount=activeBoard?.stages?.length||stages.length;
+    if(activeCount>=40||stages.length>=40||
+       (!activeBoard&&workspaceBoards.some(board=>board.stages.length>=40))){
+      setToast('حداکثر ۴۰ ستون مجاز است؛ ستون‌های بایگانی‌شده نیز شمرده می‌شوند.');
+      return;
+    }
+    const nextStage={id:'stage_'+uid(),label,subtitle:'',color:'#64748b'};
+    changeAdmin(s=>{
+      // A selected board has independent stages. In the workspace's aggregate
+      // view, make the new shared column a valid destination in its active
+      // boards too, or a card created under it would silently fall back to
+      // the first list of the destination board.
+      if(activeBoard){
+        return {...s,stages:[...s.stages,nextStage],
+          boards:(s.boards||[]).map(board=>board.id===activeBoard.id?
+            {...board,stages:[...board.stages,nextStage]}:board)};
+      }
+      return {...s,stages:[...s.stages,nextStage],
+        boards:(s.boards||[]).map(board=>!board.archived&&board.workspaceId===activeWorkspaceId?
+          {...board,stages:[...board.stages,nextStage]}:board)};
+    });
+    setAddingLane(false);
+    setNewLaneName('');
+    setToast(activeBoard?'ستون جدید به این برد اضافه شد.':'ستون جدید به بردهای فعال این فضای کاری اضافه شد.');
   };
   const taskUpdate=(id,fields)=>change(s=>{
     const original=s.tasks.find(t=>t.id===id);
@@ -914,8 +962,12 @@ export default function App(){
   const updateSettingsForBoard=fn=>{
     if(!activeBoard){changeAdmin(fn);return;}
     changeAdmin(s=>{
+      const currentBoard=(s.boards||[]).find(board=>board.id===activeBoard.id);
+      if(!currentBoard)return s;
       const localTasks=s.tasks.filter(t=>t.boardId===activeBoard.id);
-      const edited=fn({...s,stages:activeBoard.stages,tasks:localTasks});
+      const draft={...s,stages:currentBoard.stages,tasks:localTasks};
+      const edited=fn(draft);
+      if(edited===draft)return s;
       const updatedStageIds=new Set(edited.stages.map(x=>x.id));
       const fallback=edited.stages.find(stage=>stage.archived!==true)?.id;
       const globalStages=[...s.stages];
@@ -923,7 +975,9 @@ export default function App(){
         if(globalStages.length<40&&!globalStages.some(x=>x.id===stage.id))globalStages.push(stage);
       }
       const adapted=edited.tasks.map(t=>{
-        const listId=updatedStageIds.has(t.listId)?t.listId:updatedStageIds.has(t.status)?t.status:fallback;
+        if(updatedStageIds.has(t.listId))return t;
+        const listId=updatedStageIds.has(t.status)?t.status:fallback;
+        if(!listId)return t;
         return {...t,listId,status:legacyStatusForStage(listId,globalStages)||t.status};
       });
       const originalOther=s.tasks.filter(t=>t.boardId!==activeBoard.id);
@@ -1093,11 +1147,28 @@ export default function App(){
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             return <section className="kanban-lane" key={stage.id} style={{'--stage-accent':stage.color}} onDragOver={e=>{if(canEdit||canManage){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();const plain=e.dataTransfer.getData('text/plain');const draggedStage=e.dataTransfer.getData('application/x-madar-stage')||(plain.startsWith('madar-stage:')?plain.slice(12):'');if(draggedStage){if(canManage)reorderStage(draggedStage,stage.id);return;}if(!canEdit)return;const id=e.dataTransfer.getData('application/x-madar-card')||plain;const task=tasks.find(t=>t.id===id);if(!task||activeBoard&&task.boardId!==activeBoard.id)return;const originBoard=boards.find(b=>b.id===task.boardId);if(task.boardId&&(!originBoard||!originBoard.stages.some(s=>s.id===stage.id)))return;if(activeBoard)reorderCard(id,stage.id);else taskUpdate(id,task.boardId?{listId:stage.id}:{status:stage.id});}}>
-              <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions">{show('boardAdministration')&&<input type="color" className="lane-color-picker" aria-label={'رنگ ستون '+stage.label} title="انتخاب رنگ ستون" value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'} onChange={e=>updateStageColor(stage.id,e.target.value)}/>} {canEdit&&<button className="lane-add" aria-label={'افزودن به '+stage.label} onClick={()=>openAdd(stage.id)}><Plus size={18}/></button>}</div></div>
+              <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions"><LaneActionsMenu stage={stage} count={tasks.filter(task=>task.boardId===activeBoard?.id&&task.listId===stage.id&&task.deleted!==true).length} canManage={canManage&&show('boardAdministration')} canEdit={canEdit} index={viewStages.indexOf(stage)} total={viewStages.length} onSave={fields=>updateStagePresentation(stage.id,fields)} onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}} onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined} onAddCard={()=>openAdd(stage.id)}/></div></div>
               <div className="lane-subtitle">{stage.subtitle}</div>
-              <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><TaskCard key={t.id} task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleStep={toggleChecklistStep}/>} empty={<Empty title="هنوز کاری اینجا نیست" description="کارت‌ها را به این ستون بکش" onAdd={canEdit?()=>openAdd(stage.id):undefined}/>} />
+              <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><TaskCard key={t.id} task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleStep={toggleChecklistStep}/>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
+              {canEdit&&<button type="button" className="lane-add-card" onClick={()=>openAdd(stage.id)}><Plus size={16}/> افزودن کارت</button>}
             </section>;
-          })}</div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
+          })}
+          {canManage&&show('boardAdministration')&&
+            <div className="kanban-add-list" aria-label="افزودن ستون جدید به برد">
+              {addingLane?
+                <form className="kanban-add-list__form" onSubmit={event=>{event.preventDefault();addLane();}}>
+                  <input autoFocus aria-label="نام ستون جدید" maxLength={100} value={newLaneName}
+                    placeholder="نام ستون جدید را وارد کنید..."
+                    onChange={event=>setNewLaneName(event.target.value)}
+                    onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();setAddingLane(false);setNewLaneName('');}}}/>
+                  <div className="kanban-add-list__actions">
+                    <button type="submit" disabled={!newLaneName.trim()}><Plus size={15}/> افزودن لیست</button>
+                    <button type="button" aria-label="انصراف از افزودن لیست" onClick={()=>{setAddingLane(false);setNewLaneName('');}}><X size={18}/></button>
+                  </div>
+                </form>:
+                <button type="button" className="kanban-add-list__trigger" onClick={()=>setAddingLane(true)}><Plus size={20}/> افزودن یک لیست دیگر</button>}
+            </div>}
+        </div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
         </section>
         <footer className="app-footer"><span>مدار · نسخه آزمایشی {packageInfo.version}</span><span>برای تست کاربر؛ اطلاعات واقعی وارد نکنید</span></footer>
       </div>

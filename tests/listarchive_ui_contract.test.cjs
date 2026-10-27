@@ -98,13 +98,15 @@ test('App uses presentation-only active stages; SettingsPanel receives full auth
   assert.match(appText, /onRestoreList=\{id=>updateBoardListArchive\(id,true\)\}/);
 });
 
-test('SettingsPanel SSR renders archived list with its restore control', () => {
+test('SettingsPanel SSR keeps archived list recovery, with active list actions on the board', () => {
   const html = settingsHtml();
   assert.match(html, /بایگانی‌شده/);
   assert.match(html, /aria-label="بازیابی ستون بایگانی"/);
-  assert.match(html, /aria-label="بایگانی ستون فعال"/);
-  assert.equal(actionButtons(html, 'بایگانی ستون بدون حذف کارت‌ها').length, 1);
+  assert.doesNotMatch(html, /aria-label="بایگانی ستون فعال"/);
+  assert.equal(actionButtons(html, 'بایگانی ستون بدون حذف کارت‌ها').length, 0);
   assert.equal(actionButtons(html, 'بازیابی ستون بدون تغییر کارت‌ها').length, 1);
+  assert.match(appText, /<LaneActionsMenu stage=\{stage\}/);
+  assert.match(appText, /onArchive=\{activeBoard\?/);
 });
 
 test('SettingsPanel SSR hides stage-management actions from viewer/editor', () => {
@@ -123,22 +125,22 @@ test('App archive mutation is admin-gated and uses whole-state transform', () =>
   assert.match(appText, /const changeAdmin=next=>\{if\(!canManage\)return;change\(next\)/);
 });
 
-test('SSR: archive last active list button is disabled when other lists are archived', () => {
+test('last active list cannot be archived from per-list menu even with archived siblings', () => {
   const html = settingsHtml();
-  const archive = actionButtons(html, 'بایگانی ستون بدون حذف کارت‌ها');
-  assert.equal(archive.length, 1);
-  assert.match(archive[0], /\bdisabled\b/);
-  // Full stage array remains in SettingsPanel for recovery and cross-refs.
+  assert.equal(actionButtons(html, 'بایگانی ستون بدون حذف کارت‌ها').length, 0);
+  const menu = fs.readFileSync(path.join(__dirname,'../src/board_lane_actions.jsx'),'utf8');
+  assert.match(menu, /disabled=\{total<=1\}/);
+  const lastOnly = makeState();
+  assert.throws(() => archiveListState(lastOnly,'b1','working-list',ADMIN), /last active list/i);
   assert.match(html, /بازیابی ستون/);
 });
 
-test('REGRESSION/P0: delete must be disabled on last active list even with archived siblings', () => {
+test('REGRESSION/P0: active-board settings has no destructive delete controls', () => {
   const html = settingsHtml();
   const deletions = actionButtons(html, 'حذف');
-  assert.equal(deletions.length, 2);
-  assert.match(deletions[0], /\bdisabled\b/, 'archived stage should not be deleted');
-  assert.match(deletions[1], /\bdisabled\b/,
-    'deleting sole active list would leave a board with ZERO visible columns');
+  assert.equal(deletions.length, 0);
+  assert.doesNotMatch(html, /aria-label="حذف ستون/);
+  assert.match(html, /مدیریت بازیابی ستون‌های بایگانی‌شده/);
 });
 
 test('pure archive/restore hides and reveals cards without touching amounts or task identity', () => {
@@ -233,7 +235,9 @@ test('REGRESSION/P1: duplicating an individually archived card must not keep clo
 });
 
 test('settings edits must preserve all retained archived stages, never use activeBoardLists as persisted stages', () => {
-  assert.match(appText, /const edited=fn\(\{\.\.\.s,stages:activeBoard\.stages,tasks:localTasks\}\)/);
+  assert.match(appText, /const currentBoard=\(s\.boards\|\|\[\]\)\.find\(board=>board\.id===activeBoard\.id\)/);
+  assert.match(appText, /const draft=\{\.\.\.s,stages:currentBoard\.stages,tasks:localTasks\}/);
+  assert.match(appText, /const edited=fn\(draft\)/);
   assert.match(appText, /boards:s\.boards\.map\(b=>b\.id===activeBoard\.id\?\{\.\.\.b,stages:edited\.stages\}:b\)/);
   assert.match(featureText, /stages:s\.stages\.map\(stage=>stage\.id===id\?\{\.\.\.stage,\.\.\.fields\}:stage\)/);
   assert.doesNotMatch(featureText, /stages:activeBoardLists\(/);
