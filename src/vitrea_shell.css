@@ -136,6 +136,17 @@
 .app-shell > .sidebar .interface-mode-selector__label { color: var(--vs-ink); }
 .app-shell > .sidebar .interface-mode-selector__description,
 .app-shell > .sidebar .interface-mode-selector__help { color: var(--vs-muted); }
+/* The expanded desktop drawer has more controls than fit in one viewport.
+   Its direct flex children must retain natural height so the aside scrolls.
+   Otherwise .projects-nav (overflow:auto) can shrink to 0px, causing its
+   project buttons to paint outside their clipped hit-test area. */
+.app-shell.vitrea-layout > .sidebar > :not(.mobile-nav-close) {
+  flex-shrink: 0;
+}
+.app-shell.vitrea-layout > .sidebar .projects-nav {
+  flex: 0 0 auto;
+  max-block-size: 32vh;
+}
 .app-shell > .sidebar .sidebar-bottom { min-width: 0; }
 .app-shell > .sidebar .sidebar-profile {
   border-block-start: 1px solid var(--vs-edge);
