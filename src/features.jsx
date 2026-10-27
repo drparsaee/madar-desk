@@ -3,7 +3,6 @@ import {Check, Cloud, Download, Layers3, LockKeyhole, Moon, Plus, Settings2, Shi
 import {Avatar, AvatarIconPicker, RoleBadge, DEFAULT_AVATAR_COLOR} from './members.jsx';
 import {PrioritySettings} from './priorities.jsx';
 import {INTERFACE_FEATURE_TIERS, INTERFACE_MODE_OPTIONS} from './interface_mode.js';
-import {WidgetSettings} from './clock_widget.jsx';
 import {deleteSettingsStage} from './stage_delete_safe.js';
 import './settings_density.css';
 
@@ -38,7 +37,7 @@ export function FinanceSummary({project,tasks,onChange,canManage=true,compact=fa
  </div>;
 }
 
-export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,widgetSettings,onWidgetSettingsChange}){
+export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,priorityUsedIds,boardId=null,onArchiveList,onRestoreList}){
  const [name,setName]=useState('');
  const [editing,setEditing]=useState('');
  const [label,setLabel]=useState('');
@@ -64,7 +63,6 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
      <div className="setting-block"><h3><Layers3 size={17}/> تقویم و نمایش تاریخ</h3><p>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها در همه سیستم‌ها یکسان می‌ماند.</p><div className="theme-picks"><button className={calendar==='jalali'?'selected':''} onClick={()=>onCalendarChange('jalali')}>شمسی {calendar==='jalali'&&<Check size={16}/>}</button><button className={calendar==='gregorian'?'selected':''} onClick={()=>onCalendarChange('gregorian')}>میلادی {calendar==='gregorian'&&<Check size={16}/>}</button></div></div>
      <div className="setting-block"><h3><Wallet size={17}/> مدیریت هزینه‌ها</h3><label className="setting-toggle"><input type="checkbox" checked={!!settings.costDefault} disabled={!canManage} onChange={e=>updateDefault(e.target.checked)}/><span><strong>فعال‌کردن فیلد هزینه برای همه پروژه‌ها</strong><small>هم برای پروژه‌های فعلی اعمال می‌شود و هم پیش‌فرض پروژه‌های جدید خواهد بود؛ مبالغ قبلی پاک نمی‌شوند.</small></span></label></div>
      </div>
-     {onWidgetSettingsChange&&<WidgetSettings settings={widgetSettings} onChange={onWidgetSettingsChange}/>}
      <details className="settings-density__disclosure"><summary><span><Layers3 size={17}/> تنظیم اولویت‌های کارت</span><small>نام، رنگ، جلوه و اولویت‌های سفارشی</small></summary>
      <PrioritySettings settings={settings} usedIds={priorityUsedIds||data.tasks.map(t=>t.priority)} canManage={canManage} onChange={priorityDefinitions=>onChange(s=>({...s,settings:{...s.settings,priorityDefinitions}}))}/>
      </details>

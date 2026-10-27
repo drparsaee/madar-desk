@@ -18,11 +18,11 @@ test('one finance management link goes to verified standalone dashboard, not old
   assert.match(read('src/standalone_accounting_workspace.jsx'),/useState\('overview'\)/);
 });
 
-test('clock chooser is wired and settings preserve calendar changes',()=>{
+test('fixed clock uses calendar only and legacy preferences preserve calendar changes',()=>{
   const app=read('src/App.jsx');
   const backend=read('native_app.py');
-  assert.match(app,/<ClockWidget calendar=\{calendar\} settings=\{widgetSettings\}/);
-  assert.match(app,/setPreferences\(\{calendar,widgetSettings:value\}\)/);
+  assert.match(app,/<ClockWidget calendar=\{calendar\}\/>/);
+  assert.doesNotMatch(app,/<ClockWidget[^>]*\b(?:settings|onChange|onOpenSettings)=/);
   assert.match(app,/setPreferences\(\{calendar:choice,widgetSettings\}\)/);
   assert.match(backend,/"widgetSettings": widget/);
 });

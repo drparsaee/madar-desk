@@ -2,6 +2,43 @@
 
 **Development continuity:** Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) before choosing the next implementation task. It links owner decisions, incomplete obligations, ideas and evidence; [LOCALFORGE_SOURCE_OF_TRUTH.md](LOCALFORGE_SOURCE_OF_TRUTH.md) remains the Git policy.
 
+## Current development status (2026-10-27)
+
+The active source branch is `main` of the private **LocalForge** repository
+`localadmin/madar-desk`. The package source version is currently
+`1.0.0-rc.13`; the much older `v0.3-preview` instructions below are retained
+as historical notes, **not** as current release instructions.
+
+Current source includes a Vitrea-inspired task-management shell and separate
+accounting workspace, LAN permission checks, a versioned finance domain, and
+an **explicit opt-in** unified SQLite host store. The unified database is not
+automatically enabled for existing users. An active `unified-active.json`
+marker determines whether this computer uses SQLite or the legacy JSON store.
+The migration/restore workflows are guarded, backup-first operations.
+
+**Do not treat an EXE filename, a passing mock test, or a visually correct
+screen as proof of production readiness.** Two physical Windows clients,
+Google Drive failover, complete Parsian accounting migration/reconciliation,
+and clean-install acceptance remain separate tests. Accounting uses **rial**
+as its canonical currency; the historical toman overview below does not
+define the authoritative ledger.
+
+Builds have immutable release names. `npm run dist` currently targets the
+historical `v1.0-rc13` candidate and deliberately refuses to overwrite an
+existing executable. For a new candidate, first select a distinct release
+filename and run `scripts/ensure_new_release.py`, then build it using
+PyInstaller with a matching distinct `--name` after `npm run build`.
+Do not rename or overwrite an existing installed EXE.
+
+Authoritative decisions and active release limitations:
+[PROJECT_CONTEXT.md](PROJECT_CONTEXT.md),
+[docs/MADAR_VITREA_REDESIGN_20261027.md](docs/MADAR_VITREA_REDESIGN_20261027.md),
+[docs/decision-inventory/DECISIONS.md](docs/decision-inventory/DECISIONS.md).
+
+---
+
+## Historical early-version documentation
+
 An independent Windows task manager. Entirely separate from ForgeOS and Chat On Steroids. Persian RTL, personal offline mode and optional LAN host/client collaboration. Custom Kanban columns, projects, checklists, task notes, manually entered agent updates, optional per-step/project accounting, dark mode, bundled Vazirmatn font and Google Drive backup/restore.
 
 **Windows portable preview build:** `D:\CoS-Test\madar-desk\release\Madar-Desk-v0.3-preview.exe`.

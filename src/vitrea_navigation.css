@@ -87,6 +87,10 @@
   top:50%;
   transform:translateY(-50%);
   width:61px;
+  max-height:calc(100dvh - 28px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:thin;
   padding:7px;
   display:flex;
   flex-direction:column;
@@ -115,6 +119,7 @@
 }
 .vitrea-quickdock button:hover,.vitrea-quickdock button:focus-visible,
 .vitrea-quickdock button[aria-expanded="true"] {color:var(--vs-accent,#4a82d0);background:var(--vs-hover,#dbe8fa);border-color:var(--vs-edge,#c3d0e2);}
+.vitrea-quickdock button:disabled {opacity:.45;cursor:wait;}
 .vitrea-quickdock .vitrea-quickdock__create {background:linear-gradient(145deg,#a0cdff,#6aacef);color:#16375e;box-shadow:0 4px 12px #75aeed52;}
 .vitrea-quickdock .vitrea-quickdock__create:is(:hover,:focus-visible) {background:#b4d9ff;color:#10355a;}
 .vitrea-nav-backdrop {
@@ -200,6 +205,9 @@
     flex-direction:row;
     width:auto;
     max-width:calc(100vw - 18px);
+    max-height:none;
+    overflow-x:auto;
+    overflow-y:hidden;
     padding:5px;
     gap:5px;
     border-radius:999px;

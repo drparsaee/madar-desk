@@ -2551,11 +2551,24 @@ def main():
             window.events.closing += require_backup_before_close
         if os.environ.get("MADAR_QA_REPORT"):
             bridge_qa_started = threading.Event()
+            bridge_qa_start_lock = threading.Lock()
             def diagnostic():
-                if os.environ.get("MADAR_QA_VIEW") == "bridge-readiness":
-                    if bridge_qa_started.is_set():
-                        return
-                    bridge_qa_started.set()
+                # Navigation from main to the standalone accounting document
+                # emits additional loaded events. Allow only one diagnostic
+                # runner to own a navigation-based QA session; otherwise two
+                # concurrent flows can click one another's buttons and race
+                # while writing the same report. Ordinary view-specific QA
+                # runs retain their original loaded-event behavior.
+                singleflight = (
+                    os.environ.get("MADAR_QA_VIEW") == "bridge-readiness" or
+                    (os.environ.get("MADAR_RELEASE_QA") == "1" and
+                     os.environ.get("MADAR_QA_INTERACTION") == "1")
+                )
+                if singleflight:
+                    with bridge_qa_start_lock:
+                        if bridge_qa_started.is_set():
+                            return
+                        bridge_qa_started.set()
                 time.sleep(2)
                 if os.environ.get("MADAR_QA_VIEW") == "read-only-runtime-health":
                     # Real-profile smoke is opt-in and must never disclose task

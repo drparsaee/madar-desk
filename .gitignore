@@ -48,5 +48,6 @@ preview.png
 
 # Local QA run directories and generated preview snapshots
 /v1-gui-smoke-*/
+/qa-evidence/
 /preview-final.png
 /preview-v02-dark.png

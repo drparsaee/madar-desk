@@ -66,12 +66,14 @@ test('per-user feature restriction is bounded to assigned template and selected 
   assert(!lanAvailableUserFeatures(unit,'basic').includes('planner'));
 });
 
-test('widget personalization appears in global settings independent of manager permission',()=>{
+test('retired clock personalization is absent for non-admin while calendar remains available',()=>{
   const html=renderToStaticMarkup(React.createElement(SettingsPanel,{
     data:{stages:[],tasks:[],projects:[],settings:{}},onChange:()=>{},onClose:()=>{},
     onCalendarChange:()=>{},canManage:false,widgetSettings:{mode:'both'},onWidgetSettingsChange:()=>{},
   }));
-  assert(html.includes('شخصی‌سازی ساعت و تاریخ'));
-  assert(html.includes('پوسته'));
-  assert(html.includes('محل قرارگیری'));
+  assert(html.includes('تقویم و نمایش تاریخ'));
+  assert(html.includes('شمسی'));
+  assert(html.includes('میلادی'));
+  assert(!html.includes('شخصی‌سازی ساعت و تاریخ'));
+  assert(!html.includes('محل قرارگیری'));
 });

@@ -44,7 +44,7 @@ function renderLanManager(){
   }finally{React.useState=previous;}
 }
 
-test('settings show compact quick choices and widget controls with explicit advanced disclosures',()=>{
+test('settings show compact quick choices without retired clock personalization',()=>{
   const html=renderSettings();
   assert.match(source,/import '\.\/settings_density\.css';/);
   assert.match(html,/class="dialog settings-modal settings-density" dir="rtl"/);
@@ -52,7 +52,7 @@ test('settings show compact quick choices and widget controls with explicit adva
   assert.match(html,/ظاهر برنامه/);
   assert.match(html,/تقویم و نمایش تاریخ/);
   assert.match(html,/مدیریت هزینه‌ها/);
-  assert.match(html,/شخصی‌سازی ساعت و تاریخ/);
+  assert.doesNotMatch(html,/شخصی‌سازی ساعت و تاریخ|محل قرارگیری ساعت/);
   assert.match(html,/<details class="settings-density__disclosure"><summary>/);
   assert.match(html,/تنظیم اولویت‌های کارت/);
   assert.match(html,/مدیریت ستون‌ها و مراحل برد/);
@@ -60,9 +60,9 @@ test('settings show compact quick choices and widget controls with explicit adva
   assert.match(html,/تعریف اولویت/);
 });
 
-test('non-admin can still personalize calendar and widget without gaining global editing',()=>{
+test('non-admin can still select calendar but cannot edit global settings or clock placement',()=>{
   const html=renderSettings(false);
-  assert(html.includes('شخصی‌سازی ساعت و تاریخ'));
+  assert(!html.includes('شخصی‌سازی ساعت و تاریخ'));
   assert(html.includes('انتخاب تقویم'));
   assert(html.includes('disabled=""'));
   assert(!html.includes('افزودن ستون'));
