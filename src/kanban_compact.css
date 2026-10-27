@@ -1,0 +1,276 @@
+/* Board-only density: Trello-sized lanes keep their natural height and width. */
+.kanban {
+  --kanban-column-width: 288px;
+  --kanban-column-max-height: min(760px, max(300px, calc(100dvh - 240px)));
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 12px;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px 3px 16px;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 3px;
+}
+
+.kanban > .kanban-lane,
+.kanban > .kanban-add-list {
+  flex: 0 0 var(--kanban-column-width);
+  inline-size: var(--kanban-column-width);
+  min-inline-size: var(--kanban-column-width);
+  max-inline-size: var(--kanban-column-width);
+  align-self: flex-start;
+}
+
+.kanban > .kanban-lane {
+  display: flex;
+  flex-direction: column;
+  max-block-size: var(--kanban-column-max-height);
+  min-block-size: 0;
+  padding: 8px;
+  border-radius: 12px;
+  border-color: #dce4ef;
+}
+
+.kanban .lane-head {
+  flex: none;
+  min-inline-size: 0;
+  min-block-size: 34px;
+  padding: 0 2px 3px;
+  gap: 4px;
+}
+.kanban .lane-heading { flex: 1 1 auto; min-inline-size: 0; gap: 5px; }
+.kanban .lane-heading strong { flex: 0 1 auto; min-inline-size: 0; line-height: 1.55; }
+.kanban .lane-count { flex: none; padding: 2px 5px; }
+.kanban .lane-stage-actions { gap: 2px; }
+.kanban :is(.lane-add, .lane-menu-trigger, .stage-drag-handle) {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 30px;
+  block-size: 30px;
+  min-inline-size: 30px;
+  min-block-size: 30px;
+  padding: 5px;
+  border-radius: 7px;
+  background: transparent;
+  color: #657991;
+}
+.kanban :is(.lane-add, .lane-menu-trigger, .stage-drag-handle):is(:hover, :focus-visible) {
+  background: #e2e9f4;
+  color: #285bb2;
+}
+.kanban .lane-subtitle {
+  flex: none;
+  padding: 1px 5px 7px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+/* ProgressiveLane's root is the sibling after .lane-subtitle; the footer stays visible. */
+.kanban .kanban-lane > .lane-subtitle + div {
+  flex: 0 1 auto;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #bbc8d9 transparent;
+}
+.kanban .lane-cards { gap: 6px; }
+.kanban .progressive-lane-card { min-inline-size: 0; }
+.kanban .task-card {
+  padding: 8px 9px;
+  min-block-size: 0;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px #2131490a;
+}
+.kanban .task-card:hover { transform: translateY(-1px); }
+.kanban .task-card-top { margin-block-end: 4px; }
+.kanban .task-title { line-height: 1.5; margin-block-end: 3px; }
+.kanban .task-description { margin-block-end: 4px; }
+.kanban .tags { gap: 4px; margin: 4px 0; }
+.kanban .tag { padding: 2px 6px; }
+.kanban .task-footer { padding-block-start: 6px; margin-block-start: 6px; }
+
+.kanban .lane-empty {
+  min-block-size: 0;
+  padding: 9px 7px;
+  gap: 3px;
+  line-height: 1.45;
+}
+.kanban .lane-empty-message {
+  padding: 10px 8px;
+  border-radius: 8px;
+  color: #7e91a7;
+  font-size: 11px;
+  text-align: center;
+}
+.kanban .lane-empty-icon { padding: 4px; }
+.kanban .lane-empty button { margin-block-start: 1px; }
+.kanban .lane-add-card {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  inline-size: 100%;
+  min-block-size: 34px;
+  margin-block-start: 6px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: transparent;
+  color: #58718f;
+  text-align: start;
+  font-size: 11px;
+}
+.kanban .lane-add-card:is(:hover, :focus-visible) {
+  background: #e0e8f3;
+  color: #285bb2;
+}
+
+/* The add-list tile appears after the existing columns, in the board's RTL flow. */
+.kanban > .kanban-add-list { min-block-size: 44px; }
+.kanban .kanban-add-list__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 44px;
+  border-radius: 11px;
+  padding: 10px 12px;
+  color: #31547d;
+  background: #cbd9e8b8;
+  text-align: start;
+  font-size: 12px;
+  font-weight: 690;
+}
+.kanban .kanban-add-list__trigger:is(:hover, :focus-visible) {
+  background: #bccfe3;
+  color: #1f497b;
+}
+.kanban .kanban-add-list__form {
+  display: grid;
+  gap: 8px;
+  inline-size: 100%;
+  padding: 9px;
+  border: 1px solid #dce4ef;
+  border-radius: 11px;
+  background: #eef2f8;
+  box-shadow: 0 5px 16px #1b385018;
+}
+.kanban .kanban-add-list__form input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 36px;
+  padding: 7px 9px;
+  border: 1px solid #bac9db;
+  border-radius: 7px;
+  color: #2a3c56;
+  background: #fff;
+}
+.kanban .kanban-add-list__form button {
+  min-block-size: 32px;
+  border-radius: 7px;
+  padding: 5px 10px;
+  color: #32547d;
+}
+.kanban .kanban-add-list__form button[type="submit"] {
+  background: #356cbd;
+  color: #fff;
+}
+
+/* The list settings menu lives in a body portal so board scrolling cannot clip it. */
+.lane-actions-popover {
+  position: fixed;
+  z-index: 95;
+  inline-size: min(290px, calc(100vw - 16px));
+  max-block-size: calc(100dvh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 11px;
+  border: 1px solid #d4dfec;
+  border-radius: 12px;
+  background: #fff;
+  color: #37485e;
+  box-shadow: 0 15px 38px #152a4440;
+  scrollbar-width: thin;
+  direction: rtl;
+  font-size: 11px;
+}
+.lane-actions-popover__head,
+.lane-actions-popover__color,
+.lane-actions-popover__action,
+.lane-actions-popover__save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lane-actions-popover__head { justify-content: space-between; padding: 0 2px 7px; border-block-end: 1px solid #e2e8ef; }
+.lane-actions-popover__head strong { font-size: 12px; }
+.lane-actions-popover button { min-block-size: 32px; border-radius: 7px; color: inherit; background: transparent; }
+.lane-actions-popover button:is(:hover, :focus-visible):not(:disabled) { background: #ecf2f9; }
+.lane-actions-popover button:disabled { opacity: .48; }
+.lane-actions-popover__action { inline-size: 100%; margin-block-start: 5px; padding: 6px 8px; text-align: start; }
+.lane-actions-popover__editor { display: grid; gap: 8px; padding-block: 8px; border-block: 1px solid #e2e8ef; }
+.lane-actions-popover__editor label { display: grid; gap: 5px; color: #65788e; }
+.lane-actions-popover__editor input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 34px;
+  padding: 6px 8px;
+  border: 1px solid #c8d5e4;
+  border-radius: 7px;
+  background: #f8fafd;
+  color: #33485f;
+}
+.lane-actions-popover__editor .lane-actions-popover__save {
+  justify-content: center;
+  background: #e4edfc;
+  color: #26529d;
+}
+.lane-actions-popover__color { justify-content: space-between; min-block-size: 34px; color: #60758d; }
+.lane-actions-popover__color input { inline-size: 36px; block-size: 30px; border: 0; cursor: pointer; background: transparent; }
+.lane-actions-popover__moves { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding-block: 6px; }
+.lane-actions-popover__moves button { display: flex; align-items: center; gap: 4px; padding: 5px; font-size: 10px; text-align: start; }
+.lane-actions-popover__archive { color: #a44145 !important; }
+.lane-actions-popover__archive small { font-size: 9px; }
+.lane-actions-popover__hint { display: flex; align-items: center; gap: 6px; padding: 8px 2px 1px; color: #6b7b90; }
+
+:root[data-theme="dark"] .kanban > .kanban-lane { border-color: #32455f; }
+:root[data-theme="dark"] .kanban :is(.lane-add, .lane-menu-trigger, .stage-drag-handle) { color: #b1c1d5; }
+:root[data-theme="dark"] .kanban :is(.lane-add, .lane-menu-trigger, .stage-drag-handle):is(:hover, :focus-visible) { background: #2b425c; color: #d7e8ff; }
+:root[data-theme="dark"] .kanban .lane-add-card { color: #b2c7e1; }
+:root[data-theme="dark"] .kanban .lane-empty-message { color: #9fb4cf; }
+:root[data-theme="dark"] .kanban .lane-add-card:is(:hover, :focus-visible) { background: #2b425c; color: #e5efff; }
+:root[data-theme="dark"] .kanban .kanban-lane > .lane-subtitle + div { scrollbar-color: #546980 transparent; }
+:root[data-theme="dark"] .kanban .kanban-add-list__trigger { background: #304967b8; color: #dfecff; }
+:root[data-theme="dark"] .kanban .kanban-add-list__trigger:is(:hover, :focus-visible) { background: #395676; }
+:root[data-theme="dark"] .kanban .kanban-add-list__form { background: #1c2b40; border-color: #344861; }
+:root[data-theme="dark"] .kanban .kanban-add-list__form input { background: #152237; border-color: #41556e; color: #e0ecfb; }
+:root[data-theme="dark"] .kanban .kanban-add-list__form button { color: #d9e9ff; }
+:root[data-theme="dark"] .kanban .kanban-add-list__form button[type="submit"] { background: #4878be; }
+:root[data-theme="dark"] .lane-actions-popover { background: #1a293f; color: #e2ecfa; border-color: #3c526e; }
+:root[data-theme="dark"] :is(.lane-actions-popover__head, .lane-actions-popover__editor) { border-color: #3b4f67; }
+:root[data-theme="dark"] .lane-actions-popover__editor label,
+:root[data-theme="dark"] .lane-actions-popover__color,
+:root[data-theme="dark"] .lane-actions-popover__hint { color: #b5c7db; }
+:root[data-theme="dark"] .lane-actions-popover__editor input { background: #142239; color: #e4effe; border-color: #45607a; }
+:root[data-theme="dark"] .lane-actions-popover button:is(:hover, :focus-visible):not(:disabled) { background: #2c4160; }
+:root[data-theme="dark"] .lane-actions-popover__editor .lane-actions-popover__save { background: #304b75; color: #deecff; }
+:root[data-theme="dark"] .lane-actions-popover__archive { color: #ffb3b8 !important; }
+
+@media (max-width: 600px) {
+  .kanban { --kanban-column-width: min(276px, calc(100vw - 28px)); gap: 9px; }
+  .kanban > .kanban-lane { padding: 7px; }
+  .lane-actions-popover { inline-size: min(280px, calc(100vw - 16px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban .task-card:hover { transform: none; }
+}
