@@ -40,7 +40,7 @@ function visibleLabelText(label, control) {
   return clean(portions.join(' '));
 }
 
-export function floatingLabelText(control, documentRoot = globalThis.document) {
+export function floatingLabelText(control, documentRoot = globalThis.document, ignoreAriaLabel = false) {
   const nativeLabels = Array.from(control.labels || []);
   for (const label of nativeLabels) {
     const text = visibleLabelText(label, control);
@@ -52,7 +52,7 @@ export function floatingLabelText(control, documentRoot = globalThis.document) {
       documentRoot.getElementById(id)?.textContent || '').join(' '));
     if (text) return text;
   }
-  return clean(control.getAttribute('aria-label') ||
+  return clean((!ignoreAriaLabel && control.getAttribute('aria-label')) ||
     control.getAttribute('data-floating-label') ||
     control.getAttribute('placeholder') ||
     control.getAttribute('title'));
@@ -64,7 +64,7 @@ function isSimpleWrappingLabel(label, control) {
   const otherNodes = Array.from(label.children).filter(node =>
     node !== control && !node.classList.contains('madar-fl-caption'));
   return otherNodes.every(node =>
-    node.tagName === 'SPAN' && !node.querySelector(FIELD_SELECTOR + ', button')) &&
+    node.tagName === 'SPAN' && !node.querySelector(FIELD_SELECTOR + ', button, a, [role="button"]')) &&
     otherNodes.length <= 1;
 }
 
@@ -78,17 +78,50 @@ function syncCaption(state) {
   caption.classList.toggle('madar-fl-disabled', control.disabled);
 }
 
-/** Fixed captions follow the visible controls. They live in a portal outside
- * React's root, so neither reconciler children nor layout boxes are altered. */
-function positionCaption(state) {
+const CLIPPING_OVERFLOW = /^(?:auto|scroll|hidden|clip|overlay)$/;
+
+/** A fixed portal does not inherit clipping from scroll containers. Require
+ * the entire field to fit in the viewport AND every clipping ancestor before
+ * drawing a caption. This avoids a caption bleeding into unrelated rows when
+ * a partially hidden field crosses a sticky header or a modal scroll edge. */
+export function isFieldFullyVisible(control, rect, view) {
+  if (rect.width < 45 || rect.height < 30 ||
+      rect.left < 0 || rect.top < 0 ||
+      rect.right > view.innerWidth || rect.bottom > view.innerHeight ||
+      rect.right <= rect.left || rect.bottom <= rect.top) return false;
+
+  for (let ancestor = control.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    const style = view.getComputedStyle(ancestor);
+    const overflowX = style.overflowX || style.overflow || 'visible';
+    const overflowY = style.overflowY || style.overflow || 'visible';
+    const paintContain = /(?:^|\s)paint(?:\s|$)/.test(style.contain || '');
+    const xClips = CLIPPING_OVERFLOW.test(overflowX) || paintContain;
+    const yClips = CLIPPING_OVERFLOW.test(overflowY) || paintContain;
+    if (!xClips && !yClips) continue;
+    const bounds = ancestor.getBoundingClientRect();
+    // client{Width,Height} omit scrollbar and border, matching the true
+    // scrollport. Fallback only for non-layout test doubles.
+    const left = bounds.left + (ancestor.clientLeft || 0);
+    const top = bounds.top + (ancestor.clientTop || 0);
+    const right = left + (ancestor.clientWidth ?? bounds.width);
+    const bottom = top + (ancestor.clientHeight ?? bounds.height);
+    // Tiny rounding differences from fractional CSS pixels are tolerated.
+    if ((xClips && (rect.left < left - 0.5 || rect.right > right + 0.5)) ||
+        (yClips && (rect.top < top - 0.5 || rect.bottom > bottom + 0.5))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Fixed captions follow visible controls in the same animation frame.
+ * They live outside React's root and retain its original DOM ownership. */
+function positionCaption(state, activeModal) {
   const { control, caption } = state;
   const rect = control.getBoundingClientRect();
   const view = control.ownerDocument.defaultView;
-  const modal = control.ownerDocument.querySelector('.overlay, .drawer-overlay, [aria-modal="true"]');
-  const behindModal = modal && !modal.contains(control);
-  if (rect.width < 45 || rect.height < 30 ||
-      rect.bottom <= 0 || rect.top >= view.innerHeight ||
-      rect.right <= 0 || rect.left >= view.innerWidth || behindModal) {
+  const behindModal = activeModal && !activeModal.contains(control);
+  if (behindModal || !isFieldFullyVisible(control, rect, view)) {
     caption.hidden = true;
     return;
   }
@@ -146,7 +179,7 @@ export function installFloatingLabels(root = globalThis.document) {
     fields.delete(control);
   }
 
-  function add(control) {
+  function add(control, activeModal) {
     if (!isFloatingCandidate(control) || !control.parentElement) return;
     const label = floatingLabelText(control, doc);
     if (!label) return; // Never invent an accessible name from a variable name.
@@ -158,9 +191,10 @@ export function installFloatingLabels(root = globalThis.document) {
     const simple = isSimpleWrappingLabel(nativeLabel, control) ? nativeLabel : null;
     const sourceSpan = simple && Array.from(simple.children).find(node =>
       node.tagName === 'SPAN' && node !== caption);
+    // A native label is already the correct accessible name. Never replace
+    // its semantics or click target with a synthesized aria-label.
     const generatedAriaLabel = !control.getAttribute('aria-label') &&
-      !control.getAttribute('aria-labelledby') &&
-      (Boolean(simple) || !control.labels?.length);
+      !control.getAttribute('aria-labelledby') && !control.labels?.length;
     if (generatedAriaLabel) control.setAttribute('aria-label', label);
 
     const font = view.getComputedStyle(control).fontSize;
@@ -176,27 +210,37 @@ export function installFloatingLabels(root = globalThis.document) {
     fields.set(control, state);
     resizeObserver?.observe(control);
     syncCaption(state);
-    positionCaption(state);
+    positionCaption(state, activeModal);
   }
 
   function scan() {
     if (disposed) return;
+    const activeModal = doc.querySelector('.overlay, .drawer-overlay, [aria-modal="true"]');
     const found = new Set(appRoot.querySelectorAll(FIELD_SELECTOR));
     for (const control of fields.keys()) {
       if (!found.has(control) || !control.isConnected || !isFloatingCandidate(control)) remove(control);
     }
     for (const control of found) {
       const state = fields.get(control);
-      if (!state) add(control);
+      if (!state) add(control, activeModal);
       else {
-        const next = floatingLabelText(control, doc);
+        // An aria-label that we previously generated should not obscure
+        // updates to the underlying placeholder or data-floating-label.
+        const ownAriaLabel = state.generatedAriaLabel && control.getAttribute('aria-label') === state.label;
+        if (ownAriaLabel && control.labels?.length) {
+          control.removeAttribute('aria-label');
+          state.generatedAriaLabel = false;
+        } else if (state.generatedAriaLabel && !ownAriaLabel) {
+          state.generatedAriaLabel = false;
+        }
+        const next = floatingLabelText(control, doc, ownAriaLabel);
         if (next && next !== state.label) {
           state.label = next;
           state.caption.textContent = next;
           if (state.generatedAriaLabel) control.setAttribute('aria-label', next);
         }
         syncCaption(state);
-        positionCaption(state);
+        positionCaption(state, activeModal);
       }
     }
   }
@@ -209,8 +253,17 @@ export function installFloatingLabels(root = globalThis.document) {
     view.requestAnimationFrame(() => {
       pending = false;
       if (disposed) return;
-      if (dirty) { dirty = false; scan(); }
-      else for (const state of fields.values()) positionCaption(state);
+      try {
+        if (dirty) { dirty = false; scan(); }
+        else {
+          const activeModal = doc.querySelector('.overlay, .drawer-overlay, [aria-modal="true"]');
+          for (const state of fields.values()) positionCaption(state, activeModal);
+        }
+      } finally {
+        // Keep the entire portal hidden during scroll until the positions
+        // and clipping states have been recomputed in this paint cycle.
+        layer.style.visibility = '';
+      }
     });
   }
   function onFieldEvent(event) {
@@ -221,7 +274,10 @@ export function installFloatingLabels(root = globalThis.document) {
       if (!disposed && fields.has(event.target)) syncCaption(fields.get(event.target));
     });
   }
-  const onScroll = () => schedule(false);
+  const onScroll = () => {
+    layer.style.visibility = 'hidden';
+    schedule(false);
+  };
   appRoot.addEventListener('focusin', onFieldEvent, true);
   appRoot.addEventListener('focusout', onFieldEvent, true);
   appRoot.addEventListener('input', onFieldEvent, true);
@@ -233,7 +289,7 @@ export function installFloatingLabels(root = globalThis.document) {
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['aria-label', 'aria-labelledby', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled'],
+    attributeFilter: ['aria-label', 'aria-labelledby', 'data-floating-label', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled'],
   });
   schedule(true);
 

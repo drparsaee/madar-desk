@@ -23,7 +23,9 @@
   font-weight: 600;
   line-height: 1.3;
   color: var(--madar-fl-quiet, #74859a);
-  transition: top 140ms ease, font-size 140ms ease, color 140ms ease;
+  /* A fixed caption must track a scrolled input in the same paint. Animating
+     top makes it trail behind rows in nested scroll containers. */
+  transition: font-size 100ms ease, color 100ms ease;
 }
 
 .madar-fl-caption.madar-fl-raised {
