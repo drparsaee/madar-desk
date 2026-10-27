@@ -2,6 +2,8 @@ import React,{useEffect,useState} from 'react';
 import {Check, Cloud, Download, Layers3, LockKeyhole, Moon, Plus, Settings2, ShieldCheck, Sun, Trash2, Users, Wallet, X, ArrowUp, ArrowDown, RefreshCw, Archive, RotateCcw} from 'lucide-react';
 import {Avatar, AvatarIconPicker, RoleBadge, DEFAULT_AVATAR_COLOR} from './members.jsx';
 import {PrioritySettings} from './priorities.jsx';
+import {INTERFACE_FEATURE_TIERS, INTERFACE_MODE_OPTIONS} from './interface_mode.js';
+import {WidgetSettings} from './clock_widget.jsx';
 
 export const DEFAULT_STAGES=[
  {id:'inbox',label:'صندوق ورودی',subtitle:'ایده‌ها و کارهای جدید',color:'#9ca3af'},
@@ -34,7 +36,7 @@ export function FinanceSummary({project,tasks,onChange,canManage=true,compact=fa
  </div>;
 }
 
-export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,priorityUsedIds,boardId=null,onArchiveList,onRestoreList}){
+export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,widgetSettings,onWidgetSettingsChange}){
  const [name,setName]=useState('');
  const [editing,setEditing]=useState('');
  const [label,setLabel]=useState('');
@@ -59,6 +61,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
    <div className="dialog-body settings-content">
      <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3><p>حالت نمایش در تمام صفحات برنامه اعمال می‌شود.</p><div className="theme-picks"><button className={settings.theme!=='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('light')}><Sun size={19}/> روشن {settings.theme!=='dark'&&<Check size={16}/>}</button><button className={settings.theme==='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('dark')}><Moon size={19}/> تاریک {settings.theme==='dark'&&<Check size={16}/>}</button></div></div>
      <div className="setting-block"><h3><Layers3 size={17}/> تقویم و نمایش تاریخ</h3><p>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها در همه سیستم‌ها یکسان می‌ماند.</p><div className="theme-picks"><button className={calendar==='jalali'?'selected':''} onClick={()=>onCalendarChange('jalali')}>شمسی {calendar==='jalali'&&<Check size={16}/>}</button><button className={calendar==='gregorian'?'selected':''} onClick={()=>onCalendarChange('gregorian')}>میلادی {calendar==='gregorian'&&<Check size={16}/>}</button></div></div>
+     {onWidgetSettingsChange&&<WidgetSettings settings={widgetSettings} onChange={onWidgetSettingsChange}/>}
      <div className="setting-block"><h3><Wallet size={17}/> مدیریت هزینه‌ها</h3><label className="setting-toggle"><input type="checkbox" checked={!!settings.costDefault} disabled={!canManage} onChange={e=>updateDefault(e.target.checked)}/><span><strong>فعال‌کردن فیلد هزینه برای همه پروژه‌ها</strong><small>هم برای پروژه‌های فعلی اعمال می‌شود و هم پیش‌فرض پروژه‌های جدید خواهد بود؛ مبالغ قبلی پاک نمی‌شوند.</small></span></label></div>
      <PrioritySettings settings={settings} usedIds={priorityUsedIds||data.tasks.map(t=>t.priority)} canManage={canManage} onChange={priorityDefinitions=>onChange(s=>({...s,settings:{...s.settings,priorityDefinitions}}))}/>
      <div className="setting-block"><h3><Layers3 size={17}/> ستون‌ها و مراحل برد</h3><p>ستون‌ها را روی برد بکشید و جابه‌جا کنید یا از فلش‌های زیر استفاده کنید. رنگ هر ستون مستقل است.</p>
@@ -83,6 +86,58 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
  </section></div>;
 }
 
+// A display template controls UI visibility only. The LAN host's admin/editor/viewer
+// authorization remains independent and is never inferred from a custom title.
+export const LAN_BUILTIN_DISPLAY_ROLES=Object.freeze([
+ {id:'superadmin',label:'مدیرکل',displayMode:'finance',isBuiltin:true},
+ {id:'senior',label:'مدیر ارشد',displayMode:'operations',isBuiltin:true},
+ {id:'middle',label:'مدیر میانی',displayMode:'operations',isBuiltin:true},
+ {id:'unit',label:'مدیر واحد',displayMode:'operations',isBuiltin:true},
+ {id:'employee',label:'کارمند',displayMode:'basic',isBuiltin:true},
+]);
+const LAN_BUILTIN_ROLE_IDS=new Set(LAN_BUILTIN_DISPLAY_ROLES.map(item=>item.id));
+const LAN_MODE_ORDER={basic:0,operations:1,finance:2};
+const LAN_FEATURE_LABELS={
+ workspaceSwitch:'انتخاب فضای کاری',projects:'پروژه‌ها',boards:'بردها',cards:'کارت‌ها',
+ createTask:'ساخت کار',createProject:'ساخت پروژه',createBoard:'ساخت برد',
+ assignees:'اعضای کار',dueDate:'سررسید',reminder:'یادآوری',priority:'اولویت',
+ search:'جست‌وجو',quickFilters:'فیلتر سریع',taskTrash:'سطل زباله کارها',
+ projectFiles:'فایل‌های پروژه',cardChecklist:'چک‌لیست',cardAttachments:'پیوست کارت',
+ boardView:'نمای برد',listView:'نمای فهرست',syncStatus:'وضعیت همگام‌سازی',
+ backupRestore:'پشتیبان و بازیابی',networkStatus:'شبکه',settings:'تنظیمات',
+ profile:'پروفایل',notifications:'اعلان‌ها',workspaceManagement:'مدیریت فضای کاری',
+ boardAdministration:'مدیریت برد',projectAdministration:'مدیریت پروژه',
+ advancedFilters:'فیلترهای پیشرفته',activity:'فعالیت‌ها',reporting:'گزارش‌ها',
+ planner:'برنامه‌ریز',timeDashboard:'داشبورد زمان',timelineView:'نمای زمان‌بندی',
+ taskTime:'زمان کار',cardComments:'نظرهای کارت',customFields:'فیلدهای سفارشی',
+ boardFieldEditor:'ویرایش فیلدهای برد',automationRules:'قوانین خودکار',
+ trelloImport:'ورود از ترلو',calendarInterop:'اتصال تقویم',
+ secureApiKeys:'کلید API',lanUserManagement:'مدیریت کاربران',
+ financeHub:'مدیریت مالی',projectFinance:'هزینه پروژه',profitPeek:'سود پروژه',
+ taskCostControls:'هزینه کار',checklistCostControls:'هزینه مراحل',
+ projectPricing:'قیمت پروژه',aiAgent:'دستیار هوشمند (در صورت فعال‌سازی)',
+};
+export const lanTechnicalRoleForDisplay=(id,roles=LAN_BUILTIN_DISPLAY_ROLES)=>
+ id==='superadmin'?'admin':roles.find(item=>item.id===id)?.displayMode==='basic'?'viewer':'editor';
+export const lanDefaultDisplayRoleForUser=(user)=>user?.displayRole||
+ (user?.role==='admin'?'superadmin':user?.role==='viewer'?'employee':'middle');
+export const lanCanAssignDisplayRole=(roles,id,technicalRole)=>
+ Array.isArray(roles)&&roles.some(template=>template.id===id)&&
+ (id!=='superadmin'||technicalRole==='admin');
+const lanRoleLabel=(roles,id)=>roles.find(item=>item.id===id)?.label||
+ LAN_BUILTIN_DISPLAY_ROLES.find(item=>item.id===id)?.label||id;
+const lanRoleFeatures=mode=>Object.keys(INTERFACE_FEATURE_TIERS).filter(key=>
+ LAN_MODE_ORDER[INTERFACE_FEATURE_TIERS[key]]<=LAN_MODE_ORDER[mode]);
+export function lanDisplayRolePayload({id,label,displayMode,features,limited}){
+ const available=lanRoleFeatures(displayMode);
+ return {id,label:label.trim(),displayMode,
+   features:limited?available.filter(key=>features.includes(key)):available};
+}
+export const lanAvailableUserFeatures=(role,mode)=>
+ (Array.isArray(role?.features)?role.features:lanRoleFeatures(role?.displayMode||'basic'))
+   .filter(key=>Object.prototype.hasOwnProperty.call(INTERFACE_FEATURE_TIERS,key)&&
+     LAN_MODE_ORDER[INTERFACE_FEATURE_TIERS[key]]<=LAN_MODE_ORDER[mode]);
+
 export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
  const [view,setView]=useState('connection');
  const [mode,setMode]=useState(status?.mode||'solo');
@@ -95,6 +150,16 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
  const [keyfile,setKeyfile]=useState('');
  const [fingerprint,setFingerprint]=useState('');
  const [users,setUsers]=useState([]);
+ const [displayRoles,setDisplayRoles]=useState(LAN_BUILTIN_DISPLAY_ROLES);
+ const [displayRole,setDisplayRole]=useState('employee');
+ const [customUserDisplay,setCustomUserDisplay]=useState(false);
+ const [userDisplayMode,setUserDisplayMode]=useState('basic');
+ const [userDisplayFeatures,setUserDisplayFeatures]=useState([]);
+ const [editingDisplayRole,setEditingDisplayRole]=useState('');
+ const [displayRoleTitle,setDisplayRoleTitle]=useState('');
+ const [displayRoleMode,setDisplayRoleMode]=useState('basic');
+ const [limitRoleFeatures,setLimitRoleFeatures]=useState(false);
+ const [selectedRoleFeatures,setSelectedRoleFeatures]=useState([]);
  const [name,setName]=useState('');
  const [userPassword,setUserPassword]=useState('');
  const [userDisplayName,setUserDisplayName]=useState('');
@@ -102,14 +167,23 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
  const [userColor,setUserColor]=useState(DEFAULT_AVATAR_COLOR);
  const [userPhoto,setUserPhoto]=useState('');
  const [editingUsername,setEditingUsername]=useState('');
- const [role,setRole]=useState('editor');
+ const [role,setRole]=useState('viewer');
  const [scope,setScope]=useState('all');
  const [selectedProjects,setSelectedProjects]=useState([]);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const run=async action=>{setBusy(true);setError('');setNotice('');try{await action();await onRefresh();}catch(e){setError(e.message||String(e));}finally{setBusy(false);}};
- const loadUsers=()=>run(async()=>{setUsers(await api.lanUsers());setView('users');});
+ const refreshDisplayRoles=async()=>{
+   const result=await api.lanDisplayRoles();
+   if(!Array.isArray(result))throw Error('پاسخ نقش‌های نمایشی معتبر نیست.');
+   setDisplayRoles(result);
+   return result;
+ };
+ const loadUsers=()=>run(async()=>{const results=await Promise.all([api.lanUsers(),api.lanDisplayRoles()]);
+   if(!Array.isArray(results[0])||!Array.isArray(results[1]))throw Error('پاسخ کاربران یا قالب‌های نمایش معتبر نیست.');
+   setUsers(results[0]);setDisplayRoles(results[1]);setView('users');
+ });
  const httpsTarget=/^https:\/\//i.test(url.trim());
  const validPin=validLanFingerprint(fingerprint);
  const handleHost=()=>run(async()=>{
@@ -121,11 +195,64 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
    setMode(s.mode);await onConnected();setNotice(httpsTarget?'با بررسی اثرانگشت گواهی به سرور HTTPS متصل شدی.':'به میزبان HTTP قدیمی متصل شدی؛ ارتباط رمزگذاری نمی‌شود.');
  });
  const handleLeave=()=>run(async()=>{const s=await api.lanLeave();setMode(s.mode);await onConnected();setNotice('به حالت شخصی برگشتی.');});
- const resetUserForm=()=>{setEditingUsername('');setName('');setUserPassword('');setUserDisplayName('');setUserIcon('user');setUserColor(DEFAULT_AVATAR_COLOR);setUserPhoto('');setRole('editor');setScope('all');setSelectedProjects([]);};
- const editUser=u=>{setEditingUsername(u.username);setName(u.username);setRole(u.role);setScope(u.projects===null?'all':'selected');setSelectedProjects(u.projects||[]);setUserPassword('');setUserDisplayName(u.displayName||'');setUserIcon(u.avatarIcon||'user');setUserColor(u.avatarColor||DEFAULT_AVATAR_COLOR);setUserPhoto(u.avatarPhoto||'');};
- const saveUser=()=>run(async()=>{await api.lanSaveUser({username:name.trim(),password:userPassword,role,projects:role==='admin'||scope==='all'?null:selectedProjects,displayName:userDisplayName,avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto});setUsers(await api.lanUsers());resetUserForm();setNotice('حساب، پروفایل و دسترسی ذخیره شد.');});
+ const resetUserForm=()=>{setEditingUsername('');setName('');setUserPassword('');setUserDisplayName('');setUserIcon('user');setUserColor(DEFAULT_AVATAR_COLOR);setUserPhoto('');setRole('viewer');setDisplayRole('employee');setCustomUserDisplay(false);setUserDisplayMode('basic');setUserDisplayFeatures([]);setScope('all');setSelectedProjects([]);};
+ const editUser=u=>{
+   const id=lanDefaultDisplayRoleForUser(u);
+   const template=displayRoles.find(item=>item.id===id);
+   const chosenMode=u.displayMode||template?.displayMode||'basic';
+   const available=lanAvailableUserFeatures(template,chosenMode);
+   const chosenFeatures=Array.isArray(u.displayFeatures)?available.filter(key=>u.displayFeatures.includes(key)):available;
+   setEditingUsername(u.username);setName(u.username);setRole(u.role);setDisplayRole(id);
+   setUserDisplayMode(chosenMode);setUserDisplayFeatures(chosenFeatures);
+   setCustomUserDisplay(chosenMode!==template?.displayMode||chosenFeatures.length!==available.length);
+   setScope(u.projects===null?'all':'selected');setSelectedProjects(u.projects||[]);setUserPassword('');
+   setUserDisplayName(u.displayName||'');setUserIcon(u.avatarIcon||'user');setUserColor(u.avatarColor||DEFAULT_AVATAR_COLOR);setUserPhoto(u.avatarPhoto||'');
+ };
+ const changeDisplayRole=id=>{
+   setDisplayRole(id);setCustomUserDisplay(false);
+   const template=displayRoles.find(item=>item.id===id);
+   setUserDisplayMode(template?.displayMode||'basic');
+   setUserDisplayFeatures(lanAvailableUserFeatures(template,template?.displayMode||'basic'));
+   if(!editingUsername){setRole(lanTechnicalRoleForDisplay(id,displayRoles));if(id==='superadmin')setScope('all');}
+ };
+ const activeTemplate=displayRoles.find(item=>item.id===displayRole);
+ const activeMode=customUserDisplay?userDisplayMode:activeTemplate?.displayMode||'basic';
+ const userFeatureKeys=lanAvailableUserFeatures(activeTemplate,activeMode);
+ const invalidDisplayRole=!lanCanAssignDisplayRole(displayRoles,displayRole,role);
+ const saveUser=()=>run(async()=>{if(invalidDisplayRole)throw Error('برای قالب مدیرکل باید مجوز فنی مدیر میزبان انتخاب شود.');
+   await api.lanSaveUser({username:name.trim(),password:userPassword,role,displayRole,
+     displayMode:customUserDisplay?activeMode:null,
+     displayFeatures:customUserDisplay?userFeatureKeys.filter(key=>userDisplayFeatures.includes(key)):null,
+     projects:role==='admin'||scope==='all'?null:selectedProjects,displayName:userDisplayName,
+     avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto});
+   setUsers(await api.lanUsers());resetUserForm();setNotice('حساب، قالب نمایش و مجوز فنی ذخیره شد.');});
  const resetPassword=()=>run(async()=>{await api.lanResetPassword(name,userPassword);setUserPassword('');setNotice('رمز قبلی باطل و رمز جدید فعال شد؛ نشست‌های قبلی نیز لغو شدند.');});
  const deleteUser=u=>run(async()=>{await api.lanDeleteUser(u);setUsers(await api.lanUsers());setNotice('حساب حذف شد.');});
+ const resetDisplayRoleForm=()=>{setEditingDisplayRole('');setDisplayRoleTitle('');setDisplayRoleMode('basic');setLimitRoleFeatures(false);setSelectedRoleFeatures([]);};
+ const editRoleTemplate=template=>{
+   if(template.isBuiltin||LAN_BUILTIN_ROLE_IDS.has(template.id))return;
+   setEditingDisplayRole(template.id);setDisplayRoleTitle(template.label);setDisplayRoleMode(template.displayMode);
+   setLimitRoleFeatures(Array.isArray(template.features));
+   setSelectedRoleFeatures(Array.isArray(template.features)?template.features:lanRoleFeatures(template.displayMode));
+ };
+ const saveRoleTemplate=()=>run(async()=>{
+   const title=displayRoleTitle.trim();
+   if(!title)throw Error('عنوان قالب نمایش را وارد کن.');
+   if(editingDisplayRole&&LAN_BUILTIN_ROLE_IDS.has(editingDisplayRole))throw Error('قالب‌های پیش‌فرض قابل ویرایش نیستند.');
+   const payload=lanDisplayRolePayload({id:editingDisplayRole||'custom_'+Date.now().toString(36),
+     label:title,displayMode:displayRoleMode,features:selectedRoleFeatures,limited:limitRoleFeatures});
+   await api.lanSaveDisplayRole(payload);
+   await refreshDisplayRoles();resetDisplayRoleForm();setNotice('قالب نمایش ذخیره شد.');
+ });
+ const deleteRoleTemplate=template=>run(async()=>{
+   if(template.isBuiltin||LAN_BUILTIN_ROLE_IDS.has(template.id))throw Error('قالب‌های پیش‌فرض قابل حذف نیستند.');
+   if(users.some(u=>lanDefaultDisplayRoleForUser(u)===template.id))throw Error('ابتدا نقش نمایشی کاربران وابسته را تغییر بده.');
+   await api.lanDeleteDisplayRole(template.id);await refreshDisplayRoles();
+   if(editingDisplayRole===template.id)resetDisplayRoleForm();
+   if(displayRole===template.id)changeDisplayRole('employee');
+   setNotice('قالب نمایشی حذف شد.');
+ });
+ const featureKeys=lanRoleFeatures(displayRoleMode);
  const canManage=status?.user?.role==='admin'&&(status?.mode==='server'||status?.mode==='client');
  return <div className="overlay" onMouseDown={onClose}><section className="dialog lan-modal" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true"><div className="dialog-head"><h2><Users size={19}/> شبکه محلی و کاربران</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div><div className="dialog-body">
   <div className="lan-heading"><span className={'connection-dot '+(status?.mode!=='solo'?'online':'')}/><strong>{status?.mode==='server'?'میزبان شبکه فعال':status?.mode==='client'?'متصل به سرور':'حالت شخصی و آفلاین'}</strong></div>
@@ -148,18 +275,57 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
    <><div className="lan-connected"><span>{status?.mode==='server'?('پورت میزبان: '+status.port):('نشانی: '+status?.url)}</span><span>سطح دسترسی: <RoleBadge role={status?.user?.role}/></span><span>{status?.transport==='https'?'اتصال HTTPS':'اتصال HTTP قدیمی (بدون رمزگذاری)'}</span>{status?.mode==='server'&&status?.fingerprint&&<span>اثر انگشت SHA-256 گواهی میزبان: <code dir="ltr">{status.fingerprint}</code></span>}</div><div className="lan-actions"><button className="btn secondary" onClick={onConnected}><RefreshCw size={16}/> تازه‌سازی اطلاعات</button>{canManage&&<button className="btn primary" aria-label="تعریف کاربر و تعیین سطح دسترسی" onClick={loadUsers}><Plus size={16}/> تعریف کاربر</button>}<button className="btn secondary" disabled={busy} onClick={handleLeave}>خروج از شبکه</button></div></>}
   {view==='users'&&canManage&&<div className="users-manager">
     <div className="account-create-heading"><Users size={18}/> تعریف کاربر و تعیین سطح دسترسی</div>
-    <p className="lan-help">فقط مدیر می‌تواند حساب جدید بسازد، نقش‌ها را تغییر دهد یا پروژه‌های مجاز را مشخص کند. هر کاربر نماد حوزه فعالیتش را خودش هم می‌تواند از بخش پروفایل تغییر دهد.</p>
+    <p className="lan-help">مدیر قالب نمایش هر حساب را تعیین می‌کند. قالب فقط امکانات قابل مشاهده را مشخص می‌کند؛ مجوز فنی و دسترسی به داده‌ها جداگانه در میزبان کنترل می‌شود.</p>
     <h3>کاربران شبکه</h3>
     <div className="users-list">{users.map(u=><div className="user-row" key={u.username}>
       <Avatar user={u} size={36}/>
       <span><strong>{u.displayName||u.username}</strong><small dir="ltr">@{u.username}</small>
-        <RoleBadge role={u.role}/>
+        <small>قالب نمایش: {lanRoleLabel(displayRoles,lanDefaultDisplayRoleForUser(u))}</small>
+        <span>مجوز فنی: <RoleBadge role={u.role}/></span>
         <small>{u.projects===null?'تمام پروژه‌ها':u.projects.length?u.projects.length+' پروژه مجاز':'بدون پروژه مجاز'}</small>
       </span>
       <button type="button" className="btn secondary" onClick={()=>editUser(u)}>ویرایش</button>
       <button type="button" aria-label={'حذف کاربر '+u.username} disabled={busy||u.username===status?.user?.username}
         onClick={()=>{if(window.confirm('این کاربر حذف شود؟'))deleteUser(u.username)}}><Trash2 size={15}/></button>
     </div>)}</div>
+    <details className="setting-block lan-display-roles">
+      <summary><ShieldCheck size={16}/> قالب‌های نقش و سطح نمایش</summary>
+      <p className="lan-help">قالب‌های اصلی مدیرکل، مدیر ارشد، مدیر میانی، مدیر واحد و کارمند آماده‌اند. می‌توانی برای بخش‌های دیگر قالب اختصاصی بسازی. این قالب‌ها به‌تنهایی دسترسی امنیتی ایجاد نمی‌کنند.</p>
+      <div className="users-list">{displayRoles.map(template=>{
+        const assigned=users.filter(u=>lanDefaultDisplayRoleForUser(u)===template.id).length;
+        const builtin=template.isBuiltin||LAN_BUILTIN_ROLE_IDS.has(template.id);
+        const modeLabel=INTERFACE_MODE_OPTIONS.find(mode=>mode.id===template.displayMode)?.label||template.displayMode;
+        return <div className="user-row" key={template.id}>
+          <span><strong>{template.label}</strong><small>{modeLabel} · {assigned.toLocaleString('fa-IR')} کاربر · {builtin?'پیش‌فرض':'سفارشی'}</small></span>
+          {!builtin&&<><button className="btn secondary" type="button" disabled={busy} onClick={()=>editRoleTemplate(template)}>ویرایش</button>
+            <button type="button" disabled={busy||!!assigned} aria-label={'حذف قالب '+template.label}
+              title={assigned?'ابتدا کاربران این قالب را به نقش دیگری منتقل کن.':'حذف قالب سفارشی'}
+              onClick={()=>{if(window.confirm('قالب نمایشی «'+template.label+'» حذف شود؟'))deleteRoleTemplate(template);}}><Trash2 size={15}/></button></>}
+        </div>;
+      })}</div>
+      <div className="account-create-heading"><Plus size={17}/>{editingDisplayRole?'ویرایش قالب سفارشی':'افزودن قالب سفارشی'}</div>
+      <div className="setting-grid">
+        <label>عنوان نقش<input maxLength={60} value={displayRoleTitle} onChange={e=>setDisplayRoleTitle(e.target.value)} placeholder="مثلاً مسئول تدارکات"/></label>
+        <label>حالت پایه نمایش<select value={displayRoleMode} onChange={e=>setDisplayRoleMode(e.target.value)}>
+          {INTERFACE_MODE_OPTIONS.map(option=><option value={option.id} key={option.id}>{option.label}</option>)}
+        </select></label>
+      </div>
+      <label className="setting-toggle"><input type="checkbox" checked={limitRoleFeatures}
+        onChange={e=>{setLimitRoleFeatures(e.target.checked);if(e.target.checked&&!selectedRoleFeatures.length)setSelectedRoleFeatures(featureKeys);}}/>
+        <span><strong>انتخاب امکانات قابل نمایش این نقش</strong><small>وقتی خاموش است همه امکانات حالت پایه نمایش داده می‌شوند، در محدوده مجوز فنی کاربر.</small></span>
+      </label>
+      {limitRoleFeatures&&<details className="lan-role-features" open><summary>امکانات مجاز ({selectedRoleFeatures.filter(key=>featureKeys.includes(key)).length.toLocaleString('fa-IR')} مورد)</summary>
+        <div className="scope-list" role="group" aria-label="امکانات قابل نمایش نقش سفارشی">
+          {featureKeys.map(key=><label key={key}><input type="checkbox" checked={selectedRoleFeatures.includes(key)}
+            onChange={e=>setSelectedRoleFeatures(keys=>e.target.checked?[...keys,key]:keys.filter(item=>item!==key))}/>
+            {LAN_FEATURE_LABELS[key]||key}</label>)}
+        </div>
+      </details>}
+      <div className="lan-actions"><button className="btn primary" type="button" disabled={busy||!displayRoleTitle.trim()}
+        onClick={saveRoleTemplate}>{editingDisplayRole?'ذخیره قالب':'ایجاد قالب'}</button>
+        {editingDisplayRole&&<button className="btn secondary" type="button" onClick={resetDisplayRoleForm}>انصراف از ویرایش</button>}
+      </div>
+    </details>
     <div className="account-create-heading"><Plus size={17}/>{editingUsername?'ویرایش حساب '+editingUsername:'ساخت حساب جدید'}</div>
     <div className="setting-grid">
       <label>نام کاربری انگلیسی<input autoComplete="off" maxLength={40} disabled={!!editingUsername}
@@ -168,11 +334,17 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         <input type="password" autoComplete="new-password" value={userPassword} onChange={e=>setUserPassword(e.target.value)}/></label>
       <label>نام نمایشی<input maxLength={80} value={userDisplayName} onChange={e=>setUserDisplayName(e.target.value)}
         placeholder="مثلاً مسئول تولید"/></label>
-      <label>نقش و سطح دسترسی
+      <label>قالب نقش و امکانات قابل نمایش
+        <select value={displayRole} onChange={e=>changeDisplayRole(e.target.value)}>
+          {!displayRoles.some(item=>item.id===displayRole)&&<option value={displayRole}>نقش ناشناخته ({displayRole})</option>}
+          {displayRoles.map(template=><option key={template.id} value={template.id}>{template.label}</option>)}
+        </select>
+      </label>
+      <label>مجوز فنی (مستقل از قالب نمایش)
         <select value={role} onChange={e=>{setRole(e.target.value);if(e.target.value==='admin')setScope('all');}}>
           <option value="viewer">مشاهده‌گر: فقط خواندن</option>
           <option value="editor">ویرایشگر: انجام و تغییر کارها</option>
-          <option value="admin">مدیر: مدیریت همه بخش‌ها و کاربران</option>
+          <option value="admin">مدیر میزبان: مدیریت همه بخش‌ها و کاربران</option>
         </select>
       </label>
       {role!=='admin'&&<label>دسترسی به پروژه‌ها
@@ -182,11 +354,39 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         </select>
       </label>}
     </div>
-    <p className="account-role-help">{role==='admin'
+    <p className="account-role-help">{editingUsername?'تغییر قالب نمایش هنگام ویرایش، مجوز فنی قبلی را خودکار عوض نمی‌کند.':'برای حساب جدید، انتخاب قالب مجوز فنی پیشنهادی را تنظیم می‌کند؛ مجوز فنی را می‌توان جدا تغییر داد.'} {role==='admin'
       ?'مدیر به تمام پروژه‌ها و مدیریت حساب‌ها دسترسی دارد.'
       :role==='editor'
         ?'ویرایشگر می‌تواند کارهای پروژه‌های مجاز را ثبت و ویرایش کند، اما اجازه مدیریت کاربران را ندارد.'
         :'مشاهده‌گر فقط اطلاعات پروژه‌های مجاز را می‌بیند و حق تغییر ندارد.'}</p>
+    {invalidDisplayRole&&<p className="lan-error" role="alert">قالب ناشناخته یا انتخاب مدیرکل بدون مجوز فنی مدیر میزبان مجاز نیست. مجوز فنی را جدا تنظیم کن.</p>}
+    {activeTemplate&&<div className="setting-block lan-user-display-options">
+      <label className="setting-toggle"><input type="checkbox" checked={customUserDisplay} onChange={e=>{
+        setCustomUserDisplay(e.target.checked);
+        if(e.target.checked&&!userDisplayFeatures.length){
+          setUserDisplayMode(activeTemplate.displayMode);
+          setUserDisplayFeatures(lanAvailableUserFeatures(activeTemplate,activeTemplate.displayMode));
+        }
+      }}/><span><strong>شخصی‌سازی امکانات این کاربر</strong>
+        <small>تنظیم مستقل هر حساب، در محدوده قالب انتخابی؛ با خاموش‌کردن، تنظیمات پیش‌فرض قالب اعمال می‌شود.</small>
+      </span></label>
+      {customUserDisplay&&<>
+        <label>حالت نمایش این حساب
+          <select value={activeMode} onChange={e=>setUserDisplayMode(e.target.value)}>
+            {INTERFACE_MODE_OPTIONS.filter(item=>LAN_MODE_ORDER[item.id]<=LAN_MODE_ORDER[activeTemplate.displayMode])
+              .map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
+        <details className="lan-role-features"><summary>امکانات قابل مشاهده ({userFeatureKeys.filter(key=>userDisplayFeatures.includes(key)).length.toLocaleString('fa-IR')} از {userFeatureKeys.length.toLocaleString('fa-IR')})</summary>
+          <div className="scope-list" role="group" aria-label="امکانات قابل نمایش این کاربر">
+            {userFeatureKeys.map(key=><label key={key}><input type="checkbox"
+              checked={userDisplayFeatures.includes(key)}
+              onChange={e=>setUserDisplayFeatures(keys=>e.target.checked?[...keys,key]:keys.filter(item=>item!==key))}/>
+              {LAN_FEATURE_LABELS[key]||key}</label>)}
+          </div>
+        </details>
+      </>}
+    </div>}
     {role!=='admin'&&scope==='selected'&&<div className="scope-list" role="group" aria-label="پروژه‌های مجاز">
       {projects.map(p=><label key={p.id}><input type="checkbox" checked={selectedProjects.includes(p.id)}
         onChange={e=>setSelectedProjects(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>{p.name}</label>)}
@@ -202,13 +402,13 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         <input aria-label="رنگ آواتار کاربر" type="color" value={userColor} onChange={e=>setUserColor(e.target.value)}/></label>
     </div>
     <div className="lan-actions"><button type="button" className="btn primary"
-      disabled={busy||!name.trim()||(!editingUsername&&userPassword.length<10)}
+      disabled={busy||invalidDisplayRole||!name.trim()||(!editingUsername&&userPassword.length<10)}
       onClick={saveUser}>{editingUsername?'ذخیره تغییرات کاربر':'ایجاد حساب کاربر'}</button>
       {editingUsername&&<button type="button" className="btn secondary" onClick={resetUserForm}>حساب جدید</button>}
       {editingUsername&&<button type="button" className="btn secondary"
         disabled={busy||userPassword.length<10} onClick={resetPassword}>بازنشانی رمز</button>}
     </div>
-    <p className="lan-help">تغییر نقش و محدوده فقط با مجوز مدیر انجام می‌شود. رمز قبلی هنگام بازنشانی باطل می‌شود.</p>
+    <p className="lan-help">مجوز فنی روی میزبان اعمال می‌شود و قالب نمایشی جای آن را نمی‌گیرد. رمز قبلی هنگام بازنشانی باطل می‌شود.</p>
   </div>}
   {!!notice&&<div className="inline-message">{notice}</div>}{!!error&&<div className="lan-error" role="alert">{error}</div>}
  </div></section></div>;
