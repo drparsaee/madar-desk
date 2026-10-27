@@ -18,6 +18,11 @@
 | Frontend | Vite 6.4.5, 1,694 transformed modules; successful production build |
 | PyInstaller | One-file/windowed build succeeded with exit code 0 |
 
+Source snapshot: `release/Madar-Desk-v1.0-rc13-vitrea-clock-dock-QA2-20261027-source.zip`,
+created through `git archive HEAD` at `d2aaeac` (tracked source only).
+Its SHA-256 is `2318B60C7895CF1BE88E7E85417ABF0592681F29704F6659EABEF07CAD420F3A`.
+The later publication-status correction is documentation-only and does not alter the EXE.
+
 Build emitted non-fatal missing-hidden-import warnings for `pycparser.lextab`, `pycparser.yacctab`, and `importlib_resources.trees`. These imports were not individually exercised and warnings have not been declared harmless for all application paths.
 
 ## Visual and clock acceptance
@@ -72,6 +77,9 @@ Evidence (local QA machine only, deliberately ignored by Git):
 - Production LAN/TLS hardening, all security edge cases, backup disaster recovery, clean Windows install and mobile/low-end performance.
 - Unified SQLite migration on existing operational data. Nothing in these QA runs intentionally enabled or migrated that storage. Do not infer active production SQLite merely from its source support.
 - Pixel-perfect match with Vitrea across all screens, dark/light on all hardware, native screenshot callback reliability, and accessibility audit beyond the tested cases.
-- Publishing source to private LocalForge remote: a `git ls-remote --heads origin main` attempt failed with `Failed to authenticate user`; no external push or force-push was done.
+- The first read-only `git ls-remote` call failed authentication, but a later
+  `git fetch origin main` succeeded. After verifying the exact loopback LocalForge
+  origin and fast-forward ancestry, `git push origin HEAD:refs/heads/main`
+  succeeded with `d675140..d2aaeac`. No external GitHub push or force-push was done.
 
 The candidate is evidence-backed for **the isolated tested paths only**, not a full-product release sign-off.
