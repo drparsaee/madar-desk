@@ -4,6 +4,7 @@ import {Avatar, AvatarIconPicker, RoleBadge, DEFAULT_AVATAR_COLOR} from './membe
 import {PrioritySettings} from './priorities.jsx';
 import {INTERFACE_FEATURE_TIERS, INTERFACE_MODE_OPTIONS} from './interface_mode.js';
 import {WidgetSettings} from './clock_widget.jsx';
+import './settings_density.css';
 
 export const DEFAULT_STAGES=[
  {id:'inbox',label:'صندوق ورودی',subtitle:'ایده‌ها و کارهای جدید',color:'#9ca3af'},
@@ -57,13 +58,18 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
  const moveStage=(id,d)=>{const index=stages.findIndex(s=>s.id===id),next=index+d;if(next<0||next>=stages.length)return;const a=[...stages];[a[index],a[next]]=[a[next],a[index]];onChange(s=>({...s,stages:a}));};
  const updateDefault=checked=>onChange(s=>({...s,settings:{...s.settings,costDefault:checked},projects:s.projects.map(p=>({...p,costEnabled:checked}))}));
  const updateTheme=theme=>onChange(s=>({...s,settings:{...s.settings,theme}}));
- return <div className="overlay" onMouseDown={onClose}><section className="dialog settings-modal" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true"><div className="dialog-head"><h2><Settings2 size={18}/> تنظیمات مدار</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div>
+ return <div className="overlay" onMouseDown={onClose}><section className="dialog settings-modal settings-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="تنظیمات مدار"><div className="dialog-head"><h2><Settings2 size={18}/> تنظیمات مدار</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div>
    <div className="dialog-body settings-content">
+     <div className="settings-density__quick-grid" aria-label="تنظیمات پرکاربرد">
      <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3><p>حالت نمایش در تمام صفحات برنامه اعمال می‌شود.</p><div className="theme-picks"><button className={settings.theme!=='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('light')}><Sun size={19}/> روشن {settings.theme!=='dark'&&<Check size={16}/>}</button><button className={settings.theme==='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('dark')}><Moon size={19}/> تاریک {settings.theme==='dark'&&<Check size={16}/>}</button></div></div>
      <div className="setting-block"><h3><Layers3 size={17}/> تقویم و نمایش تاریخ</h3><p>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها در همه سیستم‌ها یکسان می‌ماند.</p><div className="theme-picks"><button className={calendar==='jalali'?'selected':''} onClick={()=>onCalendarChange('jalali')}>شمسی {calendar==='jalali'&&<Check size={16}/>}</button><button className={calendar==='gregorian'?'selected':''} onClick={()=>onCalendarChange('gregorian')}>میلادی {calendar==='gregorian'&&<Check size={16}/>}</button></div></div>
-     {onWidgetSettingsChange&&<WidgetSettings settings={widgetSettings} onChange={onWidgetSettingsChange}/>}
      <div className="setting-block"><h3><Wallet size={17}/> مدیریت هزینه‌ها</h3><label className="setting-toggle"><input type="checkbox" checked={!!settings.costDefault} disabled={!canManage} onChange={e=>updateDefault(e.target.checked)}/><span><strong>فعال‌کردن فیلد هزینه برای همه پروژه‌ها</strong><small>هم برای پروژه‌های فعلی اعمال می‌شود و هم پیش‌فرض پروژه‌های جدید خواهد بود؛ مبالغ قبلی پاک نمی‌شوند.</small></span></label></div>
+     </div>
+     {onWidgetSettingsChange&&<WidgetSettings settings={widgetSettings} onChange={onWidgetSettingsChange}/>}
+     <details className="settings-density__disclosure"><summary><span><Layers3 size={17}/> تنظیم اولویت‌های کارت</span><small>نام، رنگ، جلوه و اولویت‌های سفارشی</small></summary>
      <PrioritySettings settings={settings} usedIds={priorityUsedIds||data.tasks.map(t=>t.priority)} canManage={canManage} onChange={priorityDefinitions=>onChange(s=>({...s,settings:{...s.settings,priorityDefinitions}}))}/>
+     </details>
+     <details className="settings-density__disclosure"><summary><span><Layers3 size={17}/> مدیریت ستون‌ها و مراحل برد</span><small>{stages.length.toLocaleString('fa-IR')} ستون، ترتیب، رنگ و بایگانی</small></summary>
      <div className="setting-block"><h3><Layers3 size={17}/> ستون‌ها و مراحل برد</h3><p>ستون‌ها را روی برد بکشید و جابه‌جا کنید یا از فلش‌های زیر استفاده کنید. رنگ هر ستون مستقل است.</p>
        <div className="stage-manager">{stages.map((stage,i)=><div className="stage-manage-row" key={stage.id}>
          <span className="stage-color" style={{background:stage.color}}/>
@@ -81,6 +87,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
        </div>)}</div>
        {canManage&&<div className="stage-new"><input value={name} maxLength={100} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addStage()} placeholder="نام ستون جدید..."/><button className="btn primary" disabled={!name.trim()} onClick={addStage}><Plus size={15}/> افزودن ستون</button></div>}
      </div>
+     </details>
      <p className="setting-foot">فونت داخلی برنامه: وزیرمتن · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>
    </div>
  </section></div>;
@@ -137,6 +144,7 @@ export const lanAvailableUserFeatures=(role,mode)=>
      LAN_MODE_ORDER[INTERFACE_FEATURE_TIERS[key]]<=LAN_MODE_ORDER[mode]);
 
 export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
+ const editorRef=React.useRef(null);
  const [view,setView]=useState('connection');
  const [mode,setMode]=useState(status?.mode||'solo');
  const [username,setUsername]=useState('');
@@ -205,6 +213,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
    setCustomUserDisplay(chosenMode!==template?.displayMode||chosenFeatures.length!==available.length);
    setScope(u.projects===null?'all':'selected');setSelectedProjects(u.projects||[]);setUserPassword('');
    setUserDisplayName(u.displayName||'');setUserIcon(u.avatarIcon||'user');setUserColor(u.avatarColor||DEFAULT_AVATAR_COLOR);setUserPhoto(u.avatarPhoto||'');
+   editorRef.current?.focus();editorRef.current?.scrollIntoView?.({block:'nearest'});
  };
  const changeDisplayRole=id=>{
    setDisplayRole(id);setCustomUserDisplay(false);
@@ -251,9 +260,9 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
  });
  const featureKeys=lanRoleFeatures(displayRoleMode);
  const canManage=status?.user?.role==='admin'&&(status?.mode==='server'||status?.mode==='client');
- return <div className="overlay" onMouseDown={onClose}><section className="dialog lan-modal" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true"><div className="dialog-head"><h2><Users size={19}/> شبکه محلی و کاربران</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div><div className="dialog-body">
+ return <div className="overlay" onMouseDown={onClose}><section className="dialog lan-modal lan-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="شبکه محلی و کاربران"><div className="dialog-head"><h2><Users size={19}/> شبکه محلی و کاربران</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div><div className="dialog-body">
   <div className="lan-heading"><span className={'connection-dot '+(status?.mode!=='solo'?'online':'')}/><strong>{status?.mode==='server'?'میزبان شبکه فعال':status?.mode==='client'?'متصل به سرور':'حالت شخصی و آفلاین'}</strong></div>
-  <p className="lan-help">برای اتصال امن، میزبان را با گواهی و کلید PEM راه‌اندازی کن، نشانی HTTPS را به کلاینت بده و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP قدیمی فقط برای شبکه مورداعتماد است و رمزگذاری ندارد.</p>
+  <details className="lan-density__help"><summary><ShieldCheck size={15}/> راهنمای اتصال امن و اثر انگشت گواهی</summary><p className="lan-help">برای اتصال امن، میزبان را با گواهی و کلید PEM راه‌اندازی کن، نشانی HTTPS را به کلاینت بده و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP قدیمی فقط برای شبکه مورداعتماد است و رمزگذاری ندارد.</p></details>
   {status?.error&&<p className="lan-error">{status.error}</p>}
   {status?.mode==='solo'?<div className="lan-modes">
     <div className="setting-block"><h3><Cloud size={17}/> فعال‌کردن سرور محلی</h3>
@@ -273,6 +282,8 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
   {view==='users'&&canManage&&<div className="users-manager">
     <div className="account-create-heading"><Users size={18}/> تعریف کاربر و تعیین سطح دسترسی</div>
     <p className="lan-help">مدیر قالب نمایش هر حساب را تعیین می‌کند. قالب فقط امکانات قابل مشاهده را مشخص می‌کند؛ مجوز فنی و دسترسی به داده‌ها جداگانه در میزبان کنترل می‌شود.</p>
+    <div className="lan-density__workspace">
+    <aside className="lan-density__directory" aria-label="حساب‌ها و قالب‌های موجود">
     <h3>کاربران شبکه</h3>
     <div className="users-list">{users.map(u=><div className="user-row" key={u.username}>
       <Avatar user={u} size={36}/>
@@ -286,7 +297,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         onClick={()=>{if(window.confirm('این کاربر حذف شود؟'))deleteUser(u.username)}}><Trash2 size={15}/></button>
     </div>)}</div>
     <details className="setting-block lan-display-roles">
-      <summary><ShieldCheck size={16}/> قالب‌های نقش و سطح نمایش</summary>
+      <summary><ShieldCheck size={16}/> قالب‌های نقش و سطح نمایش <small>{displayRoles.length.toLocaleString('fa-IR')} قالب</small></summary>
       <p className="lan-help">قالب‌های اصلی مدیرکل، مدیر ارشد، مدیر میانی، مدیر واحد و کارمند آماده‌اند. می‌توانی برای بخش‌های دیگر قالب اختصاصی بسازی. این قالب‌ها به‌تنهایی دسترسی امنیتی ایجاد نمی‌کنند.</p>
       <div className="users-list">{displayRoles.map(template=>{
         const assigned=users.filter(u=>lanDefaultDisplayRoleForUser(u)===template.id).length;
@@ -323,14 +334,20 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         {editingDisplayRole&&<button className="btn secondary" type="button" onClick={resetDisplayRoleForm}>انصراف از ویرایش</button>}
       </div>
     </details>
+    </aside>
+    <section className="lan-density__editor" aria-label="فرم مدیریت حساب" tabIndex={-1} ref={editorRef}>
     <div className="account-create-heading"><Plus size={17}/>{editingUsername?'ویرایش حساب '+editingUsername:'ساخت حساب جدید'}</div>
-    <div className="setting-grid">
+    <h4>مشخصات حساب</h4>
+    <div className="setting-grid lan-density__identity">
       <label>نام کاربری انگلیسی<input autoComplete="off" maxLength={40} disabled={!!editingUsername}
         value={name} onChange={e=>setName(e.target.value)}/></label>
       <label>رمز {editingUsername?'(خالی = بدون تغییر)':'(حداقل ۱۰ نویسه)'}
         <input type="password" autoComplete="new-password" value={userPassword} onChange={e=>setUserPassword(e.target.value)}/></label>
       <label>نام نمایشی<input maxLength={80} value={userDisplayName} onChange={e=>setUserDisplayName(e.target.value)}
         placeholder="مثلاً مسئول تولید"/></label>
+    </div>
+    <h4>نقش و دسترسی</h4>
+    <div className="setting-grid lan-density__access">
       <label>قالب نقش و امکانات قابل نمایش
         <select value={displayRole} onChange={e=>changeDisplayRole(e.target.value)}>
           {!displayRoles.some(item=>item.id===displayRole)&&<option value={displayRole}>نقش ناشناخته ({displayRole})</option>}
@@ -389,6 +406,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         onChange={e=>setSelectedProjects(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>{p.name}</label>)}
       {!selectedProjects.length&&<small>هیچ پروژه‌ای انتخاب نشده است؛ این حساب فقط به پروفایل خودش دسترسی خواهد داشت.</small>}
     </div>}
+    <details className="lan-density__optional"><summary><Users size={15}/> آواتار و نماد کاربر <small>شخصی‌سازی اختیاری</small></summary>
     <div className="account-avatar-controls">
       <span>نماد انتخابی حوزه فعالیت کاربر</span>
       <div className="account-avatar-preview"><Avatar size={43} user={{username:name,displayName:userDisplayName,
@@ -398,7 +416,8 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
       <label className="member-color-field">رنگ آواتار
         <input aria-label="رنگ آواتار کاربر" type="color" value={userColor} onChange={e=>setUserColor(e.target.value)}/></label>
     </div>
-    <div className="lan-actions"><button type="button" className="btn primary"
+    </details>
+    <div className="lan-actions lan-density__actions"><button type="button" className="btn primary"
       disabled={busy||invalidDisplayRole||!name.trim()||(!editingUsername&&userPassword.length<10)}
       onClick={saveUser}>{editingUsername?'ذخیره تغییرات کاربر':'ایجاد حساب کاربر'}</button>
       {editingUsername&&<button type="button" className="btn secondary" onClick={resetUserForm}>حساب جدید</button>}
@@ -406,6 +425,8 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         disabled={busy||userPassword.length<10} onClick={resetPassword}>بازنشانی رمز</button>}
     </div>
     <p className="lan-help">مجوز فنی روی میزبان اعمال می‌شود و قالب نمایشی جای آن را نمی‌گیرد. رمز قبلی هنگام بازنشانی باطل می‌شود.</p>
+    </section>
+    </div>
   </div>}
   {!!notice&&<div className="inline-message">{notice}</div>}{!!error&&<div className="lan-error" role="alert">{error}</div>}
  </div></section></div>;

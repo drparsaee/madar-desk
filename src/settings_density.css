@@ -1,0 +1,149 @@
+/* Compact, task-oriented settings and LAN administration. Scoped to these dialogs. */
+.settings-modal.settings-density{width:min(980px,calc(100vw - 28px));max-width:980px}
+.lan-modal.lan-density{width:min(1080px,calc(100vw - 28px));max-width:1080px}
+.settings-density,.lan-density{--density-line:#e0e8f1;--density-surface:#f7faff;--density-ink:#39506c}
+.settings-density .dialog-body,.lan-density .dialog-body{padding:14px 18px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.settings-density .settings-content{gap:12px}
+.settings-density__quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch}
+.settings-density__quick-grid>.setting-block{min-width:0;padding:13px 14px;border:1px solid var(--density-line);border-radius:12px;background:var(--density-surface);gap:8px}
+.settings-density__quick-grid .setting-block h3{font-size:12px;gap:6px}
+.settings-density__quick-grid .setting-block p{font-size:10px;line-height:1.65}
+.settings-density__quick-grid .theme-picks{gap:5px;align-self:end}
+.settings-density__quick-grid .theme-picks button{min-width:0;min-height:35px;flex:1;justify-content:center;gap:5px;padding:7px 6px;font-size:11px}
+.settings-density__quick-grid .theme-picks svg{width:15px;height:15px;flex:none}
+.settings-density__quick-grid .setting-toggle{padding:8px 10px;align-items:flex-start;gap:8px!important}
+.settings-density__quick-grid .setting-toggle input{flex:none}
+.settings-density__quick-grid .setting-toggle small{font-size:10px;line-height:1.6}
+.settings-density>.dialog-body>.widget-settings,
+.settings-density .widget-settings--panel{min-width:0;padding:12px 14px;gap:10px}
+.settings-density .widget-settings--panel{background:var(--density-surface);border-color:var(--density-line)}
+.settings-density .widget-settings__choices{gap:5px}
+.settings-density .widget-settings__choices button{min-height:32px;padding:5px 9px}
+.settings-density__disclosure,.lan-density__optional,.lan-density .lan-display-roles{
+  min-width:0;border:1px solid var(--density-line);border-radius:12px;background:var(--density-surface);
+}
+.settings-density__disclosure>summary,.lan-density__optional>summary,.lan-density .lan-display-roles>summary{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;
+  min-height:42px;padding:9px 13px;cursor:pointer;color:var(--density-ink);font-size:12px;font-weight:750;
+  list-style:none;
+}
+.settings-density__disclosure>summary::-webkit-details-marker,.lan-density__optional>summary::-webkit-details-marker,.lan-density .lan-display-roles>summary::-webkit-details-marker{display:none}
+.settings-density__disclosure>summary::after,.lan-density__optional>summary::after,.lan-density .lan-display-roles>summary::after{
+  content:'⌄';font-size:18px;line-height:1;opacity:.7;margin-inline-start:auto;
+}
+.settings-density__disclosure[open]>summary::after,.lan-density__optional[open]>summary::after,.lan-density .lan-display-roles[open]>summary::after{content:'⌃'}
+.settings-density__disclosure>summary>span,.lan-density .lan-display-roles>summary>svg,.lan-density__optional>summary>svg{display:inline-flex;align-items:center;gap:8px}
+.settings-density__disclosure>summary small,.lan-density .lan-display-roles>summary small,.lan-density__optional>summary small{
+  font-size:10px;font-weight:500;color:#71859c;
+}
+.settings-density__disclosure[open]>summary,.lan-density__optional[open]>summary,.lan-density .lan-display-roles[open]>summary{border-bottom:1px solid var(--density-line)}
+.settings-density__disclosure>.setting-block{border:0;padding:12px 13px 14px;gap:9px}
+.settings-density__disclosure .priority-settings{min-width:0}
+.settings-density__disclosure .priority-definition-list{gap:6px}
+.settings-density__disclosure .priority-definition{padding:8px 10px;gap:8px}
+.settings-density__disclosure .stage-manager{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.settings-density__disclosure .stage-manage-row{min-width:0;padding:6px 8px;gap:6px}
+.settings-density__disclosure .stage-manage-actions{flex:none;flex-wrap:wrap;justify-content:flex-end}
+.settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.settings-density__disclosure .stage-manage-row .stage-manage-actions button{min-width:27px;min-height:28px}
+.settings-density .setting-foot{margin:0;padding-inline:4px;font-size:10px}
+
+.lan-density .lan-heading{margin-bottom:7px;gap:9px}
+.lan-density__help{margin:0 0 10px;font-size:11px}
+.lan-density__help>summary{display:flex;align-items:center;gap:7px;width:max-content;max-width:100%;cursor:pointer;color:#5a769a;font-weight:700}
+.lan-density__help>.lan-help{padding:8px 10px;margin-top:7px;border:1px solid var(--density-line);border-radius:8px;background:var(--density-surface)}
+.lan-density .lan-modes{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px;margin-top:12px}
+.lan-density .lan-modes .setting-block{min-width:0;gap:9px;padding:12px 14px}
+.lan-density .lan-modes .setting-grid{gap:8px}
+.lan-density .lan-connected{padding:9px 12px;margin-bottom:9px;gap:9px;font-size:11px}
+.lan-density .lan-actions{gap:7px;margin:8px 0}
+.lan-density .lan-actions .btn{min-height:35px;padding:7px 11px;font-size:11px}
+.lan-density .users-manager{margin-top:11px;padding-top:11px;gap:7px}
+.lan-density .account-create-heading{margin:0;font-size:13px;gap:7px}
+.lan-density__workspace{display:grid;grid-template-columns:minmax(315px,.85fr) minmax(0,1.25fr);align-items:start;gap:12px;min-width:0;margin-top:4px}
+.lan-density__directory,.lan-density__editor{min-width:0;border:1px solid var(--density-line);border-radius:12px;background:var(--density-surface);padding:12px;display:grid;gap:10px}
+.lan-density__directory h3,.lan-density__editor h4{margin:0;color:var(--density-ink);font-size:12px;font-weight:800}
+.lan-density__directory>.users-list{max-height:230px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;background:transparent}
+.lan-density__directory .user-row{gap:6px;padding:7px 8px;min-width:0}
+.lan-density__directory .user-row>span{min-width:0;gap:2px}
+.lan-density__directory .user-row>span>strong,.lan-density__directory .user-row>span>small{overflow-wrap:anywhere}
+.lan-density__directory .user-row button{flex:none;padding:5px 7px;min-height:29px}
+.lan-density__directory .users-list{min-width:0}
+.lan-density .lan-display-roles{display:block;padding:0;border-bottom:1px solid var(--density-line)}
+.lan-density .lan-display-roles>summary{justify-content:flex-start}
+.lan-density .lan-display-roles>.lan-help,.lan-density .lan-display-roles>.users-list,
+.lan-density .lan-display-roles>.account-create-heading,.lan-density .lan-display-roles>.setting-grid,
+.lan-density .lan-display-roles>.setting-toggle,.lan-density .lan-display-roles>.lan-role-features,
+.lan-density .lan-display-roles>.lan-actions{margin-inline:10px}
+.lan-density .lan-display-roles>.lan-help{padding-top:8px}
+.lan-density .lan-display-roles>.users-list{max-height:190px;overflow:auto;scrollbar-width:thin}
+.lan-density .lan-display-roles>.lan-actions{margin-bottom:10px}
+.lan-density__directory .lan-display-roles .setting-grid{grid-template-columns:1fr;gap:8px}
+.lan-density__editor{gap:10px}
+.lan-density__editor .setting-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px}
+.lan-density__editor .setting-grid label,.lan-density__directory .setting-grid label{
+  display:grid;gap:4px;font-size:11px;color:#59728f;min-width:0;
+}
+.lan-density__editor :is(input,select):not([type="checkbox"]):not([type="color"]),
+.lan-density__directory :is(input,select):not([type="checkbox"]):not([type="color"]){
+  min-width:0;width:100%;min-height:35px;padding:7px 9px;border:1px solid #d8e3ee;
+  border-radius:8px;background:#fff;color:#324965;font-size:12px;
+}
+.lan-density__editor h4:not(:first-child){border-top:1px solid var(--density-line);padding-top:9px}
+.lan-density__editor .account-role-help{margin:0;line-height:1.7}
+.lan-density__editor .lan-error{margin:0}
+.lan-density__editor .lan-user-display-options{padding:0;border:0;gap:8px}
+.lan-density__editor .lan-user-display-options .setting-toggle{padding:9px 11px}
+.lan-density__editor .lan-user-display-options>.lan-role-features,
+.lan-density__editor .lan-role-features{min-width:0}
+.lan-density .scope-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.lan-density .lan-role-features .scope-list{max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding:5px;scrollbar-width:thin}
+.lan-density .scope-list label{min-width:0;gap:6px;line-height:1.5;overflow-wrap:anywhere}
+.lan-density .scope-list input[type="checkbox"]{width:16px;height:16px;flex:none;padding:0}
+.lan-density__optional>summary{justify-content:flex-start}
+.lan-density__optional .account-avatar-controls{margin:0;background:transparent;border:0;padding:10px;gap:8px}
+.lan-density__optional .avatar-function-grid{max-height:160px}
+.lan-density__actions{position:sticky;bottom:-14px;z-index:1;padding:10px 0 6px;
+  border-top:1px solid var(--density-line);background:var(--density-surface)}
+.lan-density__editor>.lan-help:last-child{font-size:10px;line-height:1.6}
+.settings-density summary:focus-visible,.lan-density summary:focus-visible,.lan-density__editor:focus-visible{outline:3px solid #8dabf1;outline-offset:2px;border-radius:8px}
+
+:root[data-theme="dark"] .settings-density,:root[data-theme="dark"] .lan-density{
+  --density-line:#344963;--density-surface:#19283c;--density-ink:#d7e7ff;
+}
+:root[data-theme="dark"] .settings-density__quick-grid>.setting-block,
+:root[data-theme="dark"] .lan-density__directory,
+:root[data-theme="dark"] .lan-density__editor,
+:root[data-theme="dark"] .settings-density__disclosure,
+:root[data-theme="dark"] .lan-density__optional,
+:root[data-theme="dark"] .lan-density .lan-display-roles{background:var(--density-surface);border-color:var(--density-line)}
+:root[data-theme="dark"] .lan-density__editor .lan-density__actions{background:var(--density-surface)}
+:root[data-theme="dark"] .lan-density :is(.lan-density__directory,.lan-density__editor) :is(input,select):not([type="checkbox"]):not([type="color"]){background:#142237;color:#e0ebfa;border-color:#38516e}
+:root[data-theme="dark"] .lan-density__directory h3,:root[data-theme="dark"] .lan-density__editor h4{color:var(--density-ink)}
+:root[data-theme="dark"] .settings-density__disclosure>summary small,:root[data-theme="dark"] .lan-density .lan-display-roles>summary small,:root[data-theme="dark"] .lan-density__optional>summary small{color:#a4b8d1}
+
+@media(max-width:1000px){
+  .settings-density__quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .settings-density__quick-grid>.setting-block:last-child{grid-column:1/-1}
+  .lan-density__workspace{grid-template-columns:minmax(255px,.8fr) minmax(0,1.2fr)}
+  .lan-density .lan-modes{grid-template-columns:1fr}
+}
+@media(max-width:780px){
+  .lan-density__workspace{grid-template-columns:minmax(0,1fr)}
+  .lan-density__directory>.users-list{max-height:175px}
+  .settings-density__disclosure .stage-manager{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .settings-modal.settings-density,.lan-modal.lan-density{width:calc(100vw - 12px);max-width:none;border-radius:11px;max-height:96dvh}
+  .settings-density .dialog-body,.lan-density .dialog-body{padding:10px;scrollbar-gutter:auto}
+  .settings-density__quick-grid{grid-template-columns:1fr;gap:8px}
+  .settings-density__quick-grid>.setting-block:last-child{grid-column:auto}
+  .lan-density__directory,.lan-density__editor{padding:10px}
+  .lan-density__editor .setting-grid{grid-template-columns:1fr}
+  .lan-density .scope-list{grid-template-columns:1fr}
+  .lan-density__actions{bottom:-10px}
+  .lan-density__actions>.btn{flex:1}
+  .settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:1fr}
+  .settings-density__disclosure .stage-manage-row{flex-wrap:wrap}
+  .settings-density__disclosure .stage-manage-actions{width:100%;justify-content:flex-start}
+}
