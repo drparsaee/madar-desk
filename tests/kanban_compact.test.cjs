@@ -73,6 +73,7 @@ test('inline add-list tile remains a fixed-width sibling, mobile sizes stay boun
   const mobile = declarations('.kanban', '(max-width: 600px)');
   assert.match(mobile['--kanban-column-width'], /min\(276px, calc\(100vw - 28px\)\)/);
   assert.equal(declarations('.kanban .kanban-add-list__form input')['min-inline-size'], '0');
+  assert.equal(declarations('.kanban .kanban-add-list__actions').display, 'flex');
 });
 
 test('the settings portal has bounded scrolling, keyboard affordance, and dark theme', () => {
