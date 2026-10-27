@@ -2,6 +2,8 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {StandaloneAccountingWorkspace} from './standalone_accounting_workspace.jsx';
 import './styles.css';
+import {installFloatingLabels} from './floating_labels.js';
+import './floating_labels.css';
 
 class AccountingErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={failed:false};}
@@ -67,3 +69,4 @@ createRoot(root).render(
     <AuthenticatedAccounting/>
   </AccountingErrorBoundary>
 );
+installFloatingLabels(document);

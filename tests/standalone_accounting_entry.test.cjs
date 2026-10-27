@@ -25,7 +25,7 @@ test('accounting page has a separate Vite input and a return path', () => {
 
 test('main app opens standalone URL without passing tasks or project snapshots', () => {
   const app = source('src/App.jsx');
-  assert.match(app, /حسابداری مستقل<\/button>/);
+  assert.match(app, /مدیریت مالی<\/button>/);
   assert.match(app, /window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.doesNotMatch(app, /حسابداری مرتبط با کارت‌ها \(قدیمی\)/);
   assert.match(app, /prepareStandaloneFromTask\(api,/);

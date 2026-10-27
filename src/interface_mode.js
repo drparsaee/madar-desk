@@ -4,9 +4,9 @@ import {plannerIdentity} from './planner_identity.js';
 export const DEFAULT_INTERFACE_MODE = 'basic';
 export const INTERFACE_MODES = Object.freeze(['basic', 'operations', 'finance']);
 export const INTERFACE_MODE_OPTIONS = Object.freeze([
-  Object.freeze({id:'basic', label:'ساده', description:'برد، کارت، مسئول، موعد، اعلان و جست‌وجو'}),
-  Object.freeze({id:'operations', label:'تیم و عملیات', description:'ابزارهای حالت ساده، گزارش، زمان‌بندی، برنامه‌ریزی و گردش کار'}),
-  Object.freeze({id:'finance', label:'مالی و هوش مصنوعی', description:'ابزارهای تیمی و بخش مالی برای افراد مجاز؛ AI نیازمند فعال‌سازی و تأیید مستقل است'}),
+  Object.freeze({id:'basic', label:'ساده', description:'برد، فهرست، کارت، موعد، جست‌وجو و اعلان'}),
+  Object.freeze({id:'operations', label:'تیم و عملیات', description:'همه ابزارهای ساده، همراه گزارش، برنامه‌ریزی، زمان‌بندی و گردش کار'}),
+  Object.freeze({id:'finance', label:'کامل (با ابزارهای مالی)', description:'همه ابزارهای تیمی، به‌علاوه نمایش هزینه پروژه و سود برای مدیر مجاز'}),
 ]);
 
 export const INTERFACE_MODE_STORAGE_PREFIX = 'madar:interface-mode:v1:';

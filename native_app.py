@@ -483,9 +483,12 @@ class Bridge:
 
     def getPreferences(self):
         if not self.preferences_path.exists():
-            return {"calendar": "jalali"}
+            return {"calendar": "jalali", "clockWidget": "both"}
         raw = json.loads(self.preferences_path.read_text(encoding="utf8"))
-        return {"calendar": raw.get("calendar", "jalali") if raw.get("calendar") in ("jalali", "gregorian") else "jalali"}
+        return {
+            "calendar": raw.get("calendar", "jalali") if raw.get("calendar") in ("jalali", "gregorian") else "jalali",
+            "clockWidget": raw.get("clockWidget", "both") if raw.get("clockWidget") in ("both", "clock", "date", "hidden") else "both",
+        }
 
     def _clear_profile_cache(self):
         """A roster is private to its authenticated account and specific host."""
@@ -632,10 +635,15 @@ class Bridge:
         raise ValueError("ابتدا شبکه محلی را فعال کنید.")
 
     def setPreferences(self, payload):
-        if not isinstance(payload, dict) or payload.get("calendar") not in ("jalali", "gregorian"):
-            raise ValueError("تقویم انتخابی معتبر نیست.")
+        if not isinstance(payload, dict):
+            raise ValueError("تنظیمات نمایشی معتبر نیست.")
+        current = self.getPreferences()
+        calendar = payload.get("calendar", current["calendar"])
+        clock_widget = payload.get("clockWidget", current["clockWidget"])
+        if calendar not in ("jalali", "gregorian") or clock_widget not in ("both", "clock", "date", "hidden"):
+            raise ValueError("تنظیمات ساعت یا تقویم معتبر نیست.")
         temp = self.preferences_path.with_suffix(".tmp")
-        temp.write_text(json.dumps({"calendar": payload["calendar"]}), encoding="utf8")
+        temp.write_text(json.dumps({"calendar": calendar, "clockWidget": clock_widget}), encoding="utf8")
         temp.replace(self.preferences_path)
         return self.getPreferences()
 

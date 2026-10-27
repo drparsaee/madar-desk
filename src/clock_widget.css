@@ -1,0 +1,16 @@
+.clock-widget{position:relative;display:flex;align-items:center;gap:4px;min-width:0;flex:none}
+.clock-widget__display{min-width:0}
+.clock-widget__display--clock{min-width:86px}
+.clock-widget__display--date{max-width:175px}
+.clock-widget__display--date span{white-space:normal;line-height:1.55}
+.clock-widget__trigger{position:relative;flex:none;padding:7px}
+.clock-widget__trigger svg:last-child{position:absolute;right:0;bottom:0;color:#7391ba}
+.clock-widget__menu{position:absolute;left:0;top:calc(100% + 9px);z-index:70;width:230px;box-shadow:0 15px 35px #142a4b29;background:#fff;color:#263b55;border:1px solid #d5dfed;border-radius:13px;padding:12px;display:grid;gap:4px}
+.clock-widget__menu strong{font-size:12px}
+.clock-widget__menu p{font-size:10px;margin:3px 0 7px;color:#687d96}
+.clock-widget__menu button{width:100%;padding:9px 10px;display:flex;justify-content:space-between;text-align:right;color:inherit;background:transparent;border-radius:8px;font-size:12px}
+.clock-widget__menu button:hover,.clock-widget__menu button.selected{background:#ecf2fb}
+:root[data-theme="dark"] .clock-widget__menu{background:#1e3049;color:#eef5ff;border-color:#415674}
+:root[data-theme="dark"] .clock-widget__menu p{color:#b5c6df}
+:root[data-theme="dark"] .clock-widget__menu button:hover,:root[data-theme="dark"] .clock-widget__menu button.selected{background:#344b6c}
+@media(max-width:850px){.clock-widget__display--both span,.clock-widget__display--date span{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

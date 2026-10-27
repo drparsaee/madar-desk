@@ -4,9 +4,16 @@
 .interface-mode-selector__select:focus-visible{outline:3px solid #8dabf1;outline-offset:2px}
 .interface-mode-selector__description{margin:0;font-size:11px;line-height:1.8;color:#697990;overflow-wrap:anywhere}
 .interface-mode-selector--compact{padding:10px 12px;border-radius:10px;border:1px solid #d9e1eb;background:#f7f9fc}
+.interface-mode-selector__help{font-size:11px;line-height:1.8;color:#61728c}
+.interface-mode-selector__help summary{cursor:pointer;color:#5471a1;font-weight:700}
+.interface-mode-selector__help p{margin:6px 0}
+.interface-mode-selector__help ul{margin:4px 0;padding-right:17px}
+.interface-mode-selector__help li{margin:4px 0}
 .sidebar .interface-mode-selector{color:#e8efff}
 .sidebar .interface-mode-selector__label{color:#b4c0d3}
 .sidebar .interface-mode-selector__select{background:#253550;border-color:#3d516d;color:#e8efff}
 .sidebar .interface-mode-selector__description{color:#98abc6}
 .sidebar .interface-mode-selector--compact{background:#1d2b40;border-color:#324054}
+.sidebar .interface-mode-selector__help{color:#c0cce0}
+.sidebar .interface-mode-selector__help summary{color:#b6d0ff}
 @media (prefers-reduced-motion:reduce){.interface-mode-selector *{transition:none!important}}

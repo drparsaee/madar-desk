@@ -214,6 +214,16 @@ class NativeAppTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.bridge.setPreferences({"calendar": "other"})
 
+    def test_clock_widget_setting_survives_calendar_change_and_restart(self):
+        self.assertEqual(self.bridge.getPreferences()["clockWidget"], "both")
+        changed = self.bridge.setPreferences({"clockWidget": "date"})
+        self.assertEqual(changed, {"calendar": "jalali", "clockWidget": "date"})
+        self.assertEqual(self.bridge.setPreferences({"calendar": "gregorian"})["clockWidget"], "date")
+        self.assertEqual(native_app.Bridge().getPreferences()["clockWidget"], "date")
+        self.assertEqual(self.bridge.setPreferences({"clockWidget": "hidden"})["clockWidget"], "hidden")
+        with self.assertRaises(ValueError):
+            self.bridge.setPreferences({"clockWidget": "__proto__"})
+
     def test_card_cost_toggle_and_assignees_survive_backup(self):
         state = self.bridge.getState()
         self.assertIsNone(state["tasks"][0]["costEnabled"])

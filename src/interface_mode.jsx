@@ -44,7 +44,7 @@ export function InterfaceModeSelector({mode=DEFAULT_INTERFACE_MODE, onChange, di
   const descriptionId = id + '-description';
   const selectedOption = INTERFACE_MODE_OPTIONS.find(option=>option.id===selected);
   return <div className={'interface-mode-selector'+(compact?' interface-mode-selector--compact':'')} dir="rtl">
-    <label className="interface-mode-selector__label" htmlFor={id}>سطح نمایش مدار</label>
+    <label className="interface-mode-selector__label" htmlFor={id}>ابزارهای قابل نمایش</label>
     <select
       className="interface-mode-selector__select"
       id={id}
@@ -59,5 +59,11 @@ export function InterfaceModeSelector({mode=DEFAULT_INTERFACE_MODE, onChange, di
       {INTERFACE_MODE_OPTIONS.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
     </select>
     <p className="interface-mode-selector__description" id={descriptionId}>{selectedOption.description}</p>
+    <details className="interface-mode-selector__help">
+      <summary>تفاوت این سه حالت چیست؟</summary>
+      <p>این گزینه‌ها فقط شلوغی رابط را کم و زیاد می‌کنند؛ سطح دسترسی و مجوزهای کاربر تغییر نمی‌کند.</p>
+      <ul>{INTERFACE_MODE_OPTIONS.map(option=><li key={option.id}><strong>{option.label}:</strong> {option.description}</li>)}</ul>
+      <p>داشبورد سیستم حسابداری از مسیر «مدیریت مالی» و فقط با مجوز مربوط باز می‌شود.</p>
+    </details>
   </div>;
 }

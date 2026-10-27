@@ -6,9 +6,9 @@ import {
   ClipboardCheck, Cloud, CloudDownload, CloudUpload, Command, Copy, Download,
   Ellipsis, FileText, Flag, FolderClosed, HardDriveDownload, Inbox,
   LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
-  MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Sparkles, Tag,
+  MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Tag,
   Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
-  Eye, EyeOff, Wallet, GripVertical, FileInput, ReceiptText
+  Eye, EyeOff, Wallet, GripVertical, FileInput
 } from 'lucide-react';
 import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
@@ -20,7 +20,7 @@ import {RulesPanel} from './rulespanel.jsx';
 import {duplicateCard} from './taskops.js';
 import {CardAttachments} from './attachments.jsx';
 import {archiveBoardState,restoreBoardState,renameBoardState,moveCardToBoard,boardStageUpdate,legacyStatusForStage} from './boardops.js';
-import {FinanceOverview,ProfitPeek} from './financeoverview.jsx';
+import {ProfitPeek} from './financeoverview.jsx';
 import {AccountingPanel} from './accounting_panel.jsx';
 import {AccountingWorkspace} from './accounting_workspace.jsx';
 import {RialJournalPanel} from './rial_journal_panel.jsx';
@@ -46,6 +46,8 @@ import {ProgressiveLane} from './progressive_lane.jsx';
 import {CardDependencyPanel} from './card_dependency_panel.jsx';
 import {InterfaceModeSelector,useInterfaceModePreference} from './interface_mode.jsx';
 import {isInterfaceFeatureVisible} from './interface_mode.js';
+import {ClockWidget} from './clock_widget.jsx';
+import {normalizeClockWidget} from './clock_widget.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
 import './interface_mode.css';
@@ -189,15 +191,6 @@ function Modal({title,children,onClose,width=470}){
     return()=>{window.removeEventListener('keydown',fn);if(previous?.isConnected)previous.focus();};
   },[]);
   return <div className="overlay" onMouseDown={()=>closeRef.current()}><div ref={root} tabIndex={-1} className="dialog" style={{maxWidth:width}} onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-head"><h2>{title}</h2><button className="icon-btn" aria-label="بستن" onClick={()=>closeRef.current()}><X size={19}/></button></div>{children}</div></div>;
-}
-
-function DateClock({calendar}){
-  const [current,setCurrent]=useState(()=>new Date());
-  useEffect(()=>{const interval=setInterval(()=>setCurrent(new Date()),1000);return()=>clearInterval(interval);},[]);
-  const locale=calendar==='jalali'?'fa-IR-u-ca-persian':'fa-IR-u-ca-gregory';
-  const date=new Intl.DateTimeFormat(locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'}).format(current);
-  const hour=new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(current);
-  return <div className="live-clock" title="تاریخ و ساعت سیستم"><strong dir="ltr">{hour}</strong><span>{date}</span></div>;
 }
 
 function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false}){
@@ -461,7 +454,6 @@ export default function App(){
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
   const [financeOpen,setFinanceOpen]=useState(false);
-  const [financeHubOpen,setFinanceHubOpen]=useState(false);
   const [accountingOpen,setAccountingOpen]=useState(false);
   const [rialJournalOpen,setRialJournalOpen]=useState(false);
   const [rialCompanyId,setRialCompanyId]=useState('');
@@ -471,7 +463,6 @@ export default function App(){
   const [rialActivationNotice,setRialActivationNotice]=useState('');
   const [rialRefresh,setRialRefresh]=useState(0);
   const [accountingSource,setAccountingSource]=useState(null);
-  const [financeHubProject,setFinanceHubProject]=useState('');
   const [profitVisible,setProfitVisible]=useState(false);
   const [rulesOpen,setRulesOpen]=useState(false);
   const [reportingOpen,setReportingOpen]=useState(false);
@@ -488,6 +479,7 @@ export default function App(){
   const [lastSync,setLastSync]=useState(null);
   const [syncInfo,setSyncInfo]=useState({mode:'solo',connected:true,pending:false,folder:{configured:false}});
   const [calendar,setCalendar]=useState('jalali');
+  const [clockWidget,setClockWidget]=useState('both');
   const [toast,setToast]=useState('');
   const [savingError,setSavingError]=useState('');
   const [pendingRecovery,setPendingRecovery]=useState(false);
@@ -513,7 +505,7 @@ export default function App(){
   const refreshSyncStatus=async()=>setSyncInfo(await api.syncStatus());
   const refreshUsers=async()=>setUsers(await api.lanProfiles());
   useEffect(()=>{Promise.all([api.getStateForUi?api.getStateForUi():api.getState(),api.lanStatus(),api.getPreferences(),api.lanProfiles(),api.syncStatus()]).then(([s,lan,prefs,members,sync])=>{
-    const normalized=normalize(s);setData(normalized);lastSaved.current=JSON.stringify(normalized);setLanStatus(lan);setUsers(members);setCalendar(prefs.calendar||'jalali');setLastSync(new Date());ready.current=true;
+    const normalized=normalize(s);setData(normalized);lastSaved.current=JSON.stringify(normalized);setLanStatus(lan);setUsers(members);setCalendar(prefs.calendar||'jalali');setClockWidget(normalizeClockWidget(prefs.clockWidget));setLastSync(new Date());ready.current=true;
     setSyncInfo(sync);
   }).catch(e=>setSavingError('خطا در خواندن اطلاعات: '+e.message));},[]);
   useEffect(()=>{
@@ -587,7 +579,7 @@ export default function App(){
       setPortableExportOpen(false);
     }
     if(interfaceMode!=='finance'){
-      setFinanceOpen(false);setFinanceHubOpen(false);setAccountingOpen(false);
+      setFinanceOpen(false);setAccountingOpen(false);
       setRialJournalOpen(false);
       setProfitVisible(false);
     }
@@ -947,13 +939,12 @@ export default function App(){
         {show('planner')&&<button onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
         {show('activity')&&<button onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
         {show('timeDashboard')&&<button onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
-        {show('financeHub')&&<button onClick={()=>{setFinanceHubProject(selected==='all'?'':selected);setFinanceHubOpen(true);setProfitVisible(false);}}><Wallet size={18}/> مدیریت مالی</button>}
         {canViewStandalone&&<button type="button" onClick={()=>{
           if(dirty.current||saving.current||blocked.current){
             setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
           }
           window.location.assign('./accounting.html');
-        }}><ReceiptText size={18}/> حسابداری مستقل</button>}
+        }} title="ورود به داشبورد و دفتر حسابداری مستقل"><Wallet size={18}/> مدیریت مالی</button>}
         {canManage&&<button type="button" onClick={()=>setRialJournalOpen(true)}
           aria-label="دفتر روزنامه ریالی V2 فقط خواندنی"><FileText size={18}/>
           دفتر ریالی V2 (آزمایشی)</button>}
@@ -976,7 +967,6 @@ export default function App(){
       <div className="sidebar-bottom">
         <InterfaceModeSelector mode={interfaceMode} onChange={setInterfaceMode} disabled={!interfaceModeAccountReady} compact />
         {!interfaceModePersisted&&<small role="status">ترجیح نمایش این حساب روی دستگاه ذخیره نشده است.</small>}
-        <div className="sidebar-help"><div className="help-icon"><Sparkles size={19}/></div><strong>یک قدم، هر بار.</strong><p>کارها را از ذهن به برد منتقل کن و مسیرشان را ببین.</p></div>
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری و Drive <ArrowUpLeft size={15}/></button>
         <button className="sidebar-settings" onClick={()=>setLanOpen(true)}><Users size={18}/> شبکه محلی و کاربران</button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات و مراحل برد</button>
@@ -985,7 +975,7 @@ export default function App(){
     </aside>
 
     <main className="workspace">
-      <header className="topbar"><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><DateClock calendar={calendar}/></div></header>
+      <header className="topbar"><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><button className="top-icon" onClick={manualRefresh} disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی"><RefreshCw size={19} className={syncing?'spin':''}/></button><button className="top-icon" onClick={()=>setNotificationsOpen(true)} aria-label="اعلان‌ها" title="اعلان‌های من"><Bell size={19}/></button><button className="top-icon" onClick={()=>setLanOpen(true)} aria-label="شبکه محلی"><Users size={19}/></button><button className="top-icon" onClick={()=>setCloudOpen(true)} aria-label="Google Drive"><Cloud size={19}/></button><button className="top-icon" onClick={()=>setSettingsOpen(true)} aria-label="تنظیمات"><Settings2 size={19}/></button><button className="mini-user mini-profile" title={lanStatus.user?.displayName||lanStatus.user?.username||'پروفایل'} onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={35}/></button><ClockWidget calendar={calendar} mode={clockWidget} onChange={async value=>{try{const saved=await api.setPreferences({calendar,clockWidget:value});setClockWidget(normalizeClockWidget(saved.clockWidget));}catch(error){setToast('تنظیم ویجت ذخیره نشد: '+String(error?.message||error));}}}/></div></header>
       <div className="workspace-scroll">
         <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
@@ -1013,7 +1003,6 @@ export default function App(){
     </main>
     {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}
     {show('projectFinance')&&financeOpen&&selectedProject&&<FinancePanel api={api} project={selectedProject} tasks={tasks.filter(t=>t.projectId===selectedProject.id)} onClose={()=>setFinanceOpen(false)}/>}
-    {show('financeHub')&&financeHubOpen&&<FinanceOverview api={api} projects={projects} calendar={calendar} initialProjectId={financeHubProject} onClose={()=>setFinanceHubOpen(false)} onOpenInvoices={projectId=>{setSelected(projectId);setBoardId(null);setFinanceHubOpen(false);setFinanceOpen(true);}}/>}
     {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} stages={viewStages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
     {trashOpen&&<Modal title="زباله‌دان کارت‌ها" width={680} onClose={()=>setTrashOpen(false)}>
       <div className="dialog-body">
@@ -1043,7 +1032,7 @@ export default function App(){
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
     {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه حذف شود؟ کارهایش به پروژه دیگری منتقل خواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
-    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
+    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,clockWidget});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}

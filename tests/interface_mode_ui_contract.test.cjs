@@ -101,16 +101,18 @@ test('today: card cost and card-editor finance fields retain their admin guards'
   assert.match(exactOne('TaskEditor').opening,/canManage=\{canManage\}/);
 });
 
-test('today: mounted existing finance panels remain role-gated',()=>{
-  const keys={FinanceOverview:'financeHub',FinancePanel:'projectFinance',ProfitPeek:'profitPeek'};
+test('today: task-side finance panels remain role-gated; management finance opens standalone dashboard',()=>{
+  const keys={FinancePanel:'projectFinance',ProfitPeek:'profitPeek'};
   for(const [name,key] of Object.entries(keys)){
     const element=exactOne(name);
     assert.ok(guardContains(element,/\bcanManage\b/)||displayFeature(element,key),
       `${name} missing admin policy guard`);
   }
-  const nav=exactOne('button',/setFinanceHubOpen\(true\)/);
-  assert.ok(guardContains(nav,/\bcanManage\b/)||displayFeature(nav,'financeHub'),
-    'financeHub policy itself requires canManage');
+  const nav=exactOne('button',/window\.location\.assign\('\.\/accounting\.html'\)/);
+  assert.ok(guardContains(nav,/\bcanViewStandalone\b/),'standalone dashboard must require explicit finance viewing capability');
+  assert.match(nav.opening,/dirty\.current\|\|saving\.current\|\|blocked\.current/);
+  assert.match(app,/مدیریت مالی<\/button>/);
+  assert.equal(matching('FinanceOverview').length,0,'legacy financial hub must not be mounted');
   const projectFinance=exactOne('button',/setFinanceOpen\(true\)/);
   assert.ok(guardContains(projectFinance,/\bcanManage\b/)||displayFeature(projectFinance,'projectFinance'),
     'projectFinance policy itself requires canManage');
@@ -128,7 +130,7 @@ test('today: safety and account services remain present in visible application s
 
 test('feature-key mapping covers exactly the current principal App surfaces',()=>{
   const map={
-    FinanceOverview:'financeHub', FinancePanel:'projectFinance', ProfitPeek:'profitPeek',
+    FinancePanel:'projectFinance', ProfitPeek:'profitPeek',
     ReportingPanel:'reporting', RulesPanel:'automationRules',
     TrelloImportPanel:'trelloImport', CalendarFilePanel:'calendarInterop',
     PlannerPanel:'planner', WorkspaceManager:'workspaceManagement',
@@ -164,7 +166,7 @@ test('integration: account-local UI preference hook and selector connected to Ap
 
 test('integration: advanced screens and their mounted panels are tier-gated', {skip:pending},()=>{
   const map={
-    FinanceOverview:'financeHub', FinancePanel:'projectFinance', ProfitPeek:'profitPeek',
+    FinancePanel:'projectFinance', ProfitPeek:'profitPeek',
     ReportingPanel:'reporting', RulesPanel:'automationRules',
     TrelloImportPanel:'trelloImport', CalendarFilePanel:'calendarInterop',
     PlannerPanel:'planner', WorkspaceManager:'workspaceManagement',
@@ -178,7 +180,6 @@ test('integration: advanced screens and their mounted panels are tier-gated', {s
 
 test('integration: primary advanced navigation triggers also have display gates', {skip:pending},()=>{
   const map={
-    'setFinanceHubOpen(true)':'financeHub',
     'setReportingOpen(true)':'reporting',
     'setPlannerOpen(true)':'planner',
     'setActivityOpen(true)':'activity',
@@ -196,7 +197,7 @@ test('integration: primary advanced navigation triggers also have display gates'
 
 test('integration: finance cost widgets gated by both role and the finance display tier', {skip:pending},()=>{
   // Requirements checked independently: mode gates never replace canManage.
-  const keys={FinanceOverview:'financeHub',FinancePanel:'projectFinance',ProfitPeek:'profitPeek'};
+  const keys={FinancePanel:'projectFinance',ProfitPeek:'profitPeek'};
   for(const [name,key] of Object.entries(keys)){
     const element=exactOne(name);
     assert.ok(guardContains(element,/\bcanManage\b/)||displayFeature(element,key));
