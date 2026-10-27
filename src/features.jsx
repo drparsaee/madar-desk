@@ -75,17 +75,17 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
          <span className="stage-color" style={{background:stage.color}}/>
          <input className="stage-color-picker" type="color" aria-label={'رنگ ستون '+stage.label} title={'رنگ ستون '+stage.label} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'} disabled={!canManage} onChange={e=>updateStage(stage.id,{color:e.target.value})}/>
          {editing===stage.id?<div className="stage-edit-fields"><input aria-label="نام ستون" maxLength={100} value={label} onChange={e=>setLabel(e.target.value)}/><input aria-label="توضیح ستون" value={subtitle} onChange={e=>setSubtitle(e.target.value)}/></div>:<span className="stage-manage-label"><strong>{stage.label}</strong><small>{stage.archived===true?'بایگانی‌شده · ':''}{stage.subtitle}</small></span>}
-         {canManage&&<div className="stage-manage-actions">
-           {editing===stage.id?<button onClick={()=>{if(label.trim())updateStage(stage.id,{label:label.trim(),subtitle:subtitle.trim()});setEditing('');}} title="ذخیره"><Check size={16}/></button>:<button onClick={()=>{setEditing(stage.id);setLabel(stage.label);setSubtitle(stage.subtitle||'');}} title="ویرایش">ویرایش</button>}
-           <button onClick={()=>moveStage(stage.id,-1)} disabled={i===0} title="انتقال به راست"><ArrowUp size={15}/></button>
-           <button onClick={()=>moveStage(stage.id,1)} disabled={i===stages.length-1} title="انتقال به چپ"><ArrowDown size={15}/></button>
+         {canManage&&<div className="stage-manage-actions" role="group" aria-label={'عملیات ستون '+stage.label}>
+           {editing===stage.id?<button onClick={()=>{if(label.trim())updateStage(stage.id,{label:label.trim(),subtitle:subtitle.trim()});setEditing('');}} title="ذخیره" aria-label={'ذخیره ستون '+stage.label}><Check size={16}/></button>:<button onClick={()=>{setEditing(stage.id);setLabel(stage.label);setSubtitle(stage.subtitle||'');}} title="ویرایش" aria-label={'ویرایش ستون '+stage.label}>ویرایش</button>}
+           <button onClick={()=>moveStage(stage.id,-1)} disabled={i===0} title="انتقال به مرحله قبل" aria-label={'انتقال ستون '+stage.label+' به مرحله قبل'}><ArrowUp size={15}/></button>
+           <button onClick={()=>moveStage(stage.id,1)} disabled={i===stages.length-1} title="انتقال به مرحله بعد" aria-label={'انتقال ستون '+stage.label+' به مرحله بعد'}><ArrowDown size={15}/></button>
            {boardId&&(stage.archived===true?
              <button type="button" onClick={()=>onRestoreList?.(stage.id)} title="بازیابی ستون بدون تغییر کارت‌ها" aria-label={'بازیابی ستون '+stage.label}><RotateCcw size={16}/></button>:
              <button type="button" disabled={stages.filter(item=>item.archived!==true).length<=1} onClick={()=>onArchiveList?.(stage.id)} title="بایگانی ستون بدون حذف کارت‌ها" aria-label={'بایگانی ستون '+stage.label}><Archive size={16}/></button>)}
-           <button onClick={()=>{if(window.confirm('این ستون حذف شود و کارهای آن منتقل شوند؟'))deleteStage(stage.id);}} disabled={stages.length===1||stage.archived===true||stages.filter(item=>item.archived!==true).length<=1} title="حذف"><Trash2 size={15}/></button>
+           <button onClick={()=>{if(window.confirm('این ستون حذف شود و کارهای آن منتقل شوند؟'))deleteStage(stage.id);}} disabled={stages.length===1||stage.archived===true||stages.filter(item=>item.archived!==true).length<=1} title="حذف" aria-label={'حذف ستون '+stage.label}><Trash2 size={15}/></button>
          </div>}
        </div>)}</div>
-       {canManage&&<div className="stage-new"><input value={name} maxLength={100} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addStage()} placeholder="نام ستون جدید..."/><button className="btn primary" disabled={!name.trim()} onClick={addStage}><Plus size={15}/> افزودن ستون</button></div>}
+       {canManage&&<div className="stage-new"><input value={name} maxLength={100} aria-label="نام ستون جدید" onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addStage()} placeholder="نام ستون جدید..."/><button className="btn primary" disabled={!name.trim()} onClick={addStage}><Plus size={15}/> افزودن ستون</button></div>}
      </div>
      </details>
      <p className="setting-foot">فونت داخلی برنامه: وزیرمتن · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>

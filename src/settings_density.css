@@ -41,11 +41,25 @@
 .settings-density__disclosure .priority-settings{min-width:0}
 .settings-density__disclosure .priority-definition-list{gap:6px}
 .settings-density__disclosure .priority-definition{padding:8px 10px;gap:8px}
-.settings-density__disclosure .stage-manager{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-.settings-density__disclosure .stage-manage-row{min-width:0;padding:6px 8px;gap:6px}
-.settings-density__disclosure .stage-manage-actions{flex:none;flex-wrap:wrap;justify-content:flex-end}
-.settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
-.settings-density__disclosure .stage-manage-row .stage-manage-actions button{min-width:27px;min-height:28px}
+.settings-density__disclosure .stage-manager{grid-template-columns:minmax(0,1fr);gap:7px;min-width:0}
+.settings-density__disclosure .stage-manage-row{
+  display:grid;grid-template-columns:12px 31px minmax(0,1fr) max-content;
+  width:100%;min-width:0;padding:7px 9px;gap:8px;align-items:center;
+}
+.settings-density__disclosure .stage-manage-label,
+.settings-density__disclosure .stage-edit-fields{min-width:0;max-width:100%;width:100%;overflow-wrap:anywhere}
+.settings-density__disclosure .stage-manage-label :is(strong,small){white-space:normal;overflow-wrap:anywhere}
+.settings-density__disclosure .stage-manage-actions{
+  display:flex;min-width:0;flex-wrap:wrap;justify-content:flex-end;justify-self:end;gap:4px;
+}
+.settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.settings-density__disclosure .stage-manage-row .stage-manage-actions button{
+  min-width:34px;min-height:34px;padding:6px;flex:none;
+}
+.settings-density__disclosure .stage-new{min-width:0;flex-wrap:wrap}
+.settings-density__disclosure .stage-new input{flex:1 1 190px;min-width:0}
+.settings-density__disclosure .stage-manage-actions button:focus-visible,
+.settings-density__disclosure .stage-new :is(button,input):focus-visible{outline:3px solid #5086e2;outline-offset:2px}
 .settings-density .setting-foot{margin:0;padding-inline:4px;font-size:10px}
 
 .lan-density .lan-heading{margin-bottom:7px;gap:9px}
@@ -122,6 +136,46 @@
 :root[data-theme="dark"] .lan-density__directory h3,:root[data-theme="dark"] .lan-density__editor h4{color:var(--density-ink)}
 :root[data-theme="dark"] .settings-density__disclosure>summary small,:root[data-theme="dark"] .lan-density .lan-display-roles>summary small,:root[data-theme="dark"] .lan-density__optional>summary small{color:#a4b8d1}
 
+/* Workspaces are rendered by App's generic Modal, not SettingsPanel.
+   Its dialog has a dark surface in dark mode, while workspaces_panel.css
+   falls back to a dark --text. Define complete, local foreground/surface
+   tokens on the direct child. Never recolor other dialogs. */
+.dialog > .workspaces-panel{
+  --surface:#fff;--text:#273b52;--border:#d5dfeb;--accent:#285ca6;
+  --workspace-row:#f7faff;--workspace-hover:#e8f0fc;--workspace-muted:#526780;
+  color:var(--text);background:#fff;min-width:0;min-height:0;
+  max-height:calc(94dvh - 54px);overflow-y:auto;overscroll-behavior:contain;
+  padding:16px 18px;scrollbar-width:thin;
+}
+.dialog > .workspaces-panel :is(.workspaces-row,.workspaces-boardrow){
+  min-width:0;background:var(--workspace-row);border-color:var(--border);
+}
+.dialog > .workspaces-panel :is(.workspaces-heading small,.workspaces-count,.workspaces-help,.workspaces-row small){
+  opacity:1;color:var(--workspace-muted);line-height:1.6;
+}
+.dialog > .workspaces-panel .workspaces-heading strong,
+.dialog > .workspaces-panel .workspaces-boards>strong{color:var(--text)}
+.dialog > .workspaces-panel :is(button,input,select){color:var(--text);border-color:var(--border)}
+.dialog > .workspaces-panel :is(input,select){background:var(--surface)}
+.dialog > .workspaces-panel button:disabled{opacity:.6}
+.dialog > .workspaces-panel button:not(:disabled):hover{background:var(--workspace-hover);border-color:var(--accent)}
+.dialog > .workspaces-panel .workspaces-row>button.workspaces-selected{
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--surface));font-weight:750;
+}
+.dialog > .workspaces-panel :is(button,input,select,summary):focus-visible{
+  outline:3px solid var(--accent);outline-offset:2px;
+}
+.dialog > .workspaces-panel .workspaces-actions button{min-width:34px;min-height:34px}
+.dialog > .workspaces-panel .workspaces-error{color:#b42340}
+:root[data-theme="dark"] .dialog > .workspaces-panel{
+  --surface:#25384f;--text:#edf4ff;--border:#465f7c;--accent:#9dc5ff;
+  --workspace-row:#213249;--workspace-hover:#365170;--workspace-muted:#b2c8e2;
+  background:#1c283a;color:var(--text);
+}
+:root[data-theme="dark"] .dialog > .workspaces-panel .workspaces-error{color:#ffb2c0}
+:root[data-theme="dark"] .settings-density__disclosure .stage-manage-label strong{color:#e5effd}
+:root[data-theme="dark"] .settings-density__disclosure .stage-manage-label small{color:#b3c5da}
+
 @media(max-width:1000px){
   .settings-density__quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .settings-density__quick-grid>.setting-block:last-child{grid-column:1/-1}
@@ -131,7 +185,8 @@
 @media(max-width:780px){
   .lan-density__workspace{grid-template-columns:minmax(0,1fr)}
   .lan-density__directory>.users-list{max-height:175px}
-  .settings-density__disclosure .stage-manager{grid-template-columns:1fr}
+  .settings-density__disclosure .stage-manage-row{grid-template-columns:12px 31px minmax(0,1fr)}
+  .settings-density__disclosure .stage-manage-actions{grid-column:1/-1;justify-self:stretch;justify-content:flex-start}
 }
 @media(max-width:600px){
   .settings-modal.settings-density,.lan-modal.lan-density{width:calc(100vw - 12px);max-width:none;border-radius:11px;max-height:96dvh}
@@ -143,7 +198,8 @@
   .lan-density .scope-list{grid-template-columns:1fr}
   .lan-density__actions{bottom:-10px}
   .lan-density__actions>.btn{flex:1}
-  .settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:1fr}
-  .settings-density__disclosure .stage-manage-row{flex-wrap:wrap}
+  .settings-density__disclosure .stage-manage-row .stage-edit-fields{grid-template-columns:minmax(0,1fr)}
   .settings-density__disclosure .stage-manage-actions{width:100%;justify-content:flex-start}
+  .dialog > .workspaces-panel{max-height:calc(96dvh - 54px);padding:12px 10px;gap:9px}
+  .dialog > .workspaces-panel .workspaces-inline button{flex:1 1 auto}
 }
