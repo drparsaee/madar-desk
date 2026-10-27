@@ -146,8 +146,9 @@ class LocalCompanyIdentityContracts(unittest.TestCase):
     def test_initial_admin_is_required_and_secret_never_in_account_projection(self):
         with self.assertRaises(identity.IdentityError):
             self.owner.add_user("reader", "temporary-password-123", "viewer")
+        # Owner decision: 4 characters is the current minimum; reject 3.
         with self.assertRaises(identity.IdentityError):
-            self.owner.add_user("owner", "short", "admin")
+            self.owner.add_user("owner", "abc", "admin")
         self.owner.add_user("owner", "temporary-password-123", "admin")
         self.assertTrue(self.owner.initialized())
         content = (self.a / "local-users.json").read_text(encoding="utf-8")
