@@ -252,6 +252,7 @@ class GuiSmokeTest(unittest.TestCase):
 
     def test_interactive_fake_report_fullscreen_protocol_and_cleanup(self):
         payload = passing_diagnostic()
+        payload["url"] = "http://127.0.0.1:49371/index.html"
         payload["uiFlow"] = {
             name: {"pass": True, "observed": (1 if name == "task_saved_to_host" else True)}
             for name in gui.INTERACTIVE_REQUIRED
@@ -264,6 +265,8 @@ class GuiSmokeTest(unittest.TestCase):
         self.assertEqual(FakeJob.created[-1].env["MADAR_QA_VIEW"], "sample-project")
         self.assertEqual(result["checks"]["interactive_accounting_workspace_fullscreen"]["status"], "PASS")
         self.assertEqual(result["checks"]["interactive_accounting_currency_rial_display"]["status"], "PASS")
+        self.assertEqual(result["checks"]["interactive_standalone_currency_rial_head"]["status"], "PASS")
+        self.assertEqual(result["checks"]["interactive_standalone_unchanged_after_task"]["status"], "PASS")
         self.assertEqual(result["checks"]["interactive_finance_unchanged_after_task"]["status"], "PASS")
         self.assertFalse(Path(FakeJob.created[-1].env["APPDATA"]).exists())
 
@@ -284,7 +287,29 @@ class GuiSmokeTest(unittest.TestCase):
         legacy = self.run_fake(interactive=True)
         self.assertEqual(legacy["status"], "FAIL")
         self.assertEqual(legacy["checks"]["interactive_accounting_workspace_fullscreen"]["status"], "FAIL")
+        self.assertEqual(legacy["checks"]["interactive_standalone_snapshot_captured"]["status"], "FAIL")
         self.assertTrue(all(job.closed for job in FakeJob.created))
+
+    def test_index_html_return_only_allowed_in_interactive_flow(self):
+        values = passing_diagnostic()
+        values["url"] = "http://127.0.0.1:49371/index.html"
+        self.assertEqual(gui.validate_report(values)["loopback"]["status"], "FAIL")
+        self.assertEqual(gui.validate_report(values, interactive=True)["loopback"]["status"], "PASS")
+        values["url"] = "http://127.0.0.1:49371/accounting.html"
+        self.assertEqual(gui.validate_report(values, interactive=True)["loopback"]["status"], "FAIL")
+
+    def test_old_toman_flow_is_rejected_even_with_valid_task_and_host(self):
+        values = passing_diagnostic()
+        values["uiFlow"] = {name: {"pass": True, "observed": True}
+                            for name in gui.INTERACTIVE_REQUIRED
+                            if name not in ("task_saved_to_host", "standalone_currency_rial_head")}
+        values["uiFlow"]["task_saved_to_host"] = {"pass": True, "observed": 1}
+        values["uiFlow"]["accounting_currency_default_toman"] = {"pass": True, "observed": True}
+        FakeJob.diagnostic = values
+        result = self.run_fake(interactive=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["checks"]["interactive_standalone_currency_rial_head"]["status"], "FAIL")
+        self.assertTrue(FakeJob.created[-1].closed)
 
     def test_interactive_failure_when_finance_safety_claim_is_false(self):
         values = passing_diagnostic()
@@ -298,6 +323,18 @@ class GuiSmokeTest(unittest.TestCase):
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(result["checks"]["interactive_finance_unchanged_after_task"]["status"], "FAIL")
         self.assertTrue(FakeJob.created[-1].closed)
+
+    def test_interactive_failure_when_independent_ledger_changes(self):
+        values = passing_diagnostic()
+        values["uiFlow"] = {
+            name: {"pass": True, "observed": (1 if name == "task_saved_to_host" else True)}
+            for name in gui.INTERACTIVE_REQUIRED
+        }
+        values["uiFlow"]["standalone_unchanged"] = {"pass": False, "observed": False}
+        FakeJob.diagnostic = values
+        result = self.run_fake(interactive=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["checks"]["interactive_standalone_unchanged"]["status"], "FAIL")
 
 
 if __name__ == "__main__":

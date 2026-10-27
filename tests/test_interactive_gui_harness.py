@@ -1,5 +1,6 @@
 """Static/isolated protocol checks; no real Windows process is launched."""
 import importlib.util
+from copy import deepcopy
 import os
 from pathlib import Path
 import tempfile
@@ -23,6 +24,7 @@ class FakeBridge:
         self.connection = {'mode': 'solo'}
         self.path = profile / 'MadarDesk' / 'tasks.json'
         self.finance = {'accounting': {'events': []}, 'testUnit': 'TOMAN'}
+        self.independent = {'currency': 'RIAL', 'revision': 0}
         self.tasks = [{'id': 'synthetic-1', 'title': user_flow.TASK_TITLE}]
         self.finance_reads = 0
         self.state_reads = 0
@@ -34,6 +36,9 @@ class FakeBridge:
     def getState(self):
         self.state_reads += 1
         return {'tasks': self.tasks}
+
+    def standaloneAccountingRead(self):
+        return {'view': deepcopy(self.independent)}
 
 
 class FakeWindow:
@@ -113,7 +118,7 @@ class InteractiveGuiHarnessTests(unittest.TestCase):
                 item['uiFlow'][name] = {'pass':True,'observed':(
                     1 if name == 'task_saved_to_host' else True)}
 
-    def test_fake_window_protocol_is_fullscreen_only_and_no_finance_mutation(self):
+    def test_fake_window_protocol_is_independent_route_and_no_finance_mutation(self):
         # This verifies the emitted JS protocol/ordering, NOT a running EXE.
         with tempfile.TemporaryDirectory(prefix='.qa-v1-gui-isolated-') as directory:
             root = Path(directory)
@@ -138,13 +143,14 @@ class InteractiveGuiHarnessTests(unittest.TestCase):
             self.assertEqual(bridge.finance,before)
             self.assertEqual(bridge.finance_reads,3)
             scripts = '\n'.join(window.scripts)
-            for selector in ('.accw-root', '.accw-side nav',
-                             '.accw-main', '.accw-exit',
-                             'accounting-panel[role=dialog]',
-                             'واحد پولی حسابداری', 'RIAL', 'TOMAN',
-                             'accw-money-disclosure', 'بازگشت به تسک‌منیجر',
+            for selector in ('.vitrea-primary-nav button', '/accounting.html',
+                             '.sac-root', '.sac-sidebar nav',
+                             '.sac-main', '.sac-sidebar-footer button',
+                             '.sac-header-actions', 'ریال',
+                             'خروج از حسابداری', '/index.html',
                              '.create-primary', '.task-create'):
                 self.assertIn(selector,scripts)
+            self.assertNotIn('.accw-root',scripts)
             self.assertNotIn('accountingCommand',scripts)
             self.assertNotIn('financeCommand',scripts)
             self.assertNotIn('madar-interface-mode',scripts)
@@ -196,7 +202,7 @@ class InteractiveGuiHarnessTests(unittest.TestCase):
             self.assertNotIn('task_saved_to_host',outcome)
             self.assertFalse(any('.task-create' in s for s in window.scripts))
             self.assertEqual(bridge.state_reads,0)
-            self.assertEqual(bridge.finance_reads,2)
+            self.assertEqual(bridge.finance_reads,1)
 
     def test_interactive_environment_only_in_disposable_root(self):
         with tempfile.TemporaryDirectory(prefix='madar-interactive-harness-') as directory:

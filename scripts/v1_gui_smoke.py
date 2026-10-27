@@ -35,24 +35,22 @@ MAX_SCREENSHOT_BYTES = 30_000_000
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 EXIT_PASS, EXIT_FAIL, EXIT_MISSING, EXIT_UNSUPPORTED = 0, 1, 2, 3
 
-# Actual full-screen AccountingWorkspace (src/App.jsx +
-# src/accounting_workspace.jsx), NOT the deleted accounting dialog or
-# madar-interface-mode select. Missing or legacy-only QA hooks fail closed.
+# Actual independent /accounting.html route (src/standalone_main.jsx).
+# Missing or legacy-only QA hooks fail closed; no financial mutation.
 INTERACTIVE_REQUIRED = (
     "initial_rtl_and_board", "accounting_nav_visible",
-    "finance_snapshot_captured",
+    "finance_snapshot_captured", "standalone_snapshot_captured",
+    "standalone_currency_rial_head",
     "accounting_workspace_opens", "accounting_workspace_fullscreen",
     "accounting_overview_selected",
     "accounting_navigation_payments", "accounting_payments_visible",
     "accounting_navigation_reports", "accounting_reports_visible",
-    "accounting_currency_default_toman", "accounting_currency_choose_rial",
-    "accounting_currency_rial_display", "accounting_currency_choose_toman",
-    "accounting_currency_toman_restored",
+    "accounting_currency_rial_display",
     "close_accounting_workspace", "accounting_workspace_closed",
-    "finance_unchanged",
+    "finance_unchanged", "standalone_unchanged",
     "create_task_opens", "create_task_dialog", "fill_task_title",
     "create_task_submit", "new_task_drawer", "task_saved_to_host",
-    "finance_unchanged_after_task",
+    "finance_unchanged_after_task", "standalone_unchanged_after_task",
 )
 
 
@@ -201,8 +199,11 @@ def validate_report(data: object, *, screenshot: bool = False,
 
     port = data.get("port")
     url = data.get("url")
+    # Interactive navigation leaves WebView on index.html after a verified
+    # round trip. Accept this path only for that protocol, never arbitrary URLs.
+    expected_paths = ("/", "/index.html") if interactive else ("/",)
     check("loopback", _safe_int(port, 1, 65535) and isinstance(url, str)
-          and url == f"http://127.0.0.1:{port}/", url)
+          and url in {f"http://127.0.0.1:{port}{path}" for path in expected_paths}, url)
     check("dom_ready", data.get("readyState") == "complete", data.get("readyState"))
     check("root_mount", _safe_int(data.get("rootLength"), 200, 3_000_000),
           data.get("rootLength"))
@@ -591,7 +592,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--screenshot", action="store_true",
                         help="request screenshot via existing native MADAR_QA_SCREENSHOT")
     parser.add_argument("--interactive", action="store_true",
-                        help="exercise full-screen accounting workspace, unit selector and task in an isolated QA profile; never post finance")
+                        help="exercise independent /accounting.html, verify rial ledger and create one synthetic task in isolated QA AppData")
     parser.add_argument("--output-dir", type=Path,
                         help="existing NON-APPDATA directory to retain QA report/screenshot")
     args = parser.parse_args(argv)

@@ -1,8 +1,7 @@
-"""QA-only deterministic desktop interactions in an isolated Madar EXE.
+"""Interactive QA for the standalone accounting route and disposable task store.
 
-Never import/run for a normal user's desktop. Caller requires BOTH
-MADAR_RELEASE_QA=1 and MADAR_QA_INTERACTION=1 in an isolated subprocess.
-The fixture title is deliberately unique and never applied to a real profile.
+Run only from the owned EXE smoke runner with a synthetic AppData profile.
+Financial operations are read-only. The sole mutation creates one QA task.
 """
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ TASK_TITLE = 'آزمون رابط تست کاربر مدار QA'
 
 
 def _require_isolated_qa(bridge):
-    """Reject accidental execution in a user's running/connected desktop."""
+    """Reject accidental execution on a user desktop or LAN-connected host."""
     env = os.environ
     if any(env.get(flag) != '1' for flag in ('MADAR_RELEASE_QA', 'MADAR_QA_INTERACTION')):
         raise RuntimeError('interactive GUI QA must be explicitly enabled')
@@ -48,194 +47,212 @@ def run_ui_flow(window, bridge):
     _require_isolated_qa(bridge)
     results = {}
 
-    def eval_js(code):
+    def evaluate(code):
         return window.evaluate_js('(function(){' + code + '})()')
 
-    def check(name, code, *, wait=0.22):
+    def check(name, code, *, timeout=0.0):
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                value = evaluate(code)
+                if value is True:
+                    results[name] = {'pass': True, 'observed': True}
+                    return
+                last = {'pass': False, 'observed': value}
+            except Exception as exc:
+                last = {'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
+            if time.monotonic() >= deadline:
+                results[name] = last
+                return
+            time.sleep(0.15)
+
+    def record(name, callback):
         try:
-            value = eval_js(code)
+            value = callback()
             results[name] = {'pass': value is True, 'observed': value}
         except Exception as exc:
             results[name] = {'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
-        if wait:
-            time.sleep(wait)
+
+    def passed(*names):
+        return all(results.get(name, {}).get('pass') is True for name in names)
 
     check('initial_rtl_and_board', """
-      return !!document.querySelector('.app-shell .sidebar-nav') &&
+      return location.pathname==='/' &&
+        !!document.querySelector('.app-shell .sidebar-nav') &&
+        !!document.querySelector('.task-card') &&
         (document.documentElement.dir==='rtl' ||
-        document.querySelector('.app-shell')?.getAttribute('dir')==='rtl' ||
-        getComputedStyle(document.body).direction==='rtl');
-    """)
-    # Accounting navigation is an independent, admin-gated route, NOT a modal.
-    # This test must not submit any accounting forms or click finance actions.
+         document.querySelector('.app-shell')?.getAttribute('dir')==='rtl' ||
+         getComputedStyle(document.body).direction==='rtl');
+    """, timeout=4)
     check('accounting_nav_visible', """
-      return [...document.querySelectorAll('.sidebar-nav button')].some(
-        b=>b.textContent.includes('ورود به محیط حسابداری'));
-    """, wait=0.25)
-    # Capture an authoritative host snapshot, not merely DOM text.
+      return [...document.querySelectorAll('.vitrea-primary-nav button')].some(
+        b=>b.textContent.includes('حسابداری') && !b.disabled);
+    """, timeout=3)
+
+    # Capture both accounting domains. Legacy task finance and the independent
+    # SQLite head must be unchanged even if the UI looks normal after navigation.
+    finance_before = None
+    independent_before = None
     try:
         finance_before = deepcopy(bridge._load_finance())
         results['finance_snapshot_captured'] = {'pass': True, 'observed': True}
     except Exception as exc:
-        finance_before = None
         results['finance_snapshot_captured'] = {
             'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
+    try:
+        head = bridge.standaloneAccountingRead()
+        if not isinstance(head, dict) or not isinstance(head.get('view'), dict):
+            raise ValueError('standalone host returned no accounting view')
+        independent_before = deepcopy(head['view'])
+        results['standalone_snapshot_captured'] = {'pass': True, 'observed': True}
+        rial = independent_before.get('currency') == 'RIAL'
+        results['standalone_currency_rial_head'] = {'pass': rial, 'observed': rial}
+    except Exception as exc:
+        results['standalone_snapshot_captured'] = {
+            'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
+        results['standalone_currency_rial_head'] = {'pass': False, 'observed': False}
+    if not passed('initial_rtl_and_board', 'accounting_nav_visible',
+                  'finance_snapshot_captured', 'standalone_snapshot_captured',
+                  'standalone_currency_rial_head'):
+        return results
 
     check('accounting_workspace_opens', """
-      const btn=[...document.querySelectorAll('.sidebar-nav button')].find(
-        b=>b.textContent.includes('ورود به محیط حسابداری'));
-      if(!btn||btn.disabled)return false;btn.click();return true;
-    """, wait=0.65)
-    check('accounting_workspace_fullscreen', """
-      const root=document.querySelector('.accw-root[dir=rtl]');
-      return !!root && !!root.querySelector('.accw-side nav') &&
-        !!root.querySelector('.accw-main') &&
-        !document.querySelector('.app-shell') &&
-        !root.closest('[role=dialog]') &&
-        !document.querySelector('.accounting-panel[role=dialog]');
+      const b=[...document.querySelectorAll('.vitrea-primary-nav button')].find(
+        x=>x.textContent.includes('حسابداری'));
+      if(!b || b.disabled)return false;
+      b.click();return true;
     """)
-    check('accounting_overview_selected', """
-      const root=document.querySelector('.accw-root');
-      const current=root?.querySelector('.accw-side nav button[aria-current=page]');
-      return !!current && current.textContent.includes('داشبورد') &&
-        root.querySelector('.accw-top h1')?.textContent.includes('داشبورد');
-    """)
-    check('accounting_navigation_payments', """
-      const nav=document.querySelector('.accw-root .accw-side nav');
-      const button=[...nav?.querySelectorAll('button')||[]].find(
-        b=>b.textContent.includes('دریافت و پرداخت'));
-      if(!button||button.disabled)return false;button.click();return true;
-    """, wait=0.3)
-    check('accounting_payments_visible', """
-      const root=document.querySelector('.accw-root');
-      return !!root?.querySelector('.accw-payment-card') &&
-        root.querySelector('.accw-side nav button[aria-current=page]')
-            ?.textContent.includes('دریافت و پرداخت');
-    """)
-    check('accounting_navigation_reports', """
-      const nav=document.querySelector('.accw-root .accw-side nav');
-      const button=[...nav?.querySelectorAll('button')||[]].find(
-        b=>b.textContent.includes('گزارش‌ها'));
-      if(!button||button.disabled)return false;button.click();return true;
-    """, wait=0.3)
-    check('accounting_reports_visible', """
-      const root=document.querySelector('.accw-root');
-      return !!root?.querySelector('.accw-pane') &&
-        root.querySelector('.accw-side nav button[aria-current=page]')
-            ?.textContent.includes('گزارش‌ها') &&
-        root.querySelector('.accw-top h1')?.textContent.includes('گزارش‌ها');
-    """)
-    check('accounting_currency_default_toman', """
-      const root=document.querySelector('.accw-root');
-      const choice=root?.querySelector('select[aria-label="واحد پولی حسابداری"]');
-      const values=[...choice?.options||[]].map(x=>x.value);
-      return !!choice && choice.value==='TOMAN' &&
-        values.includes('TOMAN')&&values.includes('RIAL') &&
-        root.querySelector('.accw-money-disclosure[role=note]')?.textContent.includes('تومان');
-    """)
-    check('accounting_currency_choose_rial', """
-      const choice=document.querySelector('.accw-root select[aria-label="واحد پولی حسابداری"]');
-      if(!choice||choice.disabled)return false;
-      const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set;
-      if(!setter)return false;
-      setter.call(choice,'RIAL');choice.dispatchEvent(new Event('change',{bubbles:true}));
-      return true;
-    """, wait=0.32)
-    check('accounting_currency_rial_display', """
-      const root=document.querySelector('.accw-root');
-      return root?.querySelector('select[aria-label="واحد پولی حسابداری"]')?.value==='RIAL' &&
-        root.querySelector('.accw-sidefoot')?.textContent.includes('ریال') &&
-        root.querySelector('.accw-money-disclosure[role=note]')?.textContent.includes('ریال') &&
-        root.querySelector('.accw-money-disclosure')?.textContent.includes('تومان صحیح');
-    """)
-    check('accounting_currency_choose_toman', """
-      const choice=document.querySelector('.accw-root select[aria-label="واحد پولی حسابداری"]');
-      if(!choice||choice.disabled)return false;
-      const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set;
-      if(!setter)return false;
-      setter.call(choice,'TOMAN');choice.dispatchEvent(new Event('change',{bubbles:true}));
-      return true;
-    """, wait=0.32)
-    check('accounting_currency_toman_restored', """
-      const root=document.querySelector('.accw-root');
-      return root?.querySelector('select[aria-label="واحد پولی حسابداری"]')?.value==='TOMAN' &&
-        root.querySelector('.accw-sidefoot')?.textContent.includes('تومان');
-    """)
-    check('close_accounting_workspace', """
-      const btn=document.querySelector('.accw-root .accw-exit');
-      if(!btn||!btn.textContent.includes('بازگشت به تسک‌منیجر'))return false;
-      btn.click();return true;
-    """, wait=0.55)
-    check('accounting_workspace_closed', """
-      return !document.querySelector('.accw-root') &&
-        !!document.querySelector('.app-shell .sidebar-nav') &&
-        !!document.querySelector('.kanban');
-    """, wait=0.35)
-    try:
-        if finance_before is None:
-            raise RuntimeError('pre-navigation finance snapshot unavailable')
-        unchanged = bridge._load_finance() == finance_before
-        results['finance_unchanged'] = {'pass': unchanged, 'observed': unchanged}
-    except Exception as exc:
-        results['finance_unchanged'] = {
-            'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
+    if not passed('accounting_workspace_opens'):
+        return results
 
-    # A fresh task is safe only after the finance workspace really closed,
-    # the board returned, and its authoritative finance snapshot is unchanged.
-    # On any failed prerequisite, stop clicking. The smoke validator will
-    # report missing task checks as FAIL rather than forging a green result.
-    prerequisite_names = (
-        'initial_rtl_and_board', 'accounting_nav_visible',
-        'finance_snapshot_captured', 'accounting_workspace_opens',
-        'accounting_workspace_fullscreen', 'accounting_overview_selected',
-        'accounting_navigation_payments', 'accounting_payments_visible',
-        'accounting_navigation_reports', 'accounting_reports_visible',
-        'accounting_currency_default_toman',
-        'accounting_currency_choose_rial', 'accounting_currency_rial_display',
-        'accounting_currency_choose_toman', 'accounting_currency_toman_restored',
-        'close_accounting_workspace', 'accounting_workspace_closed',
-        'finance_unchanged',
-    )
-    if any(results[name]['pass'] is not True for name in prerequisite_names):
+    check('accounting_workspace_fullscreen', """
+      const root=document.querySelector('.sac-root[dir=rtl]');
+      return location.pathname==='/accounting.html' && !!root &&
+        !!root.querySelector('.sac-sidebar nav[aria-label="ناوبری میز حسابداری"]') &&
+        !!root.querySelector('.sac-main') &&
+        !document.querySelector('.app-shell') && !root.closest('[role=dialog]');
+    """, timeout=9)
+    check('accounting_overview_selected', """
+      const root=document.querySelector('.sac-root');
+      const selected=root?.querySelector('.sac-sidebar nav button[aria-current=page]');
+      return !!selected && selected.textContent.includes('داشبورد') &&
+        root.querySelector('.sac-main .sac-header h1')?.textContent.includes('داشبورد') &&
+        !!root.querySelector('.sac-vtr-home');
+    """, timeout=5)
+    check('accounting_currency_rial_display', """
+      const root=document.querySelector('.sac-root');
+      return !!root &&
+        root.querySelector('.sac-sidebar-footer strong')?.textContent.trim()==='ریال' &&
+        root.querySelector('.sac-header-actions')?.textContent.includes('ریال') &&
+        !root.querySelector('select[aria-label="واحد پولی حسابداری"]');
+    """, timeout=4)
+    if not passed('accounting_workspace_fullscreen', 'accounting_overview_selected',
+                  'accounting_currency_rial_display'):
+        return results
+
+    check('accounting_navigation_payments', """
+      const btn=[...document.querySelectorAll('.sac-sidebar nav button')].find(
+        b=>b.textContent.includes('دریافت، پرداخت و اقساط'));
+      if(!btn||btn.disabled)return false;btn.click();return true;
+    """)
+    check('accounting_payments_visible', """
+      const root=document.querySelector('.sac-root');
+      return !!root &&
+        root.querySelector('.sac-sidebar nav button[aria-current=page]')
+            ?.textContent.includes('دریافت، پرداخت و اقساط') &&
+        root.querySelector('.sac-header h1')?.textContent.includes('دریافت، پرداخت و اقساط');
+    """, timeout=4)
+    check('accounting_navigation_reports', """
+      const btn=[...document.querySelectorAll('.sac-sidebar nav button')].find(
+        b=>b.textContent.includes('گزارش‌های مالی'));
+      if(!btn||btn.disabled)return false;btn.click();return true;
+    """)
+    check('accounting_reports_visible', """
+      const root=document.querySelector('.sac-root');
+      return !!root &&
+        root.querySelector('.sac-sidebar nav button[aria-current=page]')
+            ?.textContent.includes('گزارش‌های مالی') &&
+        root.querySelector('.sac-header h1')?.textContent.includes('گزارش‌های مالی');
+    """, timeout=4)
+    if not passed('accounting_navigation_payments', 'accounting_payments_visible',
+                  'accounting_navigation_reports', 'accounting_reports_visible'):
+        return results
+
+    check('close_accounting_workspace', """
+      const btn=document.querySelector('.sac-sidebar-footer button');
+      if(!btn || !btn.textContent.includes('خروج از حسابداری'))return false;
+      btn.click();return true;
+    """)
+    check('accounting_workspace_closed', """
+      return location.pathname==='/index.html' &&
+        !document.querySelector('.sac-root') &&
+        !!document.querySelector('.app-shell .sidebar-nav') &&
+        !!document.querySelector('.task-card');
+    """, timeout=10)
+
+    def unchanged():
+        return finance_before is not None and bridge._load_finance() == finance_before
+
+    def independent_unchanged():
+        snapshot = bridge.standaloneAccountingRead()
+        return (independent_before is not None and isinstance(snapshot, dict)
+                and snapshot.get('view') == independent_before)
+
+    record('finance_unchanged', unchanged)
+    record('standalone_unchanged', independent_unchanged)
+
+    # Do not create a task unless both independent financial snapshots were
+    # unchanged and the real board reappeared after the accounting round trip.
+    if not passed('accounting_workspace_closed', 'finance_unchanged',
+                  'standalone_unchanged'):
         return results
 
     check('create_task_opens', """
       const btn=document.querySelector('.create-primary');
-      if(!btn || btn.disabled)return false;btn.click();return true;
-    """,wait=0.35)
-    check('create_task_dialog', "return !!document.querySelector('.dialog[role=dialog] form.task-create');")
-    # React tracks native input setters: using the prototype setter prevents
-    # bypassing its controlled value mechanism while dispatching input.
+      if(!btn||btn.disabled)return false;btn.click();return true;
+    """, timeout=4)
+    check('create_task_dialog', """
+      return !!document.querySelector('.dialog[role=dialog] form.task-create');
+    """, timeout=4)
+    if not passed('create_task_opens', 'create_task_dialog'):
+        return results
     check('fill_task_title', """
       const i=document.querySelector('.task-create input[required]');
       if(!i)return false;
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'آزمون رابط تست کاربر مدار QA');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')
+        .set.call(i,'آزمون رابط تست کاربر مدار QA');
       i.dispatchEvent(new Event('input',{bubbles:true}));return true;
     """)
+    time.sleep(0.2)
     check('create_task_submit', """
-      const submit=document.querySelector('.task-create button[type=submit]');
-      if(!submit||submit.disabled)return false;submit.click();return true;
-    """,wait=0.75)
+      const btn=document.querySelector('.task-create button[type=submit]');
+      if(!btn||btn.disabled)return false;btn.click();return true;
+    """)
+    if not passed('fill_task_title', 'create_task_submit'):
+        return results
     check('new_task_drawer', """
-      const drawer=document.querySelector('.drawer[role=dialog]');
-      return !!drawer && drawer.querySelector('.task-edit-title')?.value==='آزمون رابط تست کاربر مدار QA';
-    """,wait=0.75)
+      const d=document.querySelector('.drawer[role=dialog]');
+      return !!d && d.querySelector('.task-edit-title')?.value===
+        'آزمون رابط تست کاربر مدار QA';
+    """, timeout=8)
     try:
-        # The bridge reads the actual disposable host state; DOM appearance
-        # alone is insufficient evidence that an edit survived persistence.
-        stored = bridge.getState()
-        matched = [task for task in stored.get('tasks', []) if task.get('title') == TASK_TITLE]
+        # The React editor opens optimistically; persistence is debounced by
+        # 320 ms and the asynchronous host write can finish still later.
+        # Poll only authoritative host state. An unsaved UI card never passes.
+        deadline = time.monotonic() + 8.0
+        matched = []
+        while True:
+            saved = bridge.getState()
+            matched = [task for task in saved.get('tasks', [])
+                       if task.get('title') == TASK_TITLE]
+            if len(matched) == 1 or len(matched) > 1 or time.monotonic() >= deadline:
+                break
+            time.sleep(0.2)
         results['task_saved_to_host'] = {'pass': len(matched) == 1,
                                          'observed': len(matched)}
     except Exception as exc:
-        results['task_saved_to_host'] = {'pass': False,
-                                         'error': type(exc).__name__ + ': ' + str(exc)[:180]}
-    try:
-        if finance_before is None:
-            raise RuntimeError('pre-navigation finance snapshot unavailable')
-        unchanged = bridge._load_finance() == finance_before
-        results['finance_unchanged_after_task'] = {'pass': unchanged, 'observed': unchanged}
-    except Exception as exc:
-        results['finance_unchanged_after_task'] = {
+        results['task_saved_to_host'] = {
             'pass': False, 'error': type(exc).__name__ + ': ' + str(exc)[:180]}
+    record('finance_unchanged_after_task', unchanged)
+    record('standalone_unchanged_after_task', independent_unchanged)
     return results
