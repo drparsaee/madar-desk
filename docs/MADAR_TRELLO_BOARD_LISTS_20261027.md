@@ -27,6 +27,8 @@
 - آزمون WebView2 با `MADAR_QA_VIEW=board-add-create`: شش ستون پس از ایجاد `QA list creation`، فرم بسته، گزارش بدون خطای JS. فایل JSON ایزوله شش stage، دو board و چهار task دارد؛ هر دو برد فعال stage جدید را حفظ کرده‌اند.
 - اجرای مستقیم `data_model.validate_plus` روی فایل JSON **ایزوله** پس از افزودن ستون: **PASS**. این آزمون فقط قرارداد ساختار و referenceهای JSON را می‌سنجد و کنترل host-side ACL را ثابت نمی‌کند.
 - اجرای جامع Python پیش از به‌روزرسانی یک تست قدیمی: ۱۴۸۳ آزمون، یک شکست مربوط به انتظارِ منسوخ حداقل طول رمز (تست رمز ۵ کاراکتری را رد می‌خواست، ولی تصمیم مالک حداقل ۴ است). پس از اصلاح همان assertion در `tests/test_standalone_accounting_authorization_contract.py`، **۱۷ تست ماژول هویت موفق** (دو مورد expected failure). **کل مجموعهٔ ۱۴۸۳ تایی پس از این اصلاح دوباره اجرا نشده** و نباید به‌عنوان PASS کامل گزارش شود.
+- آزمون متمرکز Native/GUI: `python -m unittest tests.test_native tests.test_gui_smoke_harness tests.test_interactive_gui_harness -q` با **۴۴/۴۴ موفق**.
+- نمونهٔ QA جداگانه با ارسال `WM_CLOSE` به پنجرهٔ خودش بسته شد و فرایند خارج شد. پس از Build، نمونهٔ اصلی `pythonw.exe native_app.py` بدون متغیرهای QA راه‌اندازی شد؛ پنجرهٔ «مدار | مدیریت کارهای من» در سطح Win32 **visible، responsive (not hung)** و انتقال آن به پیش‌زمینه موفق بود. این مشاهده فقط وضعیت پنجره را می‌سنجد و تأیید دستی همهٔ تعاملات داخل GUI نیست.
 - آزمون Chromium مرتبط با تغییر DOM، حذف و جابه‌جایی مرحله توسط worker ثبت شده است؛ تأیید دستی در همهٔ viewportها انجام نشده است.
 
 ## حدود و موارد باز
