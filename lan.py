@@ -29,6 +29,9 @@ from datetime import datetime, timezone
 from automation_due import due_events
 from attachments import AttachmentStore
 from offline_exchange import atomic_json
+from role_profiles import (BUILTIN_LABELS, MAX_ROLES, MODE_RANK,
+                           DISPLAY_FEATURE_TIERS, LEGACY_DISPLAY_ROLE,
+                           default_roles, effective_display, public_role, validate_role)
 import collab
 import finance
 
@@ -157,14 +160,15 @@ def make_account(username, password, role="viewer", projects=None):
             "role": role, "projects": projects, **clean_profile({})}
 
 
-def public_user(account):
+def public_user(account, display_roles=None):
     return {k: account.get(k) for k in ("username", "role", "projects")} | {
         "financeView": (account.get("role") == "admin" or
                         account.get("financeView") is True),
         "financeEdit": (account.get("role") == "admin" or
                         (account.get("role") == "editor" and
                          account.get("financeEdit") is True)),
-        **clean_profile({}, account)
+        **clean_profile({}, account),
+        **effective_display(account, display_roles)
     }
 
 
@@ -241,7 +245,7 @@ def pinned_https_json(url, fingerprint, *, method="GET", data=None, headers=None
         raise ValueError("LAN HTTPS requires a private or loopback IP address") from exc
     if not (address.is_private or address.is_loopback):
         raise ValueError("LAN HTTPS requires a private or loopback IP address")
-    if method not in ("GET", "POST"):
+    if method not in ("GET", "POST", "DELETE"):
         raise ValueError("Unsupported LAN HTTP method")
 
     body = None if data is None else (data if isinstance(data, bytes)
@@ -290,6 +294,8 @@ class LanService:
         self.sessions = {}
         self.failed = {}
         self.users = self._read_users()
+        self.display_roles_path = self.users_path.with_name(self.users_path.stem + ".display-roles.json")
+        self.display_roles = self._read_display_roles()
         self.server = None
         self.thread = None
         self.integration_router = None
@@ -321,14 +327,79 @@ class LanService:
         tmp.write_text(json.dumps(self.users, ensure_ascii=False, indent=2), encoding="utf8")
         tmp.replace(filename)
 
+    def _read_display_roles(self):
+        defaults = default_roles()
+        if not self.display_roles_path.exists():
+            return defaults
+        data = json.loads(self.display_roles_path.read_text(encoding="utf8"))
+        if (type(data) is not dict or set(data) != {"version", "roles"} or
+                type(data["version"]) is not int or data["version"] != 1 or
+                type(data["roles"]) is not list or
+                not len(defaults) <= len(data["roles"]) <= MAX_ROLES):
+            raise ValueError("Invalid display role catalog")
+        roles = {}
+        for entry in data["roles"]:
+            role = validate_role(entry)
+            if role["id"] in roles:
+                raise ValueError("Duplicate display role id")
+            # Release updates may add new UI features. Built-in templates are
+            # code-owned and normalized on read; custom templates are persisted.
+            roles[role["id"]] = defaults.get(role["id"], role)
+        if not set(BUILTIN_LABELS).issubset(roles):
+            raise ValueError("Required display roles are missing")
+        return roles
+
+    def _public_user(self, account):
+        return public_user(account, self.display_roles)
+
+    def list_display_roles(self, token):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Only administrators can manage presentation roles")
+            return [public_role(role) for role in self.display_roles.values()]
+
+    def upsert_display_role(self, token, payload):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Only administrators can manage presentation roles")
+            role = validate_role(payload)
+            if role["id"] in BUILTIN_LABELS:
+                raise ValueError("Built-in display role templates cannot be edited")
+            if role["id"] not in self.display_roles and len(self.display_roles) >= MAX_ROLES:
+                raise ValueError("Display role catalog limit reached")
+            updated = {**self.display_roles, role["id"]: role}
+            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
+            self.display_roles = updated
+            return public_role(role)
+
+    def delete_display_role(self, token, role_id):
+        with self.lock:
+            who = self.account_for(token)
+            if who["role"] != "admin":
+                raise PermissionError("Only administrators can manage presentation roles")
+            if type(role_id) is not str or role_id not in self.display_roles:
+                raise ValueError("Display role not found")
+            if role_id in BUILTIN_LABELS:
+                raise ValueError("Built-in display roles cannot be deleted")
+            if any(account.get("displayRole", LEGACY_DISPLAY_ROLE.get(account.get("role"))) == role_id
+                   for account in self.users.values()):
+                raise ValueError("Display role is assigned to an account")
+            updated = {k: v for k, v in self.display_roles.items() if k != role_id}
+            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
+            self.display_roles = updated
+            return True
+
     def setup_owner(self, username, password):
         with self.lock:
             if self.users:
                 raise ValueError("مدیر قبلاً تعریف شده است.")
             account = make_account(username, password, "admin")
+            account["displayRole"] = "superadmin"
             self.users[username] = account
             self._store_users()
-            return public_user(account)
+            return self._public_user(account)
 
     def authenticate(self, username, password, ip="127.0.0.1"):
         if not isinstance(username, str) or not isinstance(password, str):
@@ -344,7 +415,7 @@ class LanService:
             self.failed.pop(ip, None)
             token = secrets.token_urlsafe(32)
             self.sessions[token] = (username, time.time() + 12 * 3600)
-            return {"token": token, "user": public_user(account)}
+            return {"token": token, "user": self._public_user(account)}
 
     def account_for(self, token):
         with self.lock:
@@ -362,17 +433,17 @@ class LanService:
             who = self.account_for(token)
             if who["role"] != "admin":
                 raise PermissionError("فقط مدیر به کاربران دسترسی دارد.")
-            return [public_user(u) for u in self.users.values()]
+            return [self._public_user(u) for u in self.users.values()]
 
     def list_profiles(self, token):
         with self.lock:
             who = self.account_for(token)
             if who["role"] == "admin":
-                return [public_user(u) for u in self.users.values()]
+                return [self._public_user(u) for u in self.users.values()]
             result = []
             for user in self.users.values():
                 if user["username"] == who["username"]:
-                    result.append(public_user(user))
+                    result.append(self._public_user(user))
                     continue
                 # Profiles are directory entries for coworkers on shared projects,
                 # not a general user directory. A user with zero grants sees self.
@@ -384,7 +455,7 @@ class LanService:
                         continue
                 else:
                     shared = None if who["projects"] is None else set(who["projects"])
-                visible = public_user(user)
+                visible = self._public_user(user)
                 # Do not disclose coworkers' project permissions outside what the
                 # requesting user can already see.
                 if shared is not None:
@@ -401,7 +472,11 @@ class LanService:
             who = self.account_for(token)
             who.update(clean_profile(payload, who))
             self._store_users()
-            return public_user(who)
+            return self._public_user(who)
+
+    def current_user(self, token):
+        with self.lock:
+            return self._public_user(self.account_for(token))
 
     def change_password(self, token, current, new_password):
         with self.lock:
@@ -477,6 +552,18 @@ class LanService:
             if who["role"] != "admin":
                 raise PermissionError("فقط مدیر می‌تواند کاربران را تغییر دهد.")
             old = self.users.get(username)
+            display_role = payload.get("displayRole", old.get("displayRole", LEGACY_DISPLAY_ROLE[role])
+                                       if old else LEGACY_DISPLAY_ROLE[role])
+            # A legacy ACL downgrade resets presentation defaults unless the
+            # administrator explicitly chooses a new display role.
+            if old and "displayRole" not in payload and old.get("role") != role:
+                display_role = LEGACY_DISPLAY_ROLE[role]
+            if type(display_role) is not str or display_role not in self.display_roles:
+                raise ValueError("Display role does not exist")
+            if display_role == "superadmin" and role != "admin":
+                raise ValueError("Superadmin display is reserved for administrators")
+            if role == "admin" and display_role != "superadmin":
+                raise ValueError("Administrator accounts must use superadmin display")
             if username == who["username"] and role != "admin":
                 raise ValueError("مدیر نمی‌تواند نقش خودش را کاهش دهد.")
             if not password and not old:
@@ -487,6 +574,36 @@ class LanService:
                     account.update(clean_profile({}, old))
             else:
                 account = {**old, "role": role, "projects": scope}
+            account["displayRole"] = display_role
+            # Per-account customization can narrow its role's visible features,
+            # but cannot exceed the role's presentation ceiling.
+            display_role_profile = self.display_roles[display_role]
+            base_mode = display_role_profile["displayMode"]
+            role_changed = bool(old and old.get("displayRole", LEGACY_DISPLAY_ROLE.get(old.get("role"))) != display_role)
+            account_mode = payload.get("displayMode", None if role_changed else
+                                       old.get("displayMode") if old else None)
+            if account_mode is not None:
+                if (type(account_mode) is not str or account_mode not in MODE_RANK or
+                        MODE_RANK[account_mode] > MODE_RANK[base_mode]):
+                    raise ValueError("User display mode exceeds assigned role")
+                account["displayMode"] = account_mode
+            else:
+                account.pop("displayMode", None)
+            allowed = [feature for feature in display_role_profile["features"]
+                       if MODE_RANK[DISPLAY_FEATURE_TIERS[feature]] <=
+                       MODE_RANK[account_mode or base_mode]]
+            account_features = payload.get("displayFeatures", None if role_changed else
+                                           old.get("displayFeatures") if old else None)
+            if account_features is not None:
+                if (type(account_features) is not list or len(account_features) > len(allowed) or
+                        any(type(feature) is not str or feature not in allowed
+                            for feature in account_features) or
+                        len(account_features) != len(set(account_features))):
+                    raise ValueError("User display features exceed assigned role")
+                account["displayFeatures"] = [feature for feature in allowed
+                                              if feature in account_features]
+            else:
+                account.pop("displayFeatures", None)
             # The admin API is the only place where finance grants are
             # assigned. Password/profile updates preserve existing grants.
             # A downgrade to viewer must revoke write access immediately.
@@ -515,7 +632,7 @@ class LanService:
                 for key, record in list(self.sessions.items()):
                     if record[0] == username:
                         del self.sessions[key]
-            return public_user(account)
+            return self._public_user(account)
 
     def delete_user(self, token, username):
         with self.lock:
@@ -544,7 +661,7 @@ class LanService:
         with self.lock, self.bridge._lock:
             who = self.account_for(token)
             data = view_for(self.bridge.getState(), who)
-            return {"state": data, "revision": revision(data), "user": public_user(who)}
+            return {"state": data, "revision": revision(data), "user": self._public_user(who)}
 
     def write_state(self, token, incoming, expected):
         from native_app import is_valid, normalize_state
@@ -943,7 +1060,7 @@ class LanService:
                     self.end_headers()
                     self.wfile.write(outcome.body)
                     return
-                if endpoint not in ("/api/login", "/api/state", "/api/users", "/api/user",
+                if endpoint not in ("/api/login", "/api/state", "/api/me", "/api/display-roles", "/api/users", "/api/user",
                                     "/api/profiles", "/api/profile", "/api/password",
                                     "/api/reset-password", "/api/comments", "/api/notifications",
                                     "/api/activity", "/api/collab", "/api/finance", "/api/finance-status",
@@ -984,6 +1101,8 @@ class LanService:
                                                                      payload.get("password"), self.client_address[0]))
                     if self.command == "GET" and endpoint == "/api/state":
                         return self.reply(200, service.read_state(token))
+                    if self.command == "GET" and endpoint == "/api/me":
+                        return self.reply(200, {"user": service.current_user(token)})
                     if self.command == "POST" and endpoint == "/api/state":
                         return self.reply(200, service.write_state(token, payload.get("state"),
                                                                     payload.get("revision")))
@@ -1053,6 +1172,19 @@ class LanService:
                             token, payload["kind"], payload=payload)})
                     if self.command == "GET" and endpoint == "/api/users":
                         return self.reply(200, {"users": service.list_users(token)})
+                    if self.command == "GET" and endpoint == "/api/display-roles":
+                        return self.reply(200, {"roles": service.list_display_roles(token)})
+                    if self.command == "POST" and endpoint == "/api/display-roles":
+                        if payload.get("action") == "delete":
+                            if set(payload) != {"action", "id"}:
+                                raise ValueError("Invalid display role deletion request")
+                            return self.reply(200, {"ok": service.delete_display_role(token, payload["id"])})
+                        return self.reply(200, {"role": service.upsert_display_role(token, payload)})
+                    if self.command == "DELETE" and endpoint == "/api/display-roles":
+                        params = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+                        if set(params) != {"id"} or len(params["id"]) != 1:
+                            raise ValueError("Display role id is required")
+                        return self.reply(200, {"ok": service.delete_display_role(token, params["id"][0])})
                     if self.command == "GET" and endpoint == "/api/profiles":
                         return self.reply(200, {"users": service.list_profiles(token)})
                     if self.command == "POST" and endpoint == "/api/profile":
@@ -1080,6 +1212,9 @@ class LanService:
                 self.process()
 
             def do_POST(self):
+                self.process()
+
+            def do_DELETE(self):
                 self.process()
 
             def do_PATCH(self):
