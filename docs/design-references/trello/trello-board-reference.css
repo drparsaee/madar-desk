@@ -1,0 +1,23 @@
+/*
+ * Captured from a public Trello board on 2026-10-27 at 1280x720.
+ * Reference tokens only. Do NOT import blindly into Madar.
+ * Each value below was measured using getComputedStyle or getBoundingClientRect.
+ */
+:root {
+  --trello-ref-column-wrapper-width: 284px;
+  --trello-ref-column-surface-width: 272px;
+  --trello-ref-column-horizontal-inset: 6px;
+  --trello-ref-column-radius: 12px;
+  --trello-ref-column-background: #f1f2f4;
+  --trello-ref-list-header-height: 40px;
+  --trello-ref-card-width: 256px;
+  --trello-ref-card-radius: 8px;
+  --trello-ref-card-background: #fff;
+  --trello-ref-card-spacer: 8px;
+  --trello-ref-text-primary: #292a2e;
+  --trello-ref-text-secondary: #505258;
+  --trello-ref-font-family: "Atlassian Sans", ui-sans-serif, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Ubuntu, "Helvetica Neue", sans-serif;
+  --trello-ref-card-shadow: 0 1px 1px rgba(30, 31, 33, 0.25),
+    0 0 1px rgba(30, 31, 33, 0.31);
+}

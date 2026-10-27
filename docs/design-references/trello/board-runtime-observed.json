@@ -1,0 +1,520 @@
+{
+    "source":  "https://trello.com/b/nC8QJJoZ/trello-development-roadmap",
+    "observedAt":  "2026-10-27T18:00:30.405Z",
+    "viewport":  {
+                     "width":  1280,
+                     "height":  720
+                 },
+    "body":  {
+                 "tag":  "BODY",
+                 "text":  "Skip to:\nBoard\nBoard switcher\nFeatures\nSolutions\nPlans\nPricing\nResourc",
+                 "x":  0,
+                 "y":  0,
+                 "width":  1280,
+                 "height":  720,
+                 "background":  "rgb(255, 255, 255)",
+                 "color":  "rgb(41, 42, 46)",
+                 "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                 "fontSize":  "14px",
+                 "fontWeight":  "400",
+                 "borderRadius":  "0px",
+                 "padding":  "0px",
+                 "gap":  "normal",
+                 "shadow":  "none"
+             },
+    "samples":  {
+                    "board-view":  {
+                                       "count":  1,
+                                       "first":  [
+                                                     {
+                                                         "tag":  "DIV",
+                                                         "text":  "Trello Development Roadmap\n+8\nNew Trello Roadmap\n2\n*** The Trello road",
+                                                         "x":  0,
+                                                         "y":  60,
+                                                         "width":  1280,
+                                                         "height":  660,
+                                                         "background":  "rgba(0, 0, 0, 0)",
+                                                         "color":  "rgb(41, 42, 46)",
+                                                         "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                         "fontSize":  "14px",
+                                                         "fontWeight":  "400",
+                                                         "borderRadius":  "0px",
+                                                         "padding":  "0px",
+                                                         "gap":  "normal",
+                                                         "shadow":  "none"
+                                                     }
+                                                 ]
+                                   },
+                    "board-canvas":  {
+                                         "count":  1,
+                                         "first":  [
+                                                       {
+                                                           "tag":  "DIV",
+                                                           "text":  "New Trello Roadmap\n2\n*** The Trello roadmap has moved! Click the link ",
+                                                           "x":  0,
+                                                           "y":  128,
+                                                           "width":  1280,
+                                                           "height":  592,
+                                                           "background":  "rgba(0, 0, 0, 0)",
+                                                           "color":  "rgb(41, 42, 46)",
+                                                           "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                           "fontSize":  "14px",
+                                                           "fontWeight":  "400",
+                                                           "borderRadius":  "0px",
+                                                           "padding":  "0px",
+                                                           "gap":  "normal",
+                                                           "shadow":  "none"
+                                                       }
+                                                   ]
+                                     },
+                    "lists":  {
+                                  "count":  1,
+                                  "first":  [
+                                                {
+                                                    "tag":  "UL",
+                                                    "text":  "New Trello Roadmap\n2\n*** The Trello roadmap has moved! Click the link ",
+                                                    "x":  0,
+                                                    "y":  126,
+                                                    "width":  1280,
+                                                    "height":  590,
+                                                    "background":  "rgba(0, 0, 0, 0)",
+                                                    "color":  "rgb(41, 42, 46)",
+                                                    "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                    "fontSize":  "14px",
+                                                    "fontWeight":  "400",
+                                                    "borderRadius":  "0px",
+                                                    "padding":  "2px 6px 12px",
+                                                    "gap":  "normal",
+                                                    "shadow":  "none"
+                                                }
+                                            ]
+                              },
+                    "list-wrapper":  {
+                                         "count":  45,
+                                         "first":  [
+                                                       {
+                                                           "tag":  "LI",
+                                                           "text":  "New Trello Roadmap\n2\n*** The Trello roadmap has moved! Click the link ",
+                                                           "x":  6,
+                                                           "y":  128,
+                                                           "width":  284,
+                                                           "height":  576,
+                                                           "background":  "rgba(0, 0, 0, 0)",
+                                                           "color":  "rgb(41, 42, 46)",
+                                                           "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                           "fontSize":  "14px",
+                                                           "fontWeight":  "400",
+                                                           "borderRadius":  "0px",
+                                                           "padding":  "0px 6px",
+                                                           "gap":  "normal",
+                                                           "shadow":  "none"
+                                                       },
+                                                       {
+                                                           "tag":  "LI",
+                                                           "text":  "Live (Jan-March 2021)\n4\nMore Butler Automation Types For All!\nCard Dur",
+                                                           "x":  290,
+                                                           "y":  128,
+                                                           "width":  284,
+                                                           "height":  576,
+                                                           "background":  "rgba(0, 0, 0, 0)",
+                                                           "color":  "rgb(41, 42, 46)",
+                                                           "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                           "fontSize":  "14px",
+                                                           "fontWeight":  "400",
+                                                           "borderRadius":  "0px",
+                                                           "padding":  "0px 6px",
+                                                           "gap":  "normal",
+                                                           "shadow":  "none"
+                                                       }
+                                                   ]
+                                     },
+                    "list":  {
+                                 "count":  45,
+                                 "first":  [
+                                               {
+                                                   "tag":  "DIV",
+                                                   "text":  "New Trello Roadmap\n2\n*** The Trello roadmap has moved! Click the link ",
+                                                   "x":  12,
+                                                   "y":  128,
+                                                   "width":  272,
+                                                   "height":  196,
+                                                   "background":  "rgb(241, 242, 244)",
+                                                   "color":  "rgb(80, 82, 88)",
+                                                   "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                   "fontSize":  "14px",
+                                                   "fontWeight":  "400",
+                                                   "borderRadius":  "12px",
+                                                   "padding":  "0px 0px 4px",
+                                                   "gap":  "normal",
+                                                   "shadow":  "rgba(30, 31, 33, 0.25) 0px 1px 1px 0px, rgba(30, 31, 33, 0.31) 0px 0px 1px 0px"
+                                               },
+                                               {
+                                                   "tag":  "DIV",
+                                                   "text":  "Live (Jan-March 2021)\n4\nMore Butler Automation Types For All!\nCard Dur",
+                                                   "x":  296,
+                                                   "y":  128,
+                                                   "width":  272,
+                                                   "height":  576,
+                                                   "background":  "rgb(241, 242, 244)",
+                                                   "color":  "rgb(80, 82, 88)",
+                                                   "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                   "fontSize":  "14px",
+                                                   "fontWeight":  "400",
+                                                   "borderRadius":  "12px",
+                                                   "padding":  "0px 0px 4px",
+                                                   "gap":  "normal",
+                                                   "shadow":  "rgba(30, 31, 33, 0.25) 0px 1px 1px 0px, rgba(30, 31, 33, 0.31) 0px 0px 1px 0px"
+                                               }
+                                           ]
+                             },
+                    "list-header":  {
+                                        "count":  45,
+                                        "first":  [
+                                                      {
+                                                          "tag":  "DIV",
+                                                          "text":  "New Trello Roadmap\n2",
+                                                          "x":  12,
+                                                          "y":  128,
+                                                          "width":  272,
+                                                          "height":  40,
+                                                          "background":  "rgba(0, 0, 0, 0)",
+                                                          "color":  "rgb(80, 82, 88)",
+                                                          "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                          "fontSize":  "14px",
+                                                          "fontWeight":  "400",
+                                                          "borderRadius":  "0px",
+                                                          "padding":  "8px 8px 0px",
+                                                          "gap":  "0px normal",
+                                                          "shadow":  "none"
+                                                      },
+                                                      {
+                                                          "tag":  "DIV",
+                                                          "text":  "Live (Jan-March 2021)\n4",
+                                                          "x":  296,
+                                                          "y":  128,
+                                                          "width":  272,
+                                                          "height":  40,
+                                                          "background":  "rgba(0, 0, 0, 0)",
+                                                          "color":  "rgb(80, 82, 88)",
+                                                          "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                          "fontSize":  "14px",
+                                                          "fontWeight":  "400",
+                                                          "borderRadius":  "0px",
+                                                          "padding":  "8px 8px 0px",
+                                                          "gap":  "0px normal",
+                                                          "shadow":  "none"
+                                                      }
+                                                  ]
+                                    },
+                    "list-name":  {
+                                      "count":  45,
+                                      "first":  [
+                                                    {
+                                                        "tag":  "H2",
+                                                        "text":  "New Trello Roadmap",
+                                                        "x":  20,
+                                                        "y":  136,
+                                                        "width":  203,
+                                                        "height":  32,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(80, 82, 88)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "20px",
+                                                        "fontWeight":  "653",
+                                                        "borderRadius":  "0px",
+                                                        "padding":  "0px",
+                                                        "gap":  "normal",
+                                                        "shadow":  "none"
+                                                    },
+                                                    {
+                                                        "tag":  "H2",
+                                                        "text":  "Live (Jan-March 2021)",
+                                                        "x":  304,
+                                                        "y":  136,
+                                                        "width":  203,
+                                                        "height":  32,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(80, 82, 88)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "20px",
+                                                        "fontWeight":  "653",
+                                                        "borderRadius":  "0px",
+                                                        "padding":  "0px",
+                                                        "gap":  "normal",
+                                                        "shadow":  "none"
+                                                    }
+                                                ]
+                                  },
+                    "list-cards":  {
+                                       "count":  45,
+                                       "first":  [
+                                                     {
+                                                         "tag":  "OL",
+                                                         "text":  "*** The Trello roadmap has moved! Click the link below to visit it\u0027s n",
+                                                         "x":  16,
+                                                         "y":  172,
+                                                         "width":  264,
+                                                         "height":  148,
+                                                         "background":  "rgba(0, 0, 0, 0)",
+                                                         "color":  "rgb(80, 82, 88)",
+                                                         "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                         "fontSize":  "14px",
+                                                         "fontWeight":  "400",
+                                                         "borderRadius":  "0px",
+                                                         "padding":  "4px",
+                                                         "gap":  "0px normal",
+                                                         "shadow":  "none"
+                                                     },
+                                                     {
+                                                         "tag":  "OL",
+                                                         "text":  "More Butler Automation Types For All!\nCard Duration Power-Up\n2\nBynder ",
+                                                         "x":  300,
+                                                         "y":  172,
+                                                         "width":  264,
+                                                         "height":  528,
+                                                         "background":  "rgba(0, 0, 0, 0)",
+                                                         "color":  "rgb(80, 82, 88)",
+                                                         "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                         "fontSize":  "14px",
+                                                         "fontWeight":  "400",
+                                                         "borderRadius":  "0px",
+                                                         "padding":  "4px",
+                                                         "gap":  "0px normal",
+                                                         "shadow":  "none"
+                                                     }
+                                                 ]
+                                   },
+                    "list-card":  {
+                                      "count":  174,
+                                      "first":  [
+                                                    {
+                                                        "tag":  "LI",
+                                                        "text":  "*** The Trello roadmap has moved! Click the link below to visit it\u0027s n",
+                                                        "x":  20,
+                                                        "y":  176,
+                                                        "width":  256,
+                                                        "height":  76,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(80, 82, 88)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "14px",
+                                                        "fontWeight":  "400",
+                                                        "borderRadius":  "0px",
+                                                        "padding":  "0px",
+                                                        "gap":  "8px normal",
+                                                        "shadow":  "none"
+                                                    },
+                                                    {
+                                                        "tag":  "LI",
+                                                        "text":  "https://www.atlassian.com/roadmap/cloud?selectedProduct=trello",
+                                                        "x":  20,
+                                                        "y":  260,
+                                                        "width":  256,
+                                                        "height":  56,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(80, 82, 88)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "14px",
+                                                        "fontWeight":  "400",
+                                                        "borderRadius":  "0px",
+                                                        "padding":  "0px",
+                                                        "gap":  "8px normal",
+                                                        "shadow":  "none"
+                                                    }
+                                                ]
+                                  },
+                    "trello-card":  {
+                                        "count":  2,
+                                        "first":  [
+                                                      {
+                                                          "tag":  "DIV",
+                                                          "text":  "Card Duration Power-Up\n2",
+                                                          "x":  304,
+                                                          "y":  307,
+                                                          "width":  256,
+                                                          "height":  112,
+                                                          "background":  "rgb(255, 255, 255)",
+                                                          "color":  "rgb(41, 42, 46)",
+                                                          "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                          "fontSize":  "14px",
+                                                          "fontWeight":  "400",
+                                                          "borderRadius":  "8px",
+                                                          "padding":  "0px",
+                                                          "gap":  "normal",
+                                                          "shadow":  "rgba(30, 31, 33, 0.25) 0px 1px 1px 0px, rgba(30, 31, 33, 0.31) 0px 0px 1px 0px"
+                                                      },
+                                                      {
+                                                          "tag":  "DIV",
+                                                          "text":  "Microsoft Teams Power-Up\n2",
+                                                          "x":  588,
+                                                          "y":  307,
+                                                          "width":  256,
+                                                          "height":  208,
+                                                          "background":  "rgb(255, 255, 255)",
+                                                          "color":  "rgb(41, 42, 46)",
+                                                          "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                          "fontSize":  "14px",
+                                                          "fontWeight":  "400",
+                                                          "borderRadius":  "8px",
+                                                          "padding":  "0px",
+                                                          "gap":  "normal",
+                                                          "shadow":  "rgba(30, 31, 33, 0.25) 0px 1px 1px 0px, rgba(30, 31, 33, 0.31) 0px 0px 1px 0px"
+                                                      }
+                                                  ]
+                                    },
+                    "card-name":  {
+                                      "count":  173,
+                                      "first":  [
+                                                    {
+                                                        "tag":  "A",
+                                                        "text":  "*** The Trello roadmap has moved! Click the link below to visit it\u0027s n",
+                                                        "x":  32,
+                                                        "y":  184,
+                                                        "width":  236,
+                                                        "height":  60,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(22, 75, 53)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "16px",
+                                                        "fontWeight":  "500",
+                                                        "borderRadius":  "0px",
+                                                        "padding":  "0px",
+                                                        "gap":  "normal",
+                                                        "shadow":  "none"
+                                                    },
+                                                    {
+                                                        "tag":  "A",
+                                                        "text":  "More Butler Automation Types For All!",
+                                                        "x":  316,
+                                                        "y":  251,
+                                                        "width":  236,
+                                                        "height":  40,
+                                                        "background":  "rgba(0, 0, 0, 0)",
+                                                        "color":  "rgb(255, 255, 255)",
+                                                        "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                        "fontSize":  "16px",
+                                                        "fontWeight":  "500",
+                                                        "borderRadius":  "0px 0px 8px 8px",
+                                                        "padding":  "0px",
+                                                        "gap":  "normal",
+                                                        "shadow":  "none"
+                                                    }
+                                                ]
+                                  },
+                    "list-card-gap":  {
+                                          "count":  174,
+                                          "first":  [
+                                                        {
+                                                            "tag":  "DIV",
+                                                            "text":  "",
+                                                            "x":  12,
+                                                            "y":  168,
+                                                            "width":  272,
+                                                            "height":  8,
+                                                            "background":  "rgba(0, 0, 0, 0)",
+                                                            "color":  "rgb(80, 82, 88)",
+                                                            "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                            "fontSize":  "14px",
+                                                            "fontWeight":  "400",
+                                                            "borderRadius":  "0px",
+                                                            "padding":  "0px 8px",
+                                                            "gap":  "4px",
+                                                            "shadow":  "none"
+                                                        },
+                                                        {
+                                                            "tag":  "DIV",
+                                                            "text":  "",
+                                                            "x":  20,
+                                                            "y":  252,
+                                                            "width":  256,
+                                                            "height":  8,
+                                                            "background":  "rgba(0, 0, 0, 0)",
+                                                            "color":  "rgb(80, 82, 88)",
+                                                            "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                            "fontSize":  "14px",
+                                                            "fontWeight":  "400",
+                                                            "borderRadius":  "0px",
+                                                            "padding":  "0px 8px",
+                                                            "gap":  "4px",
+                                                            "shadow":  "none"
+                                                        }
+                                                    ]
+                                      },
+                    "board-header":  {
+                                         "count":  2,
+                                         "first":  [
+                                                       {
+                                                           "tag":  "DIV",
+                                                           "text":  "Trello Development Roadmap\n+8",
+                                                           "x":  0,
+                                                           "y":  60,
+                                                           "width":  1280,
+                                                           "height":  56,
+                                                           "background":  "rgba(0, 0, 0, 0.24)",
+                                                           "color":  "rgb(41, 42, 46)",
+                                                           "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                           "fontSize":  "14px",
+                                                           "fontWeight":  "400",
+                                                           "borderRadius":  "0px",
+                                                           "padding":  "0px",
+                                                           "gap":  "normal",
+                                                           "shadow":  "none"
+                                                       },
+                                                       {
+                                                           "tag":  "DIV",
+                                                           "text":  "Trello Development Roadmap\n+8",
+                                                           "x":  0,
+                                                           "y":  60,
+                                                           "width":  1281,
+                                                           "height":  56,
+                                                           "background":  "rgba(0, 0, 0, 0)",
+                                                           "color":  "rgb(41, 42, 46)",
+                                                           "fontFamily":  "\"Atlassian Sans\", ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, \"Helvetica Neue\", sans-serif",
+                                                           "fontSize":  "14px",
+                                                           "fontWeight":  "400",
+                                                           "borderRadius":  "0px",
+                                                           "padding":  "12px",
+                                                           "gap":  "4px",
+                                                           "shadow":  "none"
+                                                       }
+                                                   ]
+                                     }
+                },
+    "foundIds":  [
+                     "header-container",
+                     "logged-out-header-wide",
+                     "logged-out-header-wide-tabs",
+                     "logged-out-header-wide-tab",
+                     "logged-out-header-narrow",
+                     "logged-out-header-menu-button",
+                     "board-view",
+                     "board-header",
+                     "board-name-container",
+                     "board-name-input",
+                     "board-name-display",
+                     "board-facepile-member",
+                     "board-facepile-show-more",
+                     "board-visibility-option-public",
+                     "board-canvas",
+                     "lists",
+                     "list-wrapper",
+                     "list",
+                     "list-header",
+                     "list-name",
+                     "list-collapse-button",
+                     "list-card-gap",
+                     "list-cards",
+                     "list-card",
+                     "list-card-wrapper",
+                     "full-cover-card",
+                     "card-front-cover",
+                     "card-done-state-read-only",
+                     "card-name",
+                     "link-card",
+                     "trello-card",
+                     "card-front-badges",
+                     "badge-card-description",
+                     "card-attachments-count",
+                     "minimal-card"
+                 ]
+}

@@ -1,0 +1,11 @@
+# Keep raw automated captures, downloaded font bundles and inspection scratch files
+# on the machine without accidentally committing them to the main Madar repository.
+trello-public-web-design/
+trello-public-board-design/
+trello-board-ultra-design/
+trello-home-ultra-design/
+_observation_stdout.txt
+board-inspect-run-code.js
+board-observation.js
+verified-board.png
+verified-board-no-dialog.png
