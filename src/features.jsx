@@ -145,9 +145,10 @@ export const lanAvailableUserFeatures=(role,mode)=>
    .filter(key=>Object.prototype.hasOwnProperty.call(INTERFACE_FEATURE_TIERS,key)&&
      LAN_MODE_ORDER[INTERFACE_FEATURE_TIERS[key]]<=LAN_MODE_ORDER[mode]);
 
-export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
+export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,initialView='connection'}){
  const editorRef=React.useRef(null);
- const [view,setView]=useState('connection');
+ const [view,setView]=useState(()=>initialView==='users'&&status?.user?.role==='admin'&&
+   ['server','client'].includes(status?.mode)?'users':'connection');
  const [mode,setMode]=useState(status?.mode||'solo');
  const [username,setUsername]=useState('');
  const [password,setPassword]=useState('');
@@ -262,8 +263,15 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
  });
  const featureKeys=lanRoleFeatures(displayRoleMode);
  const canManage=status?.user?.role==='admin'&&(status?.mode==='server'||status?.mode==='client');
+ // The network status and user-management shortcuts are separate actions.
+ // Opening users directly must still load accounts from the authorized host,
+ // never from synthetic client-side data or a personal/solo profile.
+ React.useEffect(()=>{
+   if(initialView==='users'&&canManage)loadUsers();
+ },[initialView,canManage]);
  return <div className="overlay" onMouseDown={onClose}><section className="dialog lan-modal lan-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="شبکه محلی و کاربران"><div className="dialog-head"><h2><Users size={19}/> شبکه محلی و کاربران</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div><div className="dialog-body">
   <div className="lan-heading"><span className={'connection-dot '+(status?.mode!=='solo'?'online':'')}/><strong>{status?.mode==='server'?'میزبان شبکه فعال':status?.mode==='client'?'متصل به سرور':'حالت شخصی و آفلاین'}</strong></div>
+  {status?.mode==='solo'&&<p className="lan-help" role="note">تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان شبکه فعال می‌شود؛ حالت شخصی حساب شبکه‌ای ندارد.</p>}
   <details className="lan-density__help"><summary><ShieldCheck size={15}/> راهنمای اتصال امن و اثر انگشت گواهی</summary><p className="lan-help">برای اتصال امن، میزبان را با گواهی و کلید PEM راه‌اندازی کن، نشانی HTTPS را به کلاینت بده و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP قدیمی فقط برای شبکه مورداعتماد است و رمزگذاری ندارد.</p></details>
   {status?.error&&<p className="lan-error">{status.error}</p>}
   {status?.mode==='solo'?<div className="lan-modes">
@@ -283,6 +291,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
    <><div className="lan-connected"><span>{status?.mode==='server'?('پورت میزبان: '+status.port):('نشانی: '+status?.url)}</span><span>سطح دسترسی: <RoleBadge role={status?.user?.role}/></span><span>{status?.transport==='https'?'اتصال HTTPS':'اتصال HTTP قدیمی (بدون رمزگذاری)'}</span>{status?.mode==='server'&&status?.fingerprint&&<span>اثر انگشت SHA-256 گواهی میزبان: <code dir="ltr">{status.fingerprint}</code></span>}</div><div className="lan-actions"><button className="btn secondary" onClick={onConnected}><RefreshCw size={16}/> تازه‌سازی اطلاعات</button>{canManage&&<button className="btn primary" aria-label="تعریف کاربر و تعیین سطح دسترسی" onClick={loadUsers}><Plus size={16}/> تعریف کاربر</button>}<button className="btn secondary" disabled={busy} onClick={handleLeave}>خروج از شبکه</button></div></>}
   {view==='users'&&canManage&&<div className="users-manager">
     <div className="account-create-heading"><Users size={18}/> تعریف کاربر و تعیین سطح دسترسی</div>
+    {busy&&<p className="lan-help" role="status">در حال دریافت فهرست کاربران و نقش‌ها…</p>}
     <p className="lan-help">مدیر قالب نمایش هر حساب را تعیین می‌کند. قالب فقط امکانات قابل مشاهده را مشخص می‌کند؛ مجوز فنی و دسترسی به داده‌ها جداگانه در میزبان کنترل می‌شود.</p>
     <div className="lan-density__workspace">
     <aside className="lan-density__directory" aria-label="حساب‌ها و قالب‌های موجود">

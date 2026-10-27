@@ -8,18 +8,21 @@ const css=fs.readFileSync(path.join(root,'src/vitrea_navigation.css'),'utf8');
 const clockCss=fs.readFileSync(path.join(root,'src/clock_widget.css'),'utf8');
 const clock=fs.readFileSync(path.join(root,'src/clock_widget.jsx'),'utf8');
 
-test('one unified right header has brand tagline, navigation, search then user icon; independent left clock',()=>{
+test('unified header puts brand, navigation and profile in one row; search in its own row and clock on the left',()=>{
   assert.match(app,/className="vitrea-header-layout"/);
   assert.match(app,/className="vitrea-header-main"/);
   assert.match(app,/className="vitrea-brand-capsule"[\s\S]*?<strong>مدار<\/strong><i aria-hidden="true">\|<\/i>[\s\S]*?<small>در جریان کسب و کار<\/small>/);
   const topRow=app.match(/<div className="vitrea-top-row">([\s\S]*?)<\/nav>/)?.[1];
   assert.ok(topRow);
   assert.match(topRow,/<nav className="vitrea-primary-nav"/);
+  const accountIndex=app.indexOf('className="vitrea-account-capsule"');
+  const endNav=app.indexOf('</nav>',app.indexOf('<nav className="vitrea-primary-nav"'));
+  const endTopRow=app.indexOf('</div>',endNav);
+  assert.ok(accountIndex>endNav&&accountIndex<endTopRow,'profile belongs beside navigation, not search');
   const header=app.match(/<header className="topbar">([\s\S]*?)<\/header>/)?.[1];
   assert.ok(header,'topbar must exist');
   assert.match(header,/<SearchPlus\b/);
-  assert.match(header,/className="vitrea-account-capsule"/);
-  assert.ok(header.indexOf('<SearchPlus')<header.indexOf('className="vitrea-account-capsule"'));
+  assert.doesNotMatch(header,/className="vitrea-account-capsule"/);
   assert.doesNotMatch(header,/<SyncIndicator\b|<ClockWidget\b|<Settings2|<Cloud|<Bell|<Users|<RefreshCw/);
   assert.match(app,/className="vitrea-header-clock"><ClockWidget calendar=\{calendar\}\/>/);
   assert.equal((app.match(/<ClockWidget\b/g)||[]).length,1);
@@ -37,9 +40,11 @@ test('connection status sits first in the left dock with refresh directly below,
   assert.match(dock,/aria-label="تازه‌سازی اتصال"/);
   assert.ok(dock.indexOf('<SyncIndicator')<dock.indexOf('aria-label="تازه‌سازی اتصال"'));
   assert.ok(dock.indexOf('aria-label="تازه‌سازی اتصال"')<dock.indexOf('vitrea-quickdock__main'));
-  for(const label of ['اعلان‌ها','شبکه محلی','Google Drive','تنظیمات مدار']){
+  for(const label of ['اعلان‌ها','تعریف کاربران','Google Drive','تنظیمات مدار']){
     assert.ok(dock.includes('aria-label="'+label+'"'),label+' action missing from dock');
   }
+  assert.match(dock,/canManage&&lanStatus\.mode!=='solo'/);
+  assert.doesNotMatch(dock,/aria-label="شبکه محلی"/);
   assert.equal((dock.match(/<Settings2\b/g)||[]).length,1);
   assert.match(app,/className="vitrea-account-capsule"/);
   assert.match(css,/\.vitrea-quickdock\s*\{[\s\S]*?max-height:calc\(100dvh - 28px\)/);

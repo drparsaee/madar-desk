@@ -576,6 +576,7 @@ export default function App(){
   const [cloudOpen,setCloudOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [lanOpen,setLanOpen]=useState(false);
+  const [lanInitialView,setLanInitialView]=useState('connection');
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
   const [financeOpen,setFinanceOpen]=useState(false);
@@ -724,6 +725,11 @@ export default function App(){
     try{await Promise.all([refresh(),refreshLan(),refreshUsers(),refreshSyncStatus()]);setToast('آخرین اطلاعات موجود بارگیری شد.');}
     catch(e){setSavingError('خطای تازه‌سازی: '+e.message);}
     finally{setSyncing(false);}
+  };
+  const openNetwork=()=>{setLanInitialView('connection');setLanOpen(true);};
+  const openUserManagement=()=>{
+    if(!canManage||lanStatus.mode==='solo')return;
+    setLanInitialView('users');setLanOpen(true);
   };
   useEffect(()=>{setProfitVisible(false);},[selected,boardId]);
   useEffect(()=>{
@@ -1128,7 +1134,7 @@ export default function App(){
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
       <SyncIndicator compact status={syncInfo} conflict={pendingRecovery||blocked.current}
-        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/>
+        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={openNetwork}/>
       <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
         disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
         <RefreshCw size={19} className={syncing?'spin':''}/></button>
@@ -1142,8 +1148,8 @@ export default function App(){
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/></button>
-      <button type="button" onClick={()=>setLanOpen(true)}
-        title="شبکه محلی" aria-label="شبکه محلی"><Users size={19}/></button>
+      {canManage&&lanStatus.mode!=='solo'&&<button type="button" onClick={openUserManagement}
+        title="تعریف کاربران" aria-label="تعریف کاربران"><Users size={19}/></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
         title="Google Drive" aria-label="Google Drive"><Cloud size={19}/></button>
       {canManage&&<button type="button" title={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
@@ -1206,7 +1212,6 @@ export default function App(){
           <small className="interface-mode-selector__description">تنظیم نقش و امکانات هر حساب فقط توسط مدیرکل از بخش «شبکه محلی و کاربران» انجام می‌شود.</small>
         </div>
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری و Drive <ArrowUpLeft size={15}/></button>
-        <button className="sidebar-settings" onClick={()=>setLanOpen(true)}><Users size={18}/> شبکه محلی و کاربران</button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات و مراحل برد</button>
         <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
       </div>
@@ -1233,6 +1238,10 @@ export default function App(){
         {show('planner')&&<button type="button" onClick={()=>setPlannerOpen(true)}><CalendarDays size={15}/> برنامه‌ریزی</button>}
         {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard}><Wallet size={15}/> حسابداری</button>}
       </nav>
+      <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
+        aria-label="نمایش پروفایل من" title="پروفایل من">
+        <Avatar user={lanStatus.user} size={32}/>
+      </button>
       </div>
       <header className="topbar">
         <button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar"
@@ -1241,10 +1250,6 @@ export default function App(){
         <SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length}
           totalCount={tasks.length}
           placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/>
-        <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
-          aria-label="نمایش پروفایل من" title="پروفایل من">
-          <Avatar user={lanStatus.user} size={32}/>
-        </button>
         <div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/>
           <strong>{selectedProject?.name||'همه کارها'}</strong></div>
       </header>
@@ -1331,7 +1336,7 @@ export default function App(){
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
     {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه حذف شود؟ کارهایش به پروژه دیگری منتقل خواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
     {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
-    {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
+    {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}

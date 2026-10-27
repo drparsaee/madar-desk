@@ -141,13 +141,26 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
         headerLayout.date.y>=headerLayout.time.bottom-1,
         'Date must align directly below time inside the unified clock capsule');
       assert.ok(headerLayout.search.y>headerLayout.brand.y &&
-        headerLayout.account.right<=headerLayout.search.x+5,
-        'Search belongs below the brand and profile follows the search on its left');
+        headerLayout.account.y>=headerLayout.brand.y-2 &&
+        headerLayout.account.bottom<=headerLayout.search.y+2 &&
+        headerLayout.account.right<headerLayout.brand.x,
+        'Search belongs below the top row; profile sits opposite the brand, not beside search');
       assert.ok(headerLayout.sync.y>=headerLayout.dock.y &&
         headerLayout.refresh.y>=headerLayout.sync.bottom,
         'Connection comes first and refresh immediately follows within the left rail');
       assert.ok(headerLayout.dock.y>headerLayout.date.bottom,
         'Desktop dock must not overlap the date capsule');
+      assert.equal(await page.locator('.vitrea-header-clock .clock-widget__date').evaluate(
+        el=>getComputedStyle(el).borderTopWidth),'0px',
+        'The date must share a seamless background with the clock');
+      assert.equal(await page.locator('.vitrea-quickdock button[aria-label="تعریف کاربران"]').count(),0,
+        'Solo mode must not present a fake user creation action');
+      await page.locator('.vitrea-quickdock .sync-indicator--dock').click();
+      await page.getByRole('dialog',{name:'شبکه محلی و کاربران'}).waitFor({state:'visible'});
+      assert.match(await page.locator('.lan-modal').innerText(),
+        /تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان/);
+      await page.locator('.lan-modal .dialog-head .icon-btn').click();
+      await page.locator('.lan-modal').waitFor({state:'hidden'});
       const navigationProblems=[];
       const clickWithDiagnostic=async locator=>{
         try{await locator.click({timeout:4000});}

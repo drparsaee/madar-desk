@@ -27,21 +27,15 @@ function renderSettings(canManage=true){
   }));
 }
 
-// The LAN users view normally opens after clicking "تعریف کاربر". Force only that
-// initial UI state for a static markup check, without calling the host/network.
+// Direct user management entry for an authenticated host admin. SSR never
+// calls the network, but the same entrypoint loads authorized users on mount.
 function renderLanManager(){
-  const previous=React.useState;
-  React.useState=function(initial){
-    if(initial==='connection')return ['users',()=>{}];
-    return previous(initial);
-  };
-  try{
-    return renderToStaticMarkup(React.createElement(LanPanel,{
+  return renderToStaticMarkup(React.createElement(LanPanel,{
       api:{},projects:[{id:'p1',name:'پروژه نمونه'}],onClose:()=>{},
       onRefresh:async()=>{},onConnected:async()=>{},
+      initialView:'users',
       status:{mode:'server',port:48370,transport:'https',user:{role:'admin',username:'owner'}},
     }));
-  }finally{React.useState=previous;}
 }
 
 test('settings show compact quick choices without retired clock personalization',()=>{

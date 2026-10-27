@@ -126,10 +126,14 @@ test('today: task-side finance panels remain role-gated; management finance open
 });
 
 test('today: safety and account services remain present in visible application shell',()=>{
-  for(const setter of ['setCloudOpen','setLanOpen','setSettingsOpen','setProfileOpen']){
+  for(const setter of ['setCloudOpen','setSettingsOpen','setProfileOpen']){
     const candidates=matching('button').filter(x=>x.opening.includes(setter+'(true)'));
     assert.ok(candidates.length>0,`${setter} has no user-facing button`);
   }
+  assert.match(app,/const openNetwork=\(\)=>\{setLanInitialView\('connection'\);setLanOpen\(true\);\}/);
+  assert.match(app,/showDetails=\{openNetwork\}/);
+  assert.match(app,/onClick=\{openUserManagement\}/);
+  assert.match(app,/canManage&&lanStatus\.mode!=='solo'/);
   assert.equal(matching('SyncIndicator').length,1);
   assert.equal(matching('SearchPlus').length,1);
   assert.ok(matching('div',/className="kanban"/).length>0);

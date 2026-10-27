@@ -248,10 +248,10 @@
   -webkit-backdrop-filter:blur(23px) saturate(145%);
 }
 .vitrea-header-main .vitrea-top-row {
-  display:flex;
-  justify-content:flex-start;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,max-content) minmax(0,1fr);
   align-items:center;
-  gap:12px;
+  column-gap:8px;
   padding:7px 14px 2px;
   min-height:57px;
 }
@@ -259,8 +259,10 @@
   display:inline-flex;
   flex:none;
   align-items:center;
+  justify-self:start;
+  width:max-content;
   min-height:43px;
-  max-width:none;
+  max-width:100%;
   padding:3px 4px;
   gap:7px;
   justify-self:auto;
@@ -286,18 +288,39 @@
   font-weight:650;
 }
 .vitrea-header-main .vitrea-primary-nav {
-  flex:1 1 auto;
-  justify-content:flex-start;
-  width:auto;
+  justify-self:center;
+  flex:none;
+  justify-content:center;
+  width:max-content;
   min-width:0;
   max-width:100%;
   min-height:44px;
   margin:0;
   padding:3px;
-  border:0;
-  border-radius:15px;
-  background:transparent;
+  border:1px solid var(--vs-edge,#cad4e3);
+  border-radius:999px;
+  background:linear-gradient(155deg,rgba(255,255,255,.19),transparent 70%),var(--vs-well,#f6f8fc);
+  box-shadow:inset 0 1px 1px #ffffff24;
+  overflow-x:auto;
+}
+.vitrea-header-main .vitrea-top-row > .vitrea-account-capsule {
+  display:inline-grid;
+  place-items:center;
+  justify-self:end;
+  flex:none;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
+  padding:4px;
+  border-radius:50%;
+  background:var(--vs-well,#f5f7fa);
   box-shadow:none;
+}
+.vitrea-header-main .vitrea-top-row > .vitrea-account-capsule :is(.profile-avatar,.mini-user) {
+  flex:none;
+  max-width:34px;
+  max-height:34px;
 }
 .app-shell.vitrea-layout > .workspace .vitrea-header-main .topbar {
   position:relative;
@@ -323,17 +346,6 @@
   width:clamp(195px,33vw,410px);
   max-width:410px;
   min-width:150px;
-}
-.app-shell .vitrea-header-main .topbar .vitrea-account-capsule {
-  display:grid;
-  place-items:center;
-  flex:none;
-  min-width:39px;
-  min-height:39px;
-  padding:3px;
-  border-radius:50%;
-  background:var(--vs-well,#f5f7fa);
-  box-shadow:none;
 }
 .app-shell .vitrea-header-main .topbar .breadcrumb {
   flex:0 1 auto;
@@ -398,16 +410,18 @@
 @media (max-width:1170px) and (min-width:861px) {
   .vitrea-header-layout {grid-template-columns:minmax(0,1fr) 174px;gap:10px;padding-inline:12px;}
   .vitrea-header-main .vitrea-top-row {padding-inline:9px;gap:6px;}
-  .vitrea-header-main .vitrea-brand-capsule small {font-size:10px;}
+  .vitrea-header-main .vitrea-brand-capsule :is(i,small) {display:none;}
   .vitrea-header-main .vitrea-primary-nav button {padding-inline:8px;}
   .app-shell .vitrea-header-main .topbar .breadcrumb {display:none;}
 }
 @media (max-width:860px) {
   .vitrea-header-layout {grid-template-columns:minmax(0,1fr);gap:9px;padding:10px 11px 0;}
-  .vitrea-header-main .vitrea-top-row {display:flex;padding:7px 9px 2px;}
+  .vitrea-header-main .vitrea-top-row {display:grid;padding:7px 9px 2px;gap:6px;}
   .vitrea-header-main .vitrea-top-row > .vitrea-brand-capsule {display:inline-flex;}
+  .vitrea-header-main .vitrea-top-row > .vitrea-account-capsule {display:inline-grid;}
+  .vitrea-header-main .vitrea-brand-capsule :is(i,small) {display:none;}
   .vitrea-header-main .vitrea-top-row .vitrea-primary-nav {
-    width:auto;min-width:0;max-width:100%;margin:0;padding:3px;
+    width:max-content;min-width:0;max-width:100%;margin:0;padding:3px;
   }
   .app-shell.vitrea-layout > .workspace .vitrea-header-main .topbar {
     margin:0;padding:5px 11px 9px;min-height:53px;border-radius:0 0 27px 27px;
@@ -420,11 +434,29 @@
   .vitrea-quickdock__divider {width:1px;height:30px;}
 }
 @media (max-width:600px) {
-  .vitrea-header-main .vitrea-top-row {align-items:stretch;flex-wrap:wrap;}
-  .vitrea-header-main .vitrea-primary-nav {flex-basis:100%;order:2;}
+  .vitrea-header-main .vitrea-top-row {
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto;
+    align-items:center;
+    row-gap:6px;
+  }
+  .vitrea-header-main .vitrea-primary-nav {
+    grid-column:1 / -1;
+    grid-row:2;
+    justify-self:center;
+  }
+  .vitrea-header-main .vitrea-top-row > .vitrea-account-capsule {
+    grid-column:2;
+    grid-row:1;
+  }
+  .vitrea-header-main .vitrea-top-row > .vitrea-brand-capsule {
+    grid-column:1;
+    grid-row:1;
+  }
+  .vitrea-header-main .vitrea-primary-nav button {padding-inline:8px;min-height:38px;}
+  .vitrea-header-main .vitrea-primary-nav button svg {display:none;}
   .vitrea-header-main .vitrea-brand-capsule small {font-size:10px;}
   .app-shell .vitrea-header-main .topbar .searchplus-shell {width:auto;flex:1 1 auto;max-width:none;min-width:0;}
-  .app-shell .vitrea-header-main .topbar .vitrea-account-capsule {flex:none;}
   .vitrea-header-clock .clock-widget--fixed,
   .vitrea-header-clock .clock-widget__display {width:146px;}
 }

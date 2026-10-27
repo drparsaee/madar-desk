@@ -1,13 +1,22 @@
-.priority-settings{min-width:0}
+.priority-settings{min-width:0;--priority-row-bg:var(--surface,#fff);--priority-row-border:#e2e8f2;--priority-field-bg:var(--surface,#fff);--priority-field-border:#d5deeb;--priority-field-text:inherit;--priority-label-ink:var(--text,#5b6d86);--priority-picker-border:#dae1e9;--priority-preview-bg:var(--surface,#fff)}
 .priority-definition-list{display:grid;gap:9px}
-.priority-definition{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.2fr) 64px minmax(145px,1fr) auto;align-items:end;gap:10px;padding:12px;border:1px solid #e2e8f2;border-radius:11px;background:var(--surface,#fff)}
-.priority-definition label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text,#5b6d86)}
-.priority-definition input:not([type=color]),.priority-definition select,.priority-new input{min-width:0;width:100%;border:1px solid #d5deeb;color:inherit;background:var(--surface,#fff);border-radius:8px;padding:8px;font:inherit}
-.priority-definition input[type=color]{width:100%;height:36px;border-radius:8px;border:1px solid #dae1e9;padding:2px;background:transparent;cursor:pointer}
+.priority-definition{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.2fr) 64px minmax(145px,1fr) auto;align-items:end;gap:10px;padding:12px;border:1px solid var(--priority-row-border);border-radius:11px;background:var(--priority-row-bg)}
+.priority-definition label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--priority-label-ink)}
+.priority-definition input:not([type=color]),.priority-definition select,.priority-new input{min-width:0;width:100%;border:1px solid var(--priority-field-border);color:var(--priority-field-text);background:var(--priority-field-bg);border-radius:8px;padding:8px;font:inherit}
+.priority-definition select option{background:var(--priority-field-bg);color:var(--priority-field-text)}
+.priority-definition input[type=color]{width:100%;height:36px;border-radius:8px;border:1px solid var(--priority-picker-border);padding:2px;background:transparent;cursor:pointer}
 .priority-definition>button{height:36px;padding:8px;border:0;background:transparent;color:#b04a5b}
 .priority-definition .priority-demo{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border-radius:9px;padding:7px;font-size:11px;font-weight:700}
 .priority-new{display:flex;gap:10px;margin-top:12px}.priority-new>input{flex:1}
 .priority-warning{color:#b04752;font-size:12px}
+:root[data-theme="dark"] .priority-settings{--priority-row-bg:#19283c;--priority-row-border:#344a64;--priority-field-bg:#122237;--priority-field-border:#405977;--priority-field-text:#e3edfc;--priority-label-ink:#bdcee5;--priority-picker-border:#4c6380;--priority-preview-bg:#1a2b42;color:#dce8fa}
+:root[data-theme="dark"] .priority-settings .priority-new input::placeholder{color:#a5b8d1;opacity:1}
+:root[data-theme="dark"] .priority-settings .priority-definition>button{color:#ffa0b0;border-radius:8px}
+:root[data-theme="dark"] .priority-settings .priority-definition>button:hover:not(:disabled){background:#392c40}
+:root[data-theme="dark"] .priority-settings .priority-warning{color:#ffc2cc;background:#3b2634;border:1px solid #79465a;border-radius:8px;padding:8px 10px}
+:root[data-theme="dark"] .priority-settings :is(input,select,button):focus-visible{outline:2px solid #92b7ff;outline-offset:2px}
+:root[data-theme="dark"] .priority-settings .priority-demo.priority-effect-neon{background:linear-gradient(var(--priority-preview-bg),var(--priority-preview-bg)) padding-box,conic-gradient(from var(--glow-angle,0deg),transparent,var(--priority-color),transparent,var(--priority-color),transparent) border-box}
+:root[data-theme="dark"] .priority-settings .priority-demo.priority-effect-solid{background:color-mix(in srgb,var(--priority-color) 22%,var(--priority-preview-bg))}
 .priority-effect-none{color:var(--priority-color)}
 .priority-effect-solid{color:var(--priority-color);background:color-mix(in srgb,var(--priority-color) 22%,white)}
 .priority-effect-neon{color:var(--priority-color);border:2px solid transparent;background:linear-gradient(var(--surface,#fff),var(--surface,#fff)) padding-box,conic-gradient(from var(--glow-angle,0deg),transparent,var(--priority-color),transparent,var(--priority-color),transparent) border-box;animation:priority-turn 2.4s linear infinite;box-shadow:0 0 9px color-mix(in srgb,var(--priority-color) 42%,transparent)}
