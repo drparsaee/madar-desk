@@ -1,0 +1,406 @@
+/*
+ * Vitrea-inspired chrome for Madar Desk.
+ * Verified against the public Vitrea Overview (graphite, luminous rim,
+ * pill navigation, cool blue focus). Original CSS, scoped to the Madar shell;
+ * financial operations, dialogs and the Trello Kanban layout keep their rules.
+ */
+.app-shell {
+  --vs-bg: #eef0f4;
+  --vs-ink: #152033;
+  --vs-muted: #58677b;
+  --vs-faint: #7c8a9c;
+  --vs-accent: #397acb;
+  --vs-accent-soft: #e1edfd;
+  --vs-glass: rgba(255,255,255,.73);
+  --vs-rim: rgba(255,255,255,.88);
+  --vs-edge: rgba(111,126,150,.24);
+  --vs-well: rgba(188,204,226,.22);
+  --vs-hover: rgba(115,162,226,.15);
+  --vs-shadow: 0 16px 36px -26px rgba(28,47,78,.30), inset 0 1px 1px rgba(255,255,255,.85);
+  --vs-round: 22px;
+  color: var(--vs-ink);
+  background: radial-gradient(ellipse 60% 52% at 95% 0%,#cfdcec 0%,transparent 74%),
+    radial-gradient(ellipse 65% 60% at 12% 98%,#d8dde7 0%,transparent 74%),var(--vs-bg);
+  isolation: isolate;
+}
+
+.app-shell > .sidebar {
+  position: relative;
+  z-index: 3;
+  width: 224px;
+  margin-block: 12px;
+  margin-inline-start: 12px;
+  padding: 16px 10px 12px;
+  border: 1px solid var(--vs-edge);
+  border-radius: 25px;
+  background: linear-gradient(170deg,rgba(255,255,255,.12),transparent 38%),var(--vs-glass);
+  color: var(--vs-ink);
+  box-shadow: var(--vs-shadow);
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  scrollbar-color: rgba(110,130,160,.35) transparent;
+}
+.app-shell > .sidebar .brand {
+  gap: 10px;
+  padding-inline: 8px;
+}
+.app-shell > .sidebar .brand-mark {
+  width: 39px;
+  height: 39px;
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 50%;
+  background: linear-gradient(150deg,#dceaff,#90bafa);
+  box-shadow: inset 0 1px 2px #fff,0 5px 16px #2553933c;
+}
+.app-shell > .sidebar .brand-mark span { border-color: #3677c8; }
+.app-shell > .sidebar .brand strong {
+  font-size: 22px;
+  letter-spacing: -.035em;
+  color: var(--vs-ink);
+}
+.app-shell > .sidebar .brand small { color: var(--vs-muted); }
+.app-shell > .sidebar .side-divider {
+  height: 1px;
+  margin: 14px 7px 11px;
+  background: var(--vs-edge);
+}
+.app-shell > .sidebar .sidebar-section {
+  color: var(--vs-faint);
+  font-size: 10.5px;
+  font-weight: 730;
+  letter-spacing: .01em;
+}
+.app-shell > .sidebar .sidebar-nav {
+  gap: 4px;
+  min-width: 0;
+}
+.app-shell > .sidebar .sidebar-nav button,
+.app-shell > .sidebar .sidebar-settings {
+  position: relative;
+  border: 1px solid transparent;
+  min-height: 39px;
+  border-radius: 13px;
+  padding: 8px 10px;
+  color: var(--vs-muted);
+  font-size: 11.5px;
+  font-weight: 640;
+  line-height: 1.45;
+  transition: background-color .16s ease,border-color .16s ease,color .16s ease;
+}
+.app-shell > .sidebar .sidebar-nav button svg,
+.app-shell > .sidebar .sidebar-settings svg { flex: none; }
+.app-shell > .sidebar .sidebar-nav button:hover,
+.app-shell > .sidebar .sidebar-settings:hover,
+.app-shell > .sidebar .sidebar-nav button:focus-visible {
+  background: var(--vs-hover);
+  border-color: var(--vs-edge);
+  color: var(--vs-ink);
+  transform: none;
+}
+.app-shell > .sidebar .sidebar-nav button.active,
+.app-shell > .sidebar .workspace-board-nav button.chosen {
+  background: linear-gradient(125deg,rgba(132,184,250,.29),rgba(132,184,250,.09));
+  border: 1px solid rgba(110,169,245,.43);
+  color: var(--vs-ink);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.45),0 4px 12px rgba(49,91,154,.10);
+}
+.app-shell > .sidebar .sidebar-nav button.active { border-inline-start: 2px solid var(--vs-accent); }
+.app-shell > .sidebar .sidebar-nav button span:last-child:not(.project-dot) {
+  border-radius: 999px;
+  background: var(--vs-well);
+  color: var(--vs-muted);
+}
+.app-shell > .sidebar .sidebar-plus,
+.app-shell > .sidebar .project-options {
+  color: var(--vs-muted);
+  border: 1px solid transparent;
+  border-radius: 50%;
+}
+.app-shell > .sidebar :is(.sidebar-plus,.project-options):is(:hover,:focus-visible) {
+  background: var(--vs-hover);
+  color: var(--vs-ink);
+}
+.app-shell > .sidebar #madar-active-workspace,
+.app-shell > .sidebar .interface-mode-selector__select {
+  min-height: 37px;
+  border-radius: 12px !important;
+  border: 1px solid var(--vs-edge);
+  background: var(--vs-well);
+  color: var(--vs-ink);
+}
+.app-shell > .sidebar .interface-mode-selector--compact {
+  background: var(--vs-well);
+  border: 1px solid var(--vs-edge);
+  border-radius: 14px;
+}
+.app-shell > .sidebar .interface-mode-selector__label { color: var(--vs-ink); }
+.app-shell > .sidebar .interface-mode-selector__description,
+.app-shell > .sidebar .interface-mode-selector__help { color: var(--vs-muted); }
+.app-shell > .sidebar .sidebar-bottom { min-width: 0; }
+.app-shell > .sidebar .sidebar-profile {
+  border-block-start: 1px solid var(--vs-edge);
+  color: var(--vs-ink);
+}
+.app-shell > .sidebar .sidebar-profile strong { color: var(--vs-ink); }
+.app-shell > .sidebar .sidebar-profile span:not(.profile-online) { color: var(--vs-muted); }
+.app-shell > .sidebar .sidebar-profile.profile-click:is(:hover,:focus-visible) {
+  border-radius: 15px;
+  background: var(--vs-hover);
+}
+
+.app-shell > .workspace {
+  min-width: 0;
+  background: transparent;
+}
+.app-shell > .workspace .topbar {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  min-height: 64px;
+  height: auto;
+  margin-block-start: 12px;
+  margin-inline: 15px;
+  padding: 9px 14px;
+  gap: 10px;
+  border: 1px solid var(--vs-edge);
+  border-radius: 999px;
+  background: linear-gradient(165deg,rgba(255,255,255,.24),transparent 56%),var(--vs-glass);
+  box-shadow: var(--vs-shadow);
+  backdrop-filter: blur(23px) saturate(145%);
+  -webkit-backdrop-filter: blur(23px) saturate(145%);
+}
+.app-shell .topbar .breadcrumb {
+  gap: 7px;
+  flex: 0 1 auto;
+  color: var(--vs-muted);
+}
+.app-shell .topbar .breadcrumb strong { color: var(--vs-ink); }
+.app-shell .topbar .searchplus-shell { flex: 1 1 195px; min-width: 140px; max-width: 410px; }
+.app-shell .topbar .top-actions { gap: 3px; min-width: 0; }
+.app-shell .topbar .top-icon {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: var(--vs-muted);
+}
+.app-shell .topbar .top-icon:is(:hover,:focus-visible) {
+  background: var(--vs-hover);
+  border-color: var(--vs-edge);
+  color: var(--vs-ink);
+}
+.app-shell .topbar .mini-user {
+  border: 1px solid var(--vs-rim);
+  box-shadow: 0 3px 12px rgba(40,75,124,.17);
+}
+
+.app-shell > .workspace > .workspace-scroll {
+  position: relative;
+  min-width: 0;
+  padding: 23px clamp(15px,2vw,30px) 16px;
+  scrollbar-color: rgba(129,154,186,.45) transparent;
+}
+.app-shell .workspace-scroll .page-header { gap: 14px; margin-block-end: 18px; }
+.app-shell .workspace-scroll .eyebrow { color: var(--vs-accent); }
+.app-shell .workspace-scroll .eyebrow-line { background: var(--vs-accent); }
+.app-shell .workspace-scroll .page-header h1 {
+  font-size: clamp(24px,2.6vw,34px);
+  line-height: 1.25;
+  letter-spacing: -.025em;
+  font-weight: 800;
+  color: var(--vs-ink);
+}
+.app-shell .workspace-scroll .page-header p { color: var(--vs-muted); }
+.app-shell .workspace-scroll .btn { min-height: 36px; border-radius: 999px; }
+.app-shell .workspace-scroll .btn.primary {
+  background: linear-gradient(145deg,#8ebeff,#4b8de1);
+  color: #092445;
+  box-shadow: inset 0 1px 1px #ffffffa6,0 5px 14px #3678c449;
+}
+.app-shell .workspace-scroll .btn.primary:is(:hover,:focus-visible) {
+  background: linear-gradient(145deg,#a5cdff,#609dea);
+}
+.app-shell .workspace-scroll .btn.secondary {
+  background: var(--vs-glass);
+  border: 1px solid var(--vs-edge);
+  color: var(--vs-ink);
+}
+.app-shell .workspace-scroll .btn.secondary:is(:hover,:focus-visible) {
+  background: var(--vs-hover);
+  border-color: var(--vs-accent);
+}
+.app-shell .workspace-scroll .stats { gap: 12px; }
+.app-shell .workspace-scroll .stats .stat-card {
+  min-width: 0;
+  border-radius: var(--vs-round);
+  padding: 14px 17px;
+  border: 1px solid var(--vs-edge);
+  background: linear-gradient(162deg,rgba(255,255,255,.19),transparent 56%),var(--vs-glass);
+  box-shadow: var(--vs-shadow);
+  backdrop-filter: blur(16px) saturate(135%);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+}
+.app-shell .workspace-scroll .stats .stat-card > span { color: var(--vs-muted); }
+.app-shell .workspace-scroll .stats .stat-card > strong {
+  font-size: clamp(21px,2.1vw,29px);
+  color: var(--vs-ink);
+  font-variant-numeric: tabular-nums;
+}
+.app-shell .workspace-scroll .stats .stat-card > small { color: var(--vs-faint); }
+.app-shell .workspace-scroll .stats .stat-card .stat-icon {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--vs-edge);
+  border-radius: 50%;
+}
+.app-shell .workspace-scroll .board-toolbar { margin-block-end: 14px; }
+.app-shell .workspace-scroll .board-tabs {
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--vs-edge);
+  background: var(--vs-well);
+}
+.app-shell .workspace-scroll .board-tabs button { border-radius: 999px; color: var(--vs-muted); }
+.app-shell .workspace-scroll .board-tabs button.selected {
+  background: linear-gradient(150deg,rgba(255,255,255,.42),rgba(134,181,235,.26));
+  color: var(--vs-ink);
+  box-shadow: inset 0 1px 1px var(--vs-rim),0 2px 8px #142b421c;
+}
+.app-shell .workspace-scroll .board-tabs button:hover:not(.selected) { background: var(--vs-hover); }
+.app-shell .workspace-scroll .board-filters .filter-select {
+  min-height: 36px;
+  border: 1px solid var(--vs-edge);
+  border-radius: 999px;
+  color: var(--vs-ink);
+  background: var(--vs-glass);
+}
+.app-shell .workspace-scroll .list-mode {
+  border: 1px solid var(--vs-edge);
+  border-radius: var(--vs-round);
+  background: var(--vs-glass);
+  box-shadow: var(--vs-shadow);
+  overflow-x: auto;
+}
+.app-shell .workspace-scroll .list-mode .list-row {
+  border-block-end: 1px solid var(--vs-edge);
+  background: transparent;
+  color: var(--vs-muted);
+}
+.app-shell .workspace-scroll .list-mode .list-row:is(:hover,:focus-visible) {
+  background: var(--vs-hover);
+}
+.app-shell .workspace-scroll .list-mode .list-title { color: var(--vs-ink); }
+.app-shell .workspace-scroll .app-footer { color: var(--vs-faint); }
+
+:root[data-theme="dark"] .app-shell {
+  --vs-bg: #111113;
+  --vs-ink: #f6f8fc;
+  --vs-muted: #c7cfdd;
+  --vs-faint: #a4afc1;
+  --vs-accent: #8dbcf6;
+  --vs-accent-soft: rgba(109,162,233,.25);
+  --vs-glass: rgba(32,32,36,.53);
+  --vs-rim: rgba(255,255,255,.5);
+  --vs-edge: rgba(235,241,255,.24);
+  --vs-well: rgba(226,233,252,.09);
+  --vs-hover: rgba(164,197,242,.15);
+  --vs-shadow: inset 0 1px 1px rgba(255,255,255,.29),
+    inset 0 -1px 1px rgba(255,255,255,.08),
+    0 20px 42px -23px rgba(0,0,0,.78);
+  background: radial-gradient(ellipse 65% 65% at 99% 0%,rgba(77,78,89,.25),transparent 70%),
+    radial-gradient(ellipse 55% 60% at 5% 88%,rgba(66,68,81,.23),transparent 75%),
+    linear-gradient(145deg,#19191d,#101013 72%);
+}
+:root[data-theme="dark"] .app-shell > .sidebar {
+  background: linear-gradient(155deg,rgba(255,255,255,.10),transparent 48%),var(--vs-glass);
+  border-color: var(--vs-edge);
+}
+:root[data-theme="dark"] .app-shell > .workspace .topbar {
+  background: linear-gradient(165deg,rgba(255,255,255,.09),transparent 55%),var(--vs-glass);
+  border-color: var(--vs-edge);
+}
+:root[data-theme="dark"] .app-shell .workspace-scroll .stats .stat-card {
+  background: linear-gradient(157deg,rgba(255,255,255,.13),transparent 52%),var(--vs-glass);
+  border-color: var(--vs-edge);
+}
+:root[data-theme="dark"] .app-shell .workspace-scroll .board-tabs button.selected {
+  background: linear-gradient(155deg,rgba(255,255,255,.29),rgba(139,186,247,.12));
+}
+:root[data-theme="dark"] .app-shell > .sidebar .sidebar-nav button.active,
+:root[data-theme="dark"] .app-shell > .sidebar .workspace-board-nav button.chosen {
+  border-color: rgba(151,193,248,.48);
+}
+:root[data-theme="dark"] .app-shell .workspace-scroll .list-mode .list-row {
+  background: transparent;
+  border-color: var(--vs-edge);
+}
+
+/* Respect OS visual effects restrictions and reduced power environments. */
+@media (prefers-reduced-transparency: reduce) {
+  .app-shell > .sidebar,
+  .app-shell > .workspace .topbar,
+  .app-shell .workspace-scroll .stats .stat-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .app-shell { --vs-glass: #f5f7fb; }
+  :root[data-theme="dark"] .app-shell { --vs-glass: #24252b; }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .app-shell { --vs-glass: #f5f7fb; }
+  :root[data-theme="dark"] .app-shell { --vs-glass: #222329; }
+}
+@media (max-width: 1180px) and (min-width: 861px) {
+  .app-shell > .sidebar { width: 194px; }
+  .app-shell > .workspace .topbar { margin-inline: 10px; padding-inline: 10px; gap: 6px; }
+  .app-shell .topbar .top-actions { gap: 1px; }
+  .app-shell .topbar .breadcrumb { flex-basis: 90px; }
+}
+@media (max-width: 860px) {
+  .app-shell > .sidebar {
+    /* The application's accessible mobile drawer retains its established fixed layout. */
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 302;
+    width: min(300px, 88vw);
+    margin: 0;
+    border-radius: 0 0 0 23px;
+    background: var(--vs-glass);
+  }
+  .app-shell > .workspace .topbar {
+    margin-inline: 10px;
+    min-height: 55px;
+    border-radius: 22px;
+  }
+  .app-shell .mobile-nav-toggle {
+    border-color: var(--vs-edge);
+    color: var(--vs-ink);
+    border-radius: 50%;
+    background: var(--vs-well);
+  }
+  .app-shell > .workspace > .workspace-scroll { padding-inline: 12px; }
+}
+@media (max-width: 600px) {
+  .app-shell > .workspace .topbar {
+    padding: 8px;
+    margin: 8px 8px 0;
+    gap: 6px;
+    border-radius: 19px;
+  }
+  .app-shell .topbar .searchplus-shell { flex: 1 1 100%; max-width: none; min-width: 0; }
+  .app-shell .topbar .top-actions {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .app-shell .workspace-scroll .page-header h1 { font-size: 23px; }
+  .app-shell .workspace-scroll .stats { gap: 8px; }
+  .app-shell .workspace-scroll .stats .stat-card { padding: 11px; border-radius: 18px; }
+  .app-shell .workspace-scroll .stats .stat-card .stat-icon { width: 28px; height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > .sidebar .sidebar-nav button,
+  .app-shell > .sidebar .sidebar-settings { transition: none; }
+}
