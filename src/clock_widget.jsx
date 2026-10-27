@@ -51,10 +51,12 @@ export function ClockWidget({calendar = 'jalali'}) {
   return <div className="clock-widget clock-widget--fixed" dir="rtl">
     <div className="live-clock clock-widget__display" role="timer" aria-live="off"
       aria-label={`ساعت ${hour} و ${minute} دقیقه؛ ${date}`}>
-      <div className="clock-widget__tiles" dir="ltr" aria-hidden="true">
-        <span className="clock-widget__flip-page" data-unit="hour">{hour}</span>
-        <span className="clock-widget__separator">:</span>
-        <span className="clock-widget__flip-page" data-unit="minute">{minute}</span>
+      <div className="clock-widget__time-card">
+        <div className="clock-widget__tiles" dir="ltr" aria-hidden="true">
+          <span className="clock-widget__flip-page" data-unit="hour">{hour}</span>
+          <span className="clock-widget__separator">:</span>
+          <span className="clock-widget__flip-page" data-unit="minute">{minute}</span>
+        </div>
       </div>
       <span className="clock-widget__date"><bdi>{date}</bdi></span>
     </div>

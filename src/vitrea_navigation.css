@@ -223,3 +223,208 @@
 @media (prefers-reduced-motion:reduce) {
   .app-shell.vitrea-layout > .sidebar {transition:none;}
 }
+
+/* Unified right-side masthead, with a separate, equally wide left clock
+   and date stack. Both rows belong to the same navigation surface. */
+.vitrea-header-layout {
+  display:grid;
+  direction:rtl;
+  grid-template-columns:minmax(0,1fr) 190px;
+  align-items:start;
+  gap:14px;
+  padding:14px 18px 0;
+  min-width:0;
+}
+.vitrea-header-main {
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--vs-edge,#cad4e3);
+  border-radius:27px;
+  background:linear-gradient(160deg,rgba(255,255,255,.2),transparent 68%),var(--vs-glass,#fff);
+  color:var(--vs-ink,#273a52);
+  box-shadow:var(--vs-shadow,0 8px 30px #0002);
+  backdrop-filter:blur(23px) saturate(145%);
+  -webkit-backdrop-filter:blur(23px) saturate(145%);
+}
+.vitrea-header-main .vitrea-top-row {
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  gap:12px;
+  padding:7px 14px 2px;
+  min-height:57px;
+}
+.vitrea-header-main .vitrea-brand-capsule {
+  display:inline-flex;
+  flex:none;
+  align-items:center;
+  min-height:43px;
+  max-width:none;
+  padding:3px 4px;
+  gap:7px;
+  justify-self:auto;
+  border:1px solid transparent;
+  border-radius:14px;
+  box-shadow:none;
+  background:transparent;
+  white-space:nowrap;
+}
+.vitrea-header-main .vitrea-brand-capsule:hover,
+.vitrea-header-main .vitrea-brand-capsule:focus-visible {
+  background:var(--vs-hover,#eef5fe);
+  border-color:var(--vs-edge);
+}
+.vitrea-header-main .vitrea-brand-capsule i {
+  color:var(--vs-muted,#64748b);
+  font-size:16px;
+  font-style:normal;
+}
+.vitrea-header-main .vitrea-brand-capsule small {
+  color:var(--vs-muted,#64748b);
+  font-size:11.5px;
+  font-weight:650;
+}
+.vitrea-header-main .vitrea-primary-nav {
+  flex:1 1 auto;
+  justify-content:flex-start;
+  width:auto;
+  min-width:0;
+  max-width:100%;
+  min-height:44px;
+  margin:0;
+  padding:3px;
+  border:0;
+  border-radius:15px;
+  background:transparent;
+  box-shadow:none;
+}
+.app-shell.vitrea-layout > .workspace .vitrea-header-main .topbar {
+  position:relative;
+  z-index:3;
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  flex:none;
+  gap:10px;
+  min-height:57px;
+  height:auto;
+  margin:0;
+  padding:5px 16px 10px;
+  border:0;
+  border-radius:0 0 27px 27px;
+  background:transparent;
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.app-shell .vitrea-header-main .topbar .searchplus-shell {
+  flex:0 1 410px;
+  width:clamp(195px,33vw,410px);
+  max-width:410px;
+  min-width:150px;
+}
+.app-shell .vitrea-header-main .topbar .vitrea-account-capsule {
+  display:grid;
+  place-items:center;
+  flex:none;
+  min-width:39px;
+  min-height:39px;
+  padding:3px;
+  border-radius:50%;
+  background:var(--vs-well,#f5f7fa);
+  box-shadow:none;
+}
+.app-shell .vitrea-header-main .topbar .breadcrumb {
+  flex:0 1 auto;
+  margin-inline-start:auto;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.vitrea-header-clock {
+  display:flex;
+  justify-content:flex-start;
+  min-width:0;
+}
+.vitrea-header-clock .clock-widget--fixed,
+.vitrea-header-clock .clock-widget__display {width:100%;}
+
+/* Status comes first at the head of the left dock, refresh immediately
+   follows it. Its detail still opens the real LAN/sync panel. */
+@media (min-width:861px) {
+  .vitrea-quickdock {top:188px;transform:none;max-height:calc(100dvh - 203px);}
+}
+.vitrea-quickdock > .sync-indicator--dock {
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  flex:none;
+  width:100%;
+  min-height:57px;
+  height:auto;
+  padding:6px 2px;
+  gap:5px;
+  border:1px solid var(--vs-edge,#cad4e3);
+  border-radius:19px;
+  white-space:normal;
+  background:var(--vs-well,#f3faf7);
+  font-size:9px;
+  text-align:center;
+  line-height:1.25;
+}
+.vitrea-quickdock .sync-indicator__label {
+  display:block;
+  overflow-wrap:anywhere;
+}
+.vitrea-quickdock .sync-indicator--dock.sync-pending {color:#96712b;background:#fff7e4;}
+.vitrea-quickdock .sync-indicator--dock.sync-offline {color:#a55757;background:#fff0ef;}
+.vitrea-quickdock .vitrea-quickdock__refresh {flex:none;}
+.vitrea-quickdock__divider {
+  display:block;
+  flex:none;
+  width:70%;
+  height:1px;
+  background:var(--vs-edge,#cad4e3);
+}
+:root[data-theme="dark"] .vitrea-quickdock .sync-indicator--dock {
+  background:#222b29;
+  color:#c3e8d6;
+}
+:root[data-theme="dark"] .vitrea-quickdock .sync-indicator--dock.sync-pending {background:#352d1c;color:#f4ce8b;}
+:root[data-theme="dark"] .vitrea-quickdock .sync-indicator--dock.sync-offline {background:#382727;color:#f6c5c5;}
+
+@media (max-width:1170px) and (min-width:861px) {
+  .vitrea-header-layout {grid-template-columns:minmax(0,1fr) 174px;gap:10px;padding-inline:12px;}
+  .vitrea-header-main .vitrea-top-row {padding-inline:9px;gap:6px;}
+  .vitrea-header-main .vitrea-brand-capsule small {font-size:10px;}
+  .vitrea-header-main .vitrea-primary-nav button {padding-inline:8px;}
+  .app-shell .vitrea-header-main .topbar .breadcrumb {display:none;}
+}
+@media (max-width:860px) {
+  .vitrea-header-layout {grid-template-columns:minmax(0,1fr);gap:9px;padding:10px 11px 0;}
+  .vitrea-header-main .vitrea-top-row {display:flex;padding:7px 9px 2px;}
+  .vitrea-header-main .vitrea-top-row > .vitrea-brand-capsule {display:inline-flex;}
+  .vitrea-header-main .vitrea-top-row .vitrea-primary-nav {
+    width:auto;min-width:0;max-width:100%;margin:0;padding:3px;
+  }
+  .app-shell.vitrea-layout > .workspace .vitrea-header-main .topbar {
+    margin:0;padding:5px 11px 9px;min-height:53px;border-radius:0 0 27px 27px;
+  }
+  .app-shell .vitrea-header-main .topbar .breadcrumb {display:none;}
+  .vitrea-header-clock {justify-content:flex-start;}
+  .vitrea-header-clock .clock-widget--fixed,
+  .vitrea-header-clock .clock-widget__display {width:174px;}
+  .vitrea-quickdock > .sync-indicator--dock {width:70px;min-height:43px;gap:3px;}
+  .vitrea-quickdock__divider {width:1px;height:30px;}
+}
+@media (max-width:600px) {
+  .vitrea-header-main .vitrea-top-row {align-items:stretch;flex-wrap:wrap;}
+  .vitrea-header-main .vitrea-primary-nav {flex-basis:100%;order:2;}
+  .vitrea-header-main .vitrea-brand-capsule small {font-size:10px;}
+  .app-shell .vitrea-header-main .topbar .searchplus-shell {width:auto;flex:1 1 auto;max-width:none;min-width:0;}
+  .app-shell .vitrea-header-main .topbar .vitrea-account-capsule {flex:none;}
+  .vitrea-header-clock .clock-widget--fixed,
+  .vitrea-header-clock .clock-widget__display {width:146px;}
+}

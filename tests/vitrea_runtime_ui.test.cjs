@@ -106,6 +106,39 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       await page.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
       await screenshot(page,'madar-overview-dark-initial');
+      const headerLayout=await page.evaluate(()=>{
+        const box=selector=>{
+          const node=document.querySelector(selector);
+          if(!node)return null;
+          const r=node.getBoundingClientRect();
+          return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};
+        };
+        return {
+          main:box('.vitrea-header-main'),
+          brand:box('.vitrea-brand-capsule'),
+          search:box('.vitrea-header-main .searchplus-shell'),
+          account:box('.vitrea-header-main .vitrea-account-capsule'),
+          time:box('.vitrea-header-clock .clock-widget__time-card'),
+          date:box('.vitrea-header-clock .clock-widget__date'),
+          dock:box('.vitrea-quickdock'),
+          sync:box('.vitrea-quickdock > .sync-indicator--dock'),
+          refresh:box('.vitrea-quickdock > .vitrea-quickdock__refresh'),
+        };
+      });
+      assert.ok(headerLayout.main.x>=headerLayout.time.right+10,
+        'Clock must remain outside and left of the unified right header');
+      assert.ok(Math.abs(headerLayout.date.x-headerLayout.time.x)<=1 &&
+        Math.abs(headerLayout.date.width-headerLayout.time.width)<=1 &&
+        headerLayout.date.y>headerLayout.time.bottom,
+        'Separate date capsule must be exactly aligned below the clock capsule');
+      assert.ok(headerLayout.search.y>headerLayout.brand.y &&
+        headerLayout.account.right<=headerLayout.search.x+5,
+        'Search belongs below the brand and profile follows the search on its left');
+      assert.ok(headerLayout.sync.y>=headerLayout.dock.y &&
+        headerLayout.refresh.y>=headerLayout.sync.bottom,
+        'Connection comes first and refresh immediately follows within the left rail');
+      assert.ok(headerLayout.dock.y>headerLayout.date.bottom,
+        'Desktop dock must not overlap the date capsule');
       const navigationProblems=[];
       const clickWithDiagnostic=async locator=>{
         try{await locator.click({timeout:4000});}
@@ -185,6 +218,15 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       const mobileErrors=captureErrors(small);
       await small.addInitScript(data=>localStorage.setItem('madar-preview',JSON.stringify(data)),previewState);
       await small.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
+      const mobileDock=await small.getByRole('button',{name:'نمایش منوی کامل مدار'})
+        .evaluate(button=>{
+          const r=button.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+          return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,
+            clickable:button===hit||button.contains(hit)};
+        });
+      assert.ok(mobileDock.x>=0 && mobileDock.y>=0 &&
+        mobileDock.right<=mobileDock.width && mobileDock.bottom<=mobileDock.height &&
+        mobileDock.clickable,'Mobile quickdock menu must be visible and hit-testable');
       await small.getByRole('button',{name:'نمایش منوی کامل مدار'}).click();
       assert.equal(await small.locator('#madar-sidebar').getAttribute('role'),'dialog');
       // Mobile drawer animates its visibility/transform; under parallel Node

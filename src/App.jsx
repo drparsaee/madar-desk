@@ -202,10 +202,11 @@ function Modal({title,children,onClose,width=470}){
   return <div className="overlay" onMouseDown={()=>closeRef.current()}><div ref={root} tabIndex={-1} className="dialog" style={{maxWidth:width}} onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-head"><h2>{title}</h2><button className="icon-btn" aria-label="بستن" onClick={()=>closeRef.current()}><X size={19}/></button></div>{children}</div></div>;
 }
 
-function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false}){
+function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,compact=false}){
   const health=syncHealth(status,{conflict,saving});
   const label=health.label;
-  return <button type="button" aria-live="polite" className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/>{label}</button>;
+  const shortLabel=compact&&health.kind==='online'&&label.includes('محلی')?'اتصال محلی':label;
+  return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
@@ -1110,6 +1111,12 @@ export default function App(){
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
+      <SyncIndicator compact status={syncInfo} conflict={pendingRecovery||blocked.current}
+        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/>
+      <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
+        disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
+        <RefreshCw size={19} className={syncing?'spin':''}/></button>
+      <span className="vitrea-quickdock__divider" aria-hidden="true"/>
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
         onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(value=>!value)}><Menu size={20}/></button>
@@ -1119,9 +1126,6 @@ export default function App(){
         onClick={()=>setPlannerOpen(true)}><CalendarDays size={19}/></button>}
       {show('reporting')&&<button type="button" title="گزارش و تحلیل" aria-label="گزارش و تحلیل"
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/></button>}
-      <button type="button" onClick={manualRefresh} disabled={syncing}
-        title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی">
-        <RefreshCw size={19} className={syncing?'spin':''}/></button>
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/></button>
       <button type="button" onClick={()=>setLanOpen(true)}
@@ -1195,10 +1199,13 @@ export default function App(){
     </aside>
 
     <main className="workspace">
+      <div className="vitrea-header-layout">
+      <div className="vitrea-header-main">
       <div className="vitrea-top-row">
       <button type="button" className="vitrea-brand-capsule" title="بازگشت به نمای کلی مدار"
         onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}>
-        <span aria-hidden="true">م</span><strong>مدار</strong>
+        <span aria-hidden="true">م</span><strong>مدار</strong><i aria-hidden="true">|</i>
+        <small>در جریان کسب و کار</small>
       </button>
       <nav className="vitrea-primary-nav" aria-label="بخش‌های اصلی مدار">
         <button type="button" aria-current={selected==='all'&&mode==='board'?'page':undefined}
@@ -1212,11 +1219,24 @@ export default function App(){
         {show('planner')&&<button type="button" onClick={()=>setPlannerOpen(true)}><CalendarDays size={15}/> برنامه‌ریزی</button>}
         {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard}><Wallet size={15}/> حسابداری</button>}
       </nav>
-      <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
-        aria-label="نمایش پروفایل من" title="پروفایل من"><Avatar user={lanStatus.user} size={32}/>
-        <span>{lanStatus.user?.displayName||lanStatus.user?.username||'حساب من'}</span></button>
       </div>
-      <header className="topbar"><button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar" aria-expanded={mobileNavOpen} aria-label="بازکردن فهرست پیمایش" onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button><div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/><strong>{selectedProject?.name||'همه کارها'}</strong></div><SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length} totalCount={tasks.length} placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/><div className="top-actions"><SyncIndicator status={syncInfo} conflict={pendingRecovery||blocked.current} saving={dirty.current||saving.current} lastSync={lastSync} showDetails={()=>setLanOpen(true)}/><ClockWidget calendar={calendar}/></div></header>
+      <header className="topbar">
+        <button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar"
+          aria-expanded={mobileNavOpen} aria-label="بازکردن فهرست پیمایش"
+          onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
+        <SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length}
+          totalCount={tasks.length}
+          placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/>
+        <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
+          aria-label="نمایش پروفایل من" title="پروفایل من">
+          <Avatar user={lanStatus.user} size={32}/>
+        </button>
+        <div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/>
+          <strong>{selectedProject?.name||'همه کارها'}</strong></div>
+      </header>
+      </div>
+      <div className="vitrea-header-clock"><ClockWidget calendar={calendar}/></div>
+      </div>
       <div className="workspace-scroll">
         <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
