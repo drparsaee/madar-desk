@@ -1,6 +1,6 @@
 /**
  * M-04 App.jsx integration contract. Static JSX/AST evidence, never an E2E claim.
- * Pending integration assertions are skipped until App.jsx imports the adapter.
+ * Managed LAN display roles replaced the historical local-user dropdown.
  * We do not edit App.jsx from this test or infer API/host authorization from JSX.
  */
 const {test} = require('node:test');
@@ -74,8 +74,8 @@ function loadPolicy(){
   return instance.exports;
 }
 const policy=loadPolicy();
-const integrated=matching('InterfaceModeSelector').length===1;
-const pending=integrated?false:'App.jsx has not connected useInterfaceModePreference/InterfaceModeSelector';
+const integrated=/resolvedDisplayScope\(lanStatus\)/.test(app)&&/isManagedFeatureVisible\(displayScope/.test(app);
+const pending=integrated?false:'App.jsx has not connected managed LAN display scope';
 
 test('App.jsx is parseable JSX and still derives write privileges from LAN role',()=>{
   assert.ok(ast.program.body.length>0);
@@ -110,6 +110,7 @@ test('today: task-side finance panels remain role-gated; management finance open
   }
   const nav=exactOne('button',/window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.ok(guardContains(nav,/\bcanViewStandalone\b/),'standalone dashboard must require explicit finance viewing capability');
+  assert.ok(displayFeature(nav,'accountingDashboard'),'host-allowed dashboard is also restricted by assigned display role');
   assert.match(nav.opening,/dirty\.current\|\|saving\.current\|\|blocked\.current/);
   assert.match(app,/مدیریت مالی<\/button>/);
   assert.equal(matching('FinanceOverview').length,0,'legacy financial hub must not be mounted');
@@ -154,14 +155,12 @@ test('mode preference does not become a permission or shared task-state write',(
   assert.equal(policy.isInterfaceFeatureVisible('finance','financeHub',{canManage:true}),true);
 });
 
-test('integration: account-local UI preference hook and selector connected to App', {skip:pending},()=>{
-  assert.match(app,/import\s*\{[^}]*InterfaceModeSelector[^}]*useInterfaceModePreference[^}]*\}\s*from\s*['"]\.\/interface_mode\.jsx['"]/s);
-  assert.match(app,/useInterfaceModePreference\(lanStatus/);
-  const selector=exactOne('InterfaceModeSelector');
-  assert.match(selector.opening,/\bmode=\{/);
-  assert.match(selector.opening,/\bonChange=\{/);
-  assert.match(selector.opening,/\bdisabled=\{/);
-  assert.ok(!/setData\(|changeAdmin\(/.test(selector.opening),'mode selection must not write shared task state');
+test('integration: assigned LAN display role controls App instead of local user dropdown', {skip:pending},()=>{
+  assert.match(app,/from '\.\/managed_display\.js'/);
+  assert.match(app,/const displayScope=resolvedDisplayScope\(lanStatus\)/);
+  assert.match(app,/const show=feature=>isManagedFeatureVisible\(displayScope,feature,\{canManage,canEdit\}\)/);
+  assert.equal(matching('InterfaceModeSelector').length,0,'end users must not choose their own display clearance');
+  assert.match(app,/displayScope\.label/);
 });
 
 test('integration: advanced screens and their mounted panels are tier-gated', {skip:pending},()=>{

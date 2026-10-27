@@ -483,11 +483,37 @@ class Bridge:
 
     def getPreferences(self):
         if not self.preferences_path.exists():
-            return {"calendar": "jalali", "clockWidget": "both"}
-        raw = json.loads(self.preferences_path.read_text(encoding="utf8"))
+            raw = {}
+        else:
+            raw = json.loads(self.preferences_path.read_text(encoding="utf8"))
+        if not isinstance(raw, dict):
+            raw = {}
+        default_widget = {"mode": "both", "theme": "aurora", "size": "regular",
+                          "hourFormat": "24", "dateFormat": "full", "placement": "topbar",
+                          "position": {"x": 0.83, "y": 0.12}}
+        old_mode = raw.get("clockWidget", "both")
+        if old_mode in ("both", "clock", "date", "hidden"):
+            default_widget["mode"] = old_mode
+        source = raw.get("widgetSettings")
+        if isinstance(source, dict):
+            for key, valid in (("mode", ("both", "clock", "date", "hidden")),
+                               ("theme", ("light", "dark", "aurora")),
+                               ("size", ("compact", "regular", "large")),
+                               ("hourFormat", ("12", "24")),
+                               ("dateFormat", ("compact", "full")),
+                               ("placement", ("topbar", "floating", "top-left", "top-right",
+                                              "bottom-left", "bottom-right"))):
+                if source.get(key) in valid:
+                    default_widget[key] = source[key]
+            point = source.get("position")
+            if (isinstance(point, dict) and all(
+                    isinstance(point.get(k), (int, float)) and not isinstance(point.get(k), bool)
+                    and 0 <= point[k] <= 1 for k in ("x", "y"))):
+                default_widget["position"] = {"x": float(point["x"]), "y": float(point["y"])}
         return {
             "calendar": raw.get("calendar", "jalali") if raw.get("calendar") in ("jalali", "gregorian") else "jalali",
-            "clockWidget": raw.get("clockWidget", "both") if raw.get("clockWidget") in ("both", "clock", "date", "hidden") else "both",
+            "clockWidget": default_widget["mode"],
+            "widgetSettings": default_widget,
         }
 
     def _clear_profile_cache(self):
@@ -565,7 +591,31 @@ class Bridge:
                     or len(projects) > 2000 or
                     any(not isinstance(value, str) for value in projects)))):
             raise ValueError("LAN profile identity is invalid")
-        return public_user(profile)
+        result = public_user(profile)
+        # Server /api/profiles already supplies the *effective* presentation
+        # role. Recomputing through public_user() alone loses custom role IDs
+        # because the client does not possess the host's private role catalog.
+        # Retain only bounded, allowlisted presentation fields, never tokens,
+        # secrets or any extra fields in the live response or offline cache.
+        from role_profiles import DISPLAY_FEATURE_TIERS, MODE_RANK, ID_PATTERN
+        if "displayRole" in profile:
+            identifier = profile["displayRole"]
+            mode = profile.get("displayMode")
+            label = profile.get("displayRoleLabel", identifier)
+            features = profile.get("displayFeatures")
+            if (type(identifier) is not str or not ID_PATTERN.fullmatch(identifier)
+                    or type(mode) is not str or mode not in MODE_RANK
+                    or type(label) is not str or not 1 <= len(label) <= 60
+                    or any(ord(c) < 32 or ord(c) == 127 for c in label)
+                    or type(features) is not list or len(features) > len(DISPLAY_FEATURE_TIERS)
+                    or len(features) != len(set(map(str, features)))
+                    or any(type(key) is not str or key not in DISPLAY_FEATURE_TIERS or
+                           MODE_RANK[DISPLAY_FEATURE_TIERS[key]] > MODE_RANK[mode]
+                           for key in features)):
+                raise ValueError("LAN presentation profile contains invalid fields")
+            result.update({"displayRole": identifier, "displayMode": mode,
+                           "displayRoleLabel": label, "displayFeatures": list(features)})
+        return result
 
     def lanProfiles(self):
         if self.connection.get("mode") == "client":
@@ -642,8 +692,32 @@ class Bridge:
         clock_widget = payload.get("clockWidget", current["clockWidget"])
         if calendar not in ("jalali", "gregorian") or clock_widget not in ("both", "clock", "date", "hidden"):
             raise ValueError("تنظیمات ساعت یا تقویم معتبر نیست.")
+        widget = dict(current["widgetSettings"])
+        if "widgetSettings" in payload:
+            incoming = payload["widgetSettings"]
+            if not isinstance(incoming, dict) or set(incoming) - set(widget):
+                raise ValueError("گزینه‌های ویجت نامعتبر هستند.")
+            for key, valid in (("mode", ("both", "clock", "date", "hidden")),
+                               ("theme", ("light", "dark", "aurora")),
+                               ("size", ("compact", "regular", "large")),
+                               ("hourFormat", ("12", "24")),
+                               ("dateFormat", ("compact", "full")),
+                               ("placement", ("topbar", "floating", "top-left", "top-right",
+                                              "bottom-left", "bottom-right"))):
+                if key in incoming and incoming[key] not in valid:
+                    raise ValueError("مقدار یکی از تنظیمات ویجت معتبر نیست.")
+            if "position" in incoming:
+                point = incoming["position"]
+                if (not isinstance(point, dict) or set(point) != {"x", "y"} or
+                        not all(isinstance(point[k], (float, int)) and not isinstance(point[k], bool)
+                                and 0 <= point[k] <= 1 for k in ("x", "y"))):
+                    raise ValueError("موقعیت ویجت باید در محدوده صفحه باشد.")
+            widget.update(incoming)
+        elif "clockWidget" in payload:
+            widget["mode"] = clock_widget
         temp = self.preferences_path.with_suffix(".tmp")
-        temp.write_text(json.dumps({"calendar": calendar, "clockWidget": clock_widget}), encoding="utf8")
+        temp.write_text(json.dumps({"calendar": calendar, "clockWidget": widget["mode"],
+                                    "widgetSettings": widget}), encoding="utf8")
         temp.replace(self.preferences_path)
         return self.getPreferences()
 
@@ -948,9 +1022,18 @@ class Bridge:
             self.remote_user = None
             raise
 
-    def lanStatus(self):
+    def lanStatus(self, refresh=False):
         mode = self.connection.get("mode", "solo")
         if mode == "client":
+            if refresh is True and self.remote_token and self._network_available:
+                try:
+                    fresh = self._remote_request("/api/me").get("user")
+                    if isinstance(fresh, dict) and fresh.get("username") == (self.remote_user or {}).get("username"):
+                        self.remote_user = fresh
+                except (OSError, ValueError, RuntimeError, PermissionError):
+                    # Preserve the validated offline account snapshot. Network
+                    # permission checks still occur on the authoritative host.
+                    pass
             return {"mode": mode, "url": self.connection.get("url", ""),
                     "transport": "https" if self.connection.get("url", "").startswith("https://") else "http",
                     "fingerprint": self.connection.get("fingerprint", ""),
@@ -1101,6 +1184,23 @@ class Bridge:
             return [dict(u) for u in self.lan.list_users(self.lan.authenticate_owner_token())]
         result = self._remote_request("/api/users")
         return result["users"]
+
+    def lanDisplayRoles(self):
+        if self.lan:
+            return self.lan.list_display_roles(self.lan.authenticate_owner_token())
+        return self._remote_request("/api/display-roles")["roles"]
+
+    def lanSaveDisplayRole(self, payload):
+        if self.lan:
+            return self.lan.upsert_display_role(self.lan.authenticate_owner_token(), payload)
+        return self._remote_request("/api/display-roles", payload)["role"]
+
+    def lanDeleteDisplayRole(self, identifier):
+        if not isinstance(identifier, str):
+            raise ValueError("شناسه قالب نمایش معتبر نیست.")
+        if self.lan:
+            return self.lan.delete_display_role(self.lan.authenticate_owner_token(), identifier)
+        return self._remote_request("/api/display-roles", {"action": "delete", "id": identifier})["ok"]
 
     def lanSaveUser(self, payload):
         if self.lan:
@@ -2306,6 +2406,7 @@ window.madar = Object.fromEntries(
  ['getState','getStateForUi','saveState','exportBackup','importBackup','driveStatus',
   'driveConnect','driveDisconnect','driveList','driveUpload','driveRestore',
   'lanStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
+  'lanDisplayRoles','lanSaveDisplayRole','lanDeleteDisplayRole',
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
   'getPreferences','setPreferences','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
@@ -2436,6 +2537,12 @@ def main():
                         time.sleep(0.4)
                     except Exception:
                         pass
+                elif os.environ.get("MADAR_QA_VIEW") == "widget-settings":
+                    try:
+                        window.evaluate_js("document.querySelector('button[aria-label=\"تنظیمات\"]')?.click()")
+                        time.sleep(0.4)
+                    except Exception:
+                        pass
                 if os.environ.get("MADAR_QA_THEME") == "dark":
                     try:
                         window.evaluate_js("document.documentElement.dataset.theme='dark'")
@@ -2460,6 +2567,11 @@ def main():
                     "stageCount": "document.querySelectorAll('.kanban-lane').length",
                     "cardCount": "document.querySelectorAll('.task-card').length",
                     "cardTextStart": "document.querySelector('.task-card')?.innerText.slice(0,120) ?? ''",
+                    "assignedDisplay": "document.querySelector('.interface-mode-selector--compact')?.innerText.slice(0,160) ?? ''",
+                    "widgetTheme": "document.querySelector('.clock-widget')?.dataset.widgetTheme ?? ''",
+                    "widgetPlacement": "document.querySelector('.clock-widget')?.className ?? ''",
+                    "widgetSettingsShown": "!!document.querySelector('.settings-modal .widget-settings')",
+                    "widgetSettingsSections": "document.querySelectorAll('.settings-modal .widget-settings__group').length",
                 }.items():
                     try:
                         values[name] = window.evaluate_js(script)

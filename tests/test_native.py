@@ -217,12 +217,27 @@ class NativeAppTests(unittest.TestCase):
     def test_clock_widget_setting_survives_calendar_change_and_restart(self):
         self.assertEqual(self.bridge.getPreferences()["clockWidget"], "both")
         changed = self.bridge.setPreferences({"clockWidget": "date"})
-        self.assertEqual(changed, {"calendar": "jalali", "clockWidget": "date"})
+        self.assertEqual(changed["calendar"], "jalali")
+        self.assertEqual(changed["clockWidget"], "date")
+        self.assertEqual(changed["widgetSettings"]["mode"], "date")
         self.assertEqual(self.bridge.setPreferences({"calendar": "gregorian"})["clockWidget"], "date")
         self.assertEqual(native_app.Bridge().getPreferences()["clockWidget"], "date")
         self.assertEqual(self.bridge.setPreferences({"clockWidget": "hidden"})["clockWidget"], "hidden")
         with self.assertRaises(ValueError):
             self.bridge.setPreferences({"clockWidget": "__proto__"})
+
+    def test_widget_settings_are_independent_of_calendar_and_validated(self):
+        value = {"mode": "clock", "theme": "aurora", "size": "large", "hourFormat": "12",
+                 "dateFormat": "compact", "placement": "floating", "position": {"x": 0.37, "y": 0.66}}
+        saved = self.bridge.setPreferences({"widgetSettings": value})
+        self.assertEqual(saved["widgetSettings"], value)
+        self.assertEqual(saved["clockWidget"], "clock")
+        self.bridge.setPreferences({"calendar": "gregorian"})
+        self.assertEqual(native_app.Bridge().getPreferences()["widgetSettings"], value)
+        for wrong in ({"placement": "outside"}, {"position": {"x": 2, "y": 0.4}},
+                      {"theme": "fake"}, {"position": {"x": float("nan"), "y": 0.2}}):
+            with self.assertRaises(ValueError):
+                self.bridge.setPreferences({"widgetSettings": wrong})
 
     def test_card_cost_toggle_and_assignees_survive_backup(self):
         state = self.bridge.getState()

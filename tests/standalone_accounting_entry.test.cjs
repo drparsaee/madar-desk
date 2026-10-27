@@ -37,7 +37,7 @@ test('accounting entry respects financeView and standalone host-verified edit ca
   assert.match(app,/canViewStandalone=canManage/);
   assert.match(app,/financeView===true/);
   assert.match(app,/financeEdit===true/);
-  assert.match(app,/canViewStandalone&&<button/);
+  assert.match(app,/canViewStandalone&&show\('accountingDashboard'\)&&<button/);
   assert.match(entry,/payload\?\.capabilities\?\.canManage===true/);
   assert.match(entry,/payload\?\.capabilities\?\.canDraft===true/);
   assert.doesNotMatch(entry,/canManage=\{Boolean\(window\.madar\)\}/);

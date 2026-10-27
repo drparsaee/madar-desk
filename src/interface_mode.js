@@ -34,7 +34,7 @@ export const INTERFACE_FEATURE_TIERS = Object.freeze({
   // Financial figures and entry points require the existing admin check as well.
   financeHub:'finance', projectFinance:'finance', profitPeek:'finance',
   taskCostControls:'finance', checklistCostControls:'finance',
-  projectPricing:'finance', aiAgent:'finance',
+  projectPricing:'finance', accountingDashboard:'finance', aiAgent:'finance',
 });
 
 const ADMIN_ONLY_FEATURES = new Set([

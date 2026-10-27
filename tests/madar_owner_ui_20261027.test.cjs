@@ -12,7 +12,7 @@ test('decorative old sidebar promo is fully absent from JSX and CSS',()=>{
 test('one finance management link goes to verified standalone dashboard, not old finance hub',()=>{
   const source=read('src/App.jsx');
   assert.equal((source.match(/مدیریت مالی<\/button>/g)||[]).length,1);
-  assert.match(source,/canViewStandalone&&<button/);
+  assert.match(source,/canViewStandalone&&show\('accountingDashboard'\)&&<button/);
   assert.match(source,/window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.doesNotMatch(source,/setFinanceHubOpen\(true\)|<FinanceOverview\b/);
   assert.match(read('src/standalone_accounting_workspace.jsx'),/useState\('overview'\)/);
@@ -21,10 +21,10 @@ test('one finance management link goes to verified standalone dashboard, not old
 test('clock chooser is wired and settings preserve calendar changes',()=>{
   const app=read('src/App.jsx');
   const backend=read('native_app.py');
-  assert.match(app,/<ClockWidget calendar=\{calendar\} mode=\{clockWidget\}/);
-  assert.match(app,/setPreferences\(\{calendar,clockWidget:value\}\)/);
-  assert.match(app,/setPreferences\(\{calendar:choice,clockWidget\}\)/);
-  assert.match(backend,/"clockWidget": clock_widget/);
+  assert.match(app,/<ClockWidget calendar=\{calendar\} settings=\{widgetSettings\}/);
+  assert.match(app,/setPreferences\(\{calendar,widgetSettings:value\}\)/);
+  assert.match(app,/setPreferences\(\{calendar:choice,widgetSettings\}\)/);
+  assert.match(backend,/"widgetSettings": widget/);
 });
 
 test('floating labels initialize in both tasks and standalone accounting',()=>{

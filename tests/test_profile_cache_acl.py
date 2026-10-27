@@ -101,6 +101,25 @@ class ProfileCacheACLTests(unittest.TestCase):
         reopened.client_auth_path.unlink()
         self.assertEqual(reopened.lanProfiles(), [])
 
+    def test_valid_custom_role_survives_live_profile_sanitizing_without_leaking_fields(self):
+        source = {**self.accounts["viewer_a"], "displayRole": "custom-finance",
+                  "displayRoleLabel": "هماهنگ‌کننده", "displayMode": "operations",
+                  "displayFeatures": ["cards", "planner"],
+                  "privateSessionToken": "must-never-be-cached"}
+        sanitized = native_app.Bridge._public_cached_profile(source)
+        self.assertEqual(sanitized["displayRole"], "custom-finance")
+        self.assertEqual(sanitized["displayRoleLabel"], "هماهنگ‌کننده")
+        self.assertEqual(sanitized["displayMode"], "operations")
+        self.assertEqual(sanitized["displayFeatures"], ["cards", "planner"])
+        self.assertNotIn("privateSessionToken", sanitized)
+        for malformed in (
+            {**source, "displayFeatures": ["cards", "projectFinance"]},
+            {**source, "displayFeatures": ["cards", "cards"]},
+            {**source, "displayRole": "../bad"},
+        ):
+            with self.assertRaises(ValueError):
+                native_app.Bridge._public_cached_profile(malformed)
+
     def test_server_change_and_role_scope_changes_reject_old_cache(self):
         self.join("viewer_a")
         self.live_profiles()
