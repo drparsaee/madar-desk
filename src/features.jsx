@@ -117,13 +117,11 @@ const LAN_FEATURE_LABELS={
  taskCostControls:'هزینه کار',checklistCostControls:'هزینه مراحل',
  projectPricing:'قیمت پروژه',aiAgent:'دستیار هوشمند (در صورت فعال‌سازی)',
 };
-export const lanTechnicalRoleForDisplay=(id,roles=LAN_BUILTIN_DISPLAY_ROLES)=>
- id==='superadmin'?'admin':roles.find(item=>item.id===id)?.displayMode==='basic'?'viewer':'editor';
 export const lanDefaultDisplayRoleForUser=(user)=>user?.displayRole||
  (user?.role==='admin'?'superadmin':user?.role==='viewer'?'employee':'middle');
 export const lanCanAssignDisplayRole=(roles,id,technicalRole)=>
  Array.isArray(roles)&&roles.some(template=>template.id===id)&&
- (id!=='superadmin'||technicalRole==='admin');
+ (id==='superadmin')===(technicalRole==='admin');
 const lanRoleLabel=(roles,id)=>roles.find(item=>item.id===id)?.label||
  LAN_BUILTIN_DISPLAY_ROLES.find(item=>item.id===id)?.label||id;
 const lanRoleFeatures=mode=>Object.keys(INTERFACE_FEATURE_TIERS).filter(key=>
@@ -213,13 +211,12 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
    const template=displayRoles.find(item=>item.id===id);
    setUserDisplayMode(template?.displayMode||'basic');
    setUserDisplayFeatures(lanAvailableUserFeatures(template,template?.displayMode||'basic'));
-   if(!editingUsername){setRole(lanTechnicalRoleForDisplay(id,displayRoles));if(id==='superadmin')setScope('all');}
  };
  const activeTemplate=displayRoles.find(item=>item.id===displayRole);
  const activeMode=customUserDisplay?userDisplayMode:activeTemplate?.displayMode||'basic';
  const userFeatureKeys=lanAvailableUserFeatures(activeTemplate,activeMode);
  const invalidDisplayRole=!lanCanAssignDisplayRole(displayRoles,displayRole,role);
- const saveUser=()=>run(async()=>{if(invalidDisplayRole)throw Error('برای قالب مدیرکل باید مجوز فنی مدیر میزبان انتخاب شود.');
+ const saveUser=()=>run(async()=>{if(invalidDisplayRole)throw Error('قالب مدیرکل فقط با مجوز فنی مدیر میزبان مجاز است؛ مجوز مدیر نیز به انتخاب قالب مدیرکل نیاز دارد.');
    await api.lanSaveUser({username:name.trim(),password:userPassword,role,displayRole,
      displayMode:customUserDisplay?activeMode:null,
      displayFeatures:customUserDisplay?userFeatureKeys.filter(key=>userDisplayFeatures.includes(key)):null,
@@ -354,12 +351,12 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected}){
         </select>
       </label>}
     </div>
-    <p className="account-role-help">{editingUsername?'تغییر قالب نمایش هنگام ویرایش، مجوز فنی قبلی را خودکار عوض نمی‌کند.':'برای حساب جدید، انتخاب قالب مجوز فنی پیشنهادی را تنظیم می‌کند؛ مجوز فنی را می‌توان جدا تغییر داد.'} {role==='admin'
+    <p className="account-role-help">{editingUsername?'تغییر قالب نمایش هنگام ویرایش، مجوز فنی قبلی را خودکار عوض نمی‌کند.':'حساب جدید با مجوز فنی «مشاهده‌گر» شروع می‌شود؛ انتخاب قالب نمایشی هیچ مجوزی را تغییر نمی‌دهد.'} {role==='admin'
       ?'مدیر به تمام پروژه‌ها و مدیریت حساب‌ها دسترسی دارد.'
       :role==='editor'
         ?'ویرایشگر می‌تواند کارهای پروژه‌های مجاز را ثبت و ویرایش کند، اما اجازه مدیریت کاربران را ندارد.'
         :'مشاهده‌گر فقط اطلاعات پروژه‌های مجاز را می‌بیند و حق تغییر ندارد.'}</p>
-    {invalidDisplayRole&&<p className="lan-error" role="alert">قالب ناشناخته یا انتخاب مدیرکل بدون مجوز فنی مدیر میزبان مجاز نیست. مجوز فنی را جدا تنظیم کن.</p>}
+    {invalidDisplayRole&&<p className="lan-error" role="alert">قالب معتبر انتخاب کن. قالب «مدیرکل» فقط با مجوز فنی «مدیر میزبان» سازگار است و این مجوز نیز به قالب «مدیرکل» نیاز دارد. هر دو را جداگانه انتخاب کن.</p>}
     {activeTemplate&&<div className="setting-block lan-user-display-options">
       <label className="setting-toggle"><input type="checkbox" checked={customUserDisplay} onChange={e=>{
         setCustomUserDisplay(e.target.checked);

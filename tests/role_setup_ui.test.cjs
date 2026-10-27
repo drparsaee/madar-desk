@@ -1,5 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 const path=require('node:path');
 const Module=require('node:module');
 const esbuild=require('esbuild');
@@ -16,25 +17,34 @@ loaded.paths=Module._nodeModulePaths(root);
 loaded._compile(bundle,loaded.filename);
 const {
   LAN_BUILTIN_DISPLAY_ROLES,lanCanAssignDisplayRole,lanDefaultDisplayRoleForUser,
-  lanDisplayRolePayload,lanTechnicalRoleForDisplay,lanAvailableUserFeatures,SettingsPanel,
+  lanDisplayRolePayload,lanAvailableUserFeatures,SettingsPanel,
 }=loaded.exports;
 
 test('five display templates align with host IDs and never substitute for technical ACL',()=>{
   assert.deepEqual(LAN_BUILTIN_DISPLAY_ROLES.map(item=>item.id),
     ['superadmin','senior','middle','unit','employee']);
-  assert.equal(lanTechnicalRoleForDisplay('superadmin'),'admin');
-  assert.equal(lanTechnicalRoleForDisplay('employee'),'viewer');
-  assert.equal(lanTechnicalRoleForDisplay('senior'),'editor');
-  assert.equal(lanTechnicalRoleForDisplay('finance_staff',[
-    {id:'finance_staff',displayMode:'finance'}]),'editor');
   assert.equal(lanDefaultDisplayRoleForUser({role:'admin'}),'superadmin');
   assert.equal(lanDefaultDisplayRoleForUser({role:'editor'}),'middle');
   assert.equal(lanDefaultDisplayRoleForUser({role:'viewer'}),'employee');
   assert.equal(lanDefaultDisplayRoleForUser({role:'editor',displayRole:'custom_a'}),'custom_a');
   assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'superadmin','viewer'),false);
   assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'superadmin','admin'),true);
-  assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'middle','admin'),true);
+  assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'middle','admin'),false);
+  assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'middle','viewer'),true);
+  assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'employee','editor'),true);
   assert.equal(lanCanAssignDisplayRole(LAN_BUILTIN_DISPLAY_ROLES,'missing','admin'),false);
+});
+
+test('changing a display template never silently changes technical ACL or project scope',()=>{
+  const source=fs.readFileSync(path.join(root,'src/features.jsx'),'utf8');
+  const handler=source.match(/const changeDisplayRole=id=>\{([\s\S]*?)\n \};/);
+  assert(handler,'displayRole selection handler must exist');
+  assert(!handler[1].includes('setRole('),'presentation choice must not change technical role');
+  assert(!handler[1].includes('setScope('),'presentation choice must not change project access');
+  assert.match(source,/const \[role,setRole\]=useState\('viewer'\)/);
+  assert.match(source,/const resetUserForm=\(\)=>\{[^\n]*setRole\('viewer'\)/);
+  assert.match(source,/select value=\{role\} onChange=\{e=>\{setRole\(e\.target\.value\)/);
+  assert.match(source,/disabled=\{busy\|\|invalidDisplayRole\|\|!name\.trim\(\)/);
 });
 
 test('custom role payload matches required LAN API contract and cannot extend its display tier',()=>{
