@@ -36,7 +36,11 @@
   color: var(--text, #1c293c);
   font: inherit;
   font-size: 13px;
+  min-height: 0;
+  height: auto;
+  line-height: 1.5;
 }
+.searchplus-input:focus { background: transparent; }
 .searchplus-input::-webkit-search-cancel-button { display: none; }
 .searchplus-input::placeholder { color: var(--muted, #8090a1); opacity: 1; }
 .searchplus-action {
@@ -63,6 +67,7 @@
   font-size: 11px;
   color: var(--muted, #66758a);
   white-space: nowrap;
+  pointer-events: none;
 }
 .searchplus-help {
   position: absolute;

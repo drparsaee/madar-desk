@@ -208,7 +208,9 @@ def run_ui_flow(window, bridge):
         return results
 
     check('create_task_opens', """
-      const btn=document.querySelector('.create-primary');
+      // Trello-style creation lives inside its destination list. Global
+      // create shortcuts were intentionally retired by the owner.
+      const btn=document.querySelector('.kanban-lane .lane-add-card');
       if(!btn||btn.disabled)return false;btn.click();return true;
     """, timeout=4)
     check('create_task_dialog', """

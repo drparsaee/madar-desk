@@ -130,6 +130,9 @@ test('React search control displays accessible help, clear action and result cou
     query: 'title:جعبه', onQueryChange: () => {}, resultCount: 3, totalCount: 18
   }));
   assert.match(result, /role="search"/);
+  assert.match(result, /data-no-floating-label=""/, 'search owns its own inline label and icon layout');
+  assert.match(result, /type="search"/);
+  assert.match(result, /placeholder="جست‌وجو در عنوان/);
   assert.match(result, /جست‌وجوی پیشرفته کارها/);
   assert.match(result, /پاک‌کردن جست‌وجو/);
   assert.match(result, /راهنمای جست‌وجوی پیشرفته/);

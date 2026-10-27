@@ -20,6 +20,7 @@ import {RulesPanel} from './rulespanel.jsx';
 import {duplicateCard} from './taskops.js';
 import {CardAttachments} from './attachments.jsx';
 import {archiveBoardState,restoreBoardState,renameBoardState,moveCardToBoard,boardStageUpdate,legacyStatusForStage} from './boardops.js';
+import {boardForColumn,propagateAddedWorkspaceStages} from './board_stage_sync.js';
 import {ProfitPeek} from './financeoverview.jsx';
 import {AccountingPanel} from './accounting_panel.jsx';
 import {AccountingWorkspace} from './accounting_workspace.jsx';
@@ -205,7 +206,7 @@ function Modal({title,children,onClose,width=470}){
 function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,compact=false}){
   const health=syncHealth(status,{conflict,saving});
   const label=health.label;
-  const shortLabel=compact&&health.kind==='online'&&label.includes('محلی')?'اتصال محلی':label;
+  const shortLabel=compact?({offline:'آفلاین',conflict:'تعارض',pending:'در صف',saving:'ذخیره'}[health.kind]||'محلی'):label;
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
@@ -780,6 +781,14 @@ export default function App(){
     }catch(e){setToast('عملیات ستون انجام نشد: '+e.message);}
   };
   const selectWorkspace=id=>{setWorkspaceId(id);setSelected('all');setBoardId(null);setFilter('all');setAdvanced(a=>({...a,status:'all'}));};
+  const openBoardView=()=>{
+    // An explicit Board action must open a real board, not merely reselect an
+    // already active "board" mode while the aggregate overview is shown.
+    const destination=activeBoard||workspaceBoards.find(b=>b.projectId===selected)||workspaceBoards[0];
+    if(destination){setSelected(destination.projectId);setBoardId(destination.id);}
+    else if(selected==='all'&&visibleProjects[0])setSelected(visibleProjects[0].id);
+    setMode('board');setFilter('all');
+  };
   const reorderCard=(cardId,toListId,anchorCardId=null,placement='end')=>{
     if(!canEdit||!activeBoard)return;
     if(!activeBoardLists(activeBoard).some(s=>s.id===toListId))return;
@@ -817,13 +826,15 @@ export default function App(){
     changeAdmin(s=>activeBoard?
       {...s,boards:(s.boards||[]).map(b=>b.id===activeBoard.id?
         {...b,stages:b.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage)}:b)}:
-      {...s,stages:s.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage)});
+      {...s,stages:s.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage),
+        boards:(s.boards||[]).map(b=>b.archived||b.workspaceId!==activeWorkspaceId?b:
+          {...b,stages:b.stages.map(stage=>stage.id===stageId?{...stage,...patch}:stage)})});
   };
   const addLane=()=>{
     const label=newLaneName.trim();
     if(!canManage||!label||label.length>100)return;
     const activeCount=activeBoard?.stages?.length||stages.length;
-    if(activeCount>=40||stages.length>=40||
+    if(activeCount>=40||(!activeBoard&&stages.length>=40)||
        (!activeBoard&&workspaceBoards.some(board=>board.stages.length>=40))){
       setToast('حداکثر ۴۰ ستون مجاز است؛ ستون‌های بایگانی‌شده نیز شمرده می‌شوند.');
       return;
@@ -835,7 +846,7 @@ export default function App(){
       // boards too, or a card created under it would silently fall back to
       // the first list of the destination board.
       if(activeBoard){
-        return {...s,stages:[...s.stages,nextStage],
+        return {...s,stages:s.stages.length<40?[...s.stages,nextStage]:s.stages,
           boards:(s.boards||[]).map(board=>board.id===activeBoard.id?
             {...board,stages:[...board.stages,nextStage]}:board)};
       }
@@ -935,8 +946,10 @@ export default function App(){
     setEditorId(t.id);setToast('تسک مشابه ساخته شد؛ هزینه‌ها و مراحل تکمیل‌شده منتقل نشدند.');
   };
   const openAdd=status=>{
-    const projectId=selected==='all'?(visibleProjects[0]?.id||''):selected;
-    const board=activeBoard?.projectId===projectId?activeBoard:workspaceBoards.find(b=>b.projectId===projectId);
+    const projectId=selected==='all'?
+      (workspaceBoards.find(b=>activeBoardLists(b).some(s=>s.id===status))?.projectId||visibleProjects[0]?.id||''):
+      selected;
+    const board=boardForColumn(workspaceBoards,projectId,status,activeBoard?.id);
     const available=board?activeBoardLists(board):stages;
     setDraftBoardId(board?.id||'');setDraftStatus(status&&available.some(s=>s.id===status)?status:available[0]?.id||stages[0]?.id);
     setDraftPriority('medium');setDraftProject(projectId);setDraftTitle('');setDraftTemplate(null);setAdding(true);
@@ -994,7 +1007,10 @@ export default function App(){
     setToast('پروژه خالی حذف شد؛ هیچ کارت یا سندی جابه‌جا نشد.');
   };
   const updateSettingsForBoard=fn=>{
-    if(!activeBoard){changeAdmin(fn);return;}
+    if(!activeBoard){
+      changeAdmin(s=>propagateAddedWorkspaceStages(s,fn(s),activeWorkspaceId));
+      return;
+    }
     changeAdmin(s=>{
       const currentBoard=(s.boards||[]).find(board=>board.id===activeBoard.id);
       if(!currentBoard)return s;
@@ -1120,8 +1136,6 @@ export default function App(){
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
         onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(value=>!value)}><Menu size={20}/></button>
-      {canEdit&&visibleProjects.length>0&&<button type="button" className="vitrea-quickdock__create" aria-label="ایجاد کار جدید" title="ایجاد کار جدید"
-        onClick={()=>openAdd(viewStages[0].id)}><Plus size={21}/></button>}
       {show('planner')&&<button type="button" title="برنامه‌ریزی" aria-label="برنامه‌ریزی"
         onClick={()=>setPlannerOpen(true)}><CalendarDays size={19}/></button>}
       {show('reporting')&&<button type="button" title="گزارش و تحلیل" aria-label="گزارش و تحلیل"
@@ -1211,7 +1225,7 @@ export default function App(){
         <button type="button" aria-current={selected==='all'&&mode==='board'?'page':undefined}
           onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}><LayoutDashboard size={15}/> نمای کلی</button>
         <button type="button" aria-current={selected!=='all'&&mode==='board'?'page':undefined}
-          onClick={()=>setMode('board')}><LayoutGrid size={15}/> برد کارها</button>
+          onClick={openBoardView}><LayoutGrid size={15}/> برد کارها</button>
         <button type="button" aria-current={mode==='list'?'page':undefined}
           onClick={()=>setMode('list')}><ListChecks size={15}/> فهرست</button>
         <button type="button" aria-expanded={desktopNavOpen||mobileNavOpen} aria-controls="madar-sidebar"
@@ -1238,7 +1252,8 @@ export default function App(){
       <div className="vitrea-header-clock"><ClockWidget calendar={calendar}/></div>
       </div>
       <div className="workspace-scroll">
-        <section className="page-header"><div className="page-heading"><span className="eyebrow"><span className="eyebrow-line"/> فضای مدیریت روزانه</span><h1>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1><p>{activeBoard?'برد مستقل با مراحل انجام اختصاصی':'کارهایت را مرتب کن، پیشرفت را ببین و چیزی را از قلم نینداز.'}</p></div><div className="page-controls">{show('profitPeek')&&<button type="button" className="btn secondary private-profit-toggle" aria-label={profitVisible?'مخفی کردن سود':'نمایش موقت سود'} aria-pressed={profitVisible} title={profitVisible?'پنهان کردن سود و زیان':'نمایش سود و زیان فقط برای مدیر'} onClick={()=>setProfitVisible(v=>!v)}>{profitVisible?<EyeOff size={17}/>:<Eye size={17}/>} {profitVisible?'مخفی‌کردن سود':'نمایش سود'}</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}}><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard}><Archive size={15}/> بایگانی برد</button></>}{canEdit&&visibleProjects.length>0&&<button className="btn primary create-primary" onClick={()=>openAdd(viewStages[0].id)}><Plus size={18}/> کار جدید</button>}</div></section>
+
+        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
         {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
@@ -1254,7 +1269,7 @@ export default function App(){
           <div className="stat-card"><div className="stat-icon completed"><CheckCheck size={19}/></div><span>انجام‌شده</span><strong>{counts.done.toLocaleString('fa-IR')}</strong><small>موفق و تمام</small></div>
         </div>}
         <section className="board-section">
-          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={()=>setMode('board')}><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')}><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')}><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             return <section className="kanban-lane" key={stage.id} style={{'--stage-accent':stage.color}} onDragOver={e=>{if(canEdit||canManage){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();const plain=e.dataTransfer.getData('text/plain');const draggedStage=e.dataTransfer.getData('application/x-madar-stage')||(plain.startsWith('madar-stage:')?plain.slice(12):'');if(draggedStage){if(canManage)reorderStage(draggedStage,stage.id);return;}if(!canEdit)return;const id=e.dataTransfer.getData('application/x-madar-card')||plain;const task=tasks.find(t=>t.id===id);if(!task||activeBoard&&task.boardId!==activeBoard.id)return;const originBoard=boards.find(b=>b.id===task.boardId);if(task.boardId&&(!originBoard||!originBoard.stages.some(s=>s.id===stage.id)))return;if(activeBoard)reorderCard(id,stage.id);else taskUpdate(id,task.boardId?{listId:stage.id}:{status:stage.id});}}>

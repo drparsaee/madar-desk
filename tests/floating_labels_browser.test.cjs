@@ -14,6 +14,96 @@ const chromePaths = process.platform === 'win32'
 const chrome = chromePaths.find(candidate => fs.existsSync(candidate));
 const jsSource = fs.readFileSync(path.join(__dirname, '../src/floating_labels.js'), 'utf8');
 const cssSource = fs.readFileSync(path.join(__dirname, '../src/floating_labels.css'), 'utf8');
+const searchCss = fs.readFileSync(path.join(__dirname, '../src/searchplus.css'), 'utf8');
+
+test('real Chromium DOM: search keeps its inline hint, keyboard target and text beside regular fields', {skip:!chrome}, () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'madar-search-fl-'));
+  try {
+    const fixture = `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<style>
+body{font:14px sans-serif;margin:30px}
+.searchplus-shell{max-width:440px}
+input{box-sizing:border-box}
+.test-fields{display:grid;gap:18px;max-width:440px;margin-top:32px}
+.test-fields>label{display:grid;gap:6px}
+.test-fields input{height:42px;width:240px;border:1px solid #aaa}
+${searchCss}
+${cssSource}
+</style></head><body><div id="root">
+<div class="searchplus-shell" data-no-floating-label dir="rtl"><div class="searchplus-control" role="search">
+<span aria-hidden="true">⌕</span><input id="search" type="search" class="searchplus-input"
+  aria-label="جست‌وجوی پیشرفته کارها" placeholder="جست‌وجو در عنوان..." value=""/>
+<button type="button" aria-label="راهنمای جست‌وجوی پیشرفته">?</button></div></div>
+<div class="test-fields">
+<label for="external">عنوان جداگانه</label><input id="external" aria-label="عنوان جداگانه" value="مقدار"/>
+<label id="wrapped">عنوان مرحله<input id="wrapped" value=""/></label>
+<input id="stage" aria-label="عنوان مستقل" placeholder="عنوان مستقل..." value=""/>
+<div class="stage-edit-fields"><input id="stage-name" aria-label="نام ستون" value="موجود"/></div>
+<div class="stage-new"><input id="new-stage" aria-label="نام ستون جدید" placeholder="نام ستون جدید..."/></div>
+<select class="filter-select" id="priority" aria-label="فیلتر سریع"><option value="all">همه اولویت‌ها</option></select>
+</div></div><script type="module">
+${jsSource}
+window.requestAnimationFrame = fn => setTimeout(() => fn(performance.now()), 0);
+const nextFrame = () => new Promise(resolve => setTimeout(resolve, 100));
+(async () => {
+  const dispose = installFloatingLabels(document);
+  await nextFrame();
+  const search = document.getElementById('search');
+  const external = document.getElementById('external');
+  const wrapped = document.getElementById('wrapped');
+  const stage = document.getElementById('stage');
+  const searchRect = search.getBoundingClientRect();
+  const focusTarget = document.elementFromPoint(searchRect.left + searchRect.width / 2,
+    searchRect.top + searchRect.height / 2);
+  search.focus();
+  search.value = 'عنوان:سفارش';
+  search.dispatchEvent(new Event('input', {bubbles:true}));
+  stage.focus();
+  stage.value = 'ستون جدید';
+  stage.dispatchEvent(new Event('input', {bubbles:true}));
+  const captions = [...document.querySelectorAll('.madar-fl-caption')];
+  const stageCaption = captions.find(c => c.textContent === 'عنوان مستقل');
+  const report = {
+    searchUnmodified:!search.classList.contains('madar-fl-control') &&
+      getComputedStyle(search).paddingTop === '9px' &&
+      getComputedStyle(search, '::placeholder').color !== 'transparent',
+    searchClickable:focusTarget === search,
+    searchNameAndValue:search.getAttribute('aria-label') === 'جست‌وجوی پیشرفته کارها' &&
+      search.value === 'عنوان:سفارش',
+    externalLabelVisible:getComputedStyle(document.querySelector('label[for=external]')).fontSize !== '0px'
+      && external.labels[0] === document.querySelector('label[for=external]'),
+    wrappedClick:wrapped.control === document.querySelector('#wrapped input'),
+    captionsCorrect:captions.length === 2 && stageCaption?.classList.contains('madar-fl-raised')
+      && captions.some(c => c.textContent === 'عنوان مرحله'),
+    compactFieldsUnmodified:['stage-name','new-stage','priority'].every(id =>
+      !document.getElementById(id).classList.contains('madar-fl-control')),
+    stageTextPreserved:stage.value === 'ستون جدید',
+  };
+  dispose();
+  document.body.dataset.results = encodeURIComponent(JSON.stringify(report));
+})().catch(error => document.body.dataset.results = encodeURIComponent(JSON.stringify({error:String(error)})));
+</script></body></html>`;
+    const file = path.join(directory, 'search-fields.html');
+    fs.writeFileSync(file, fixture, 'utf8');
+    const result = spawnSync(chrome, [
+      '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+      '--disable-extensions', '--virtual-time-budget=3000', '--window-size=1000,800',
+      `--user-data-dir=${path.join(directory,'profile')}`, '--dump-dom', pathToFileURL(file).href,
+    ], {timeout:18000, maxBuffer:5*1024*1024, encoding:'utf8'});
+    assert.equal(result.error,undefined,`Chromium launch: ${result.error?.message}`);
+    assert.equal(result.status,0,`Chromium exited ${result.status}: ${result.stderr?.slice(0,500)}`);
+    const match = result.stdout.match(/data-results="([^"]+)"/);
+    assert.ok(match,`Chromium did not complete search scenario: ${result.stdout.slice(-800)}`);
+    const report = JSON.parse(decodeURIComponent(match[1]));
+    assert.deepEqual(report,{
+      searchUnmodified:true,searchClickable:true,searchNameAndValue:true,
+      externalLabelVisible:true,wrappedClick:true,captionsCorrect:true,stageTextPreserved:true,
+      compactFieldsUnmodified:true,
+    });
+  } finally {
+    fs.rmSync(directory,{recursive:true,force:true});
+  }
+});
 
 test('real Chromium DOM: a nested scrolling dialog never leaves drifting captions', {skip:!chrome}, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'madar-fl-dom-'));

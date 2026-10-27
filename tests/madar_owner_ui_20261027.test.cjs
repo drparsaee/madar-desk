@@ -27,11 +27,11 @@ test('fixed clock uses calendar only and legacy preferences preserve calendar ch
   assert.match(backend,/"widgetSettings": widget/);
 });
 
-test('floating labels initialize in both tasks and standalone accounting',()=>{
-  for(const name of ['src/main.jsx','src/standalone_main.jsx']){
-    const source=read(name);
-    assert.match(source,/import \{installFloatingLabels\} from '\.\/floating_labels\.js'/);
-    assert.match(source,/installFloatingLabels\(document\)/);
-    assert.match(source,/floating_labels\.css/);
-  }
+test('task manager uses native accessible labels and only short button hints; accounting retains its own labels',()=>{
+  const task=read('src/main.jsx');
+  assert.doesNotMatch(task,/installFloatingLabels\(document\)/);
+  assert.match(task,/installButtonHints\(document\)/);
+  const accounting=read('src/standalone_main.jsx');
+  assert.match(accounting,/installFloatingLabels\(document\)/);
+  assert.match(accounting,/floating_labels\.css/);
 });

@@ -8,8 +8,16 @@
 const FIELD_SELECTOR = 'input, textarea, select';
 const NON_TEXT_TYPES = new Set([
   'hidden', 'checkbox', 'radio', 'file', 'color', 'range', 'button', 'reset',
-  'submit', 'image',
+  'submit', 'image', 'search',
 ]);
+// These components provide their own input chrome and/or an adjacent label.
+// An extra portal caption would overlap the icon, currency suffix or action.
+const COMPOSITE_FIELD_SELECTOR = [
+  '[data-no-floating-label]', '.searchplus-shell', '.search-box',
+  '.money-input', '.inline-create', '.filter-select',
+  '.stage-edit-fields', '.stage-new', '.kanban-add-list__form',
+  '.lane-actions-popover__editor',
+].join(', ');
 const ALWAYS_RAISED_TYPES = new Set([
   'date', 'datetime-local', 'time', 'month', 'week',
 ]);
@@ -19,7 +27,10 @@ const clean = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 export function isFloatingCandidate(control) {
   if (!control || !['INPUT', 'TEXTAREA', 'SELECT'].includes(control.tagName)) return false;
   if (control.tagName === 'INPUT' && NON_TEXT_TYPES.has(control.type?.toLowerCase())) return false;
-  if (control.closest?.('[inert], [aria-hidden="true"], [data-no-floating-label]')) return false;
+  if (control.closest?.(`[inert], [aria-hidden="true"], ${COMPOSITE_FIELD_SELECTOR}`)) return false;
+  // A separate or compound native label is already visible beside this field.
+  // Floating it as well produces duplicate text (and can hide instructions).
+  if (Array.from(control.labels || []).some(label => !isSimpleWrappingLabel(label, control))) return false;
   // An input without a real visible box (e.g. a hidden autocomplete helper)
   // must not acquire a visual overlay.
   return true;
@@ -172,6 +183,12 @@ export function installFloatingLabels(root = globalThis.document) {
       } else if (record.type === 'attributes') {
         if (['class', 'style', 'hidden', 'dir', 'open'].includes(record.attributeName)) {
           layoutChanged = true;
+          // Adding a composite wrapper or native label changes eligibility,
+          // even if the field itself never rerenders.
+          if (record.attributeName === 'class' &&
+              (record.target?.matches?.(FIELD_SELECTOR) || record.target?.querySelector?.(FIELD_SELECTOR))) {
+            needsScan = true;
+          }
         } else {
           needsScan = true;
         }
@@ -308,6 +325,10 @@ export function installFloatingLabels(root = globalThis.document) {
           state.generatedAriaLabel = false;
         }
         const next = floatingLabelText(control, doc, ownAriaLabel);
+        if (!next) {
+          remove(control);
+          continue;
+        }
         if (next && next !== state.label) {
           state.label = next;
           state.caption.textContent = next;
@@ -363,7 +384,7 @@ export function installFloatingLabels(root = globalThis.document) {
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['aria-label', 'aria-labelledby', 'data-floating-label', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled', 'class', 'style', 'hidden', 'dir', 'open'],
+    attributeFilter: ['aria-label', 'aria-labelledby', 'aria-hidden', 'inert', 'data-no-floating-label', 'data-floating-label', 'placeholder', 'title', 'id', 'for', 'type', 'aria-invalid', 'disabled', 'class', 'style', 'hidden', 'dir', 'open'],
   });
   schedule(true);
 

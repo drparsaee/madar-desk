@@ -21,10 +21,11 @@ export function SearchPlus({query = '', onQueryChange = () => {}, resultCount, t
   const helpId = useId();
   const current = String(query ?? '');
   const clear = () => { onQueryChange(''); inputRef.current?.focus(); };
-  return <div className="searchplus-shell" dir="rtl" onKeyDown={event => {
+  return <div className="searchplus-shell" data-no-floating-label="" dir="rtl" onKeyDown={event => {
     if (event.key === 'Escape') {
       if (helpOpen) setHelpOpen(false);
       else if (current) clear();
+      else return;
       event.stopPropagation();
     }
   }}>

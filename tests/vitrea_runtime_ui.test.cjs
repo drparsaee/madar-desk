@@ -105,6 +105,15 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       },previewState);
       await page.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
+      // Task manager uses ordinary native field labels; no fixed caption
+      // portal may obscure search or the editable fields in its settings.
+      assert.equal(await page.locator('.madar-fl-caption').count(),0);
+      const searchInput=page.getByRole('searchbox',{name:'جست‌وجوی پیشرفته کارها'});
+      await searchInput.click();
+      assert.equal(await page.locator('.madar-fl-caption').count(),0);
+      const menuButton=page.getByRole('button',{name:'نمایش منوی کامل مدار'});
+      await menuButton.hover();
+      assert.equal(await menuButton.getAttribute('title'),'منو');
       await screenshot(page,'madar-overview-dark-initial');
       const headerLayout=await page.evaluate(()=>{
         const box=selector=>{
@@ -129,8 +138,8 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
         'Clock must remain outside and left of the unified right header');
       assert.ok(Math.abs(headerLayout.date.x-headerLayout.time.x)<=1 &&
         Math.abs(headerLayout.date.width-headerLayout.time.width)<=1 &&
-        headerLayout.date.y>headerLayout.time.bottom,
-        'Separate date capsule must be exactly aligned below the clock capsule');
+        headerLayout.date.y>=headerLayout.time.bottom-1,
+        'Date must align directly below time inside the unified clock capsule');
       assert.ok(headerLayout.search.y>headerLayout.brand.y &&
         headerLayout.account.right<=headerLayout.search.x+5,
         'Search belongs below the brand and profile follows the search on its left');

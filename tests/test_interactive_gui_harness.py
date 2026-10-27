@@ -148,8 +148,9 @@ class InteractiveGuiHarnessTests(unittest.TestCase):
                              '.sac-main', '.sac-sidebar-footer button',
                              '.sac-header-actions', 'ریال',
                              'خروج از حسابداری', '/index.html',
-                             '.create-primary', '.task-create'):
+                             '.kanban-lane .lane-add-card', '.task-create'):
                 self.assertIn(selector,scripts)
+            self.assertNotIn("document.querySelector('.create-primary')",scripts)
             self.assertNotIn('.accw-root',scripts)
             self.assertNotIn('accountingCommand',scripts)
             self.assertNotIn('financeCommand',scripts)

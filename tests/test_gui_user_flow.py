@@ -77,7 +77,7 @@ class SyntheticWindow:
             return True
         if "location.pathname==='/index.html'" in script:
             return self.path == "/index.html"
-        if "const btn=document.querySelector('.create-primary')" in script:
+        if "const btn=document.querySelector('.kanban-lane .lane-add-card')" in script:
             self.actions.append("open_task")
             self.dialog = True
             return True

@@ -54,6 +54,26 @@ test('candidate filtering skips non-typable controls, but covers selects and tex
   assert.equal(isFloatingCandidate(control), true);
 });
 
+test('search and compound controls keep their own accessible label and input layout', async () => {
+  const {isFloatingCandidate} = await modulePromise;
+  const control = field({placeholder:'جست‌وجو', 'aria-label':'جست‌وجوی پیشرفته کارها'});
+  control.type = 'search';
+  assert.equal(isFloatingCandidate(control), false, 'search inputs must keep their native inline hint');
+  control.type = 'text';
+  for (const wrapper of ['.searchplus-shell', '.search-box', '.money-input', '.inline-create',
+    '.filter-select', '.stage-edit-fields', '.stage-new', '.kanban-add-list__form',
+    '.lane-actions-popover__editor', '[data-no-floating-label]']) {
+    control.closest = selector => selector.includes(wrapper) ? {} : null;
+    assert.equal(isFloatingCandidate(control), false, `${wrapper} owns its input chrome`);
+  }
+  control.closest = () => null;
+  control.labels = [{tagName:'LABEL'}]; // Separate <label for="..."> stays visible.
+  assert.equal(isFloatingCandidate(control), false);
+  control.labels = [];
+  assert.equal(isFloatingCandidate(control), true, 'ordinary standalone text fields still float');
+  assert.equal(control.getAttribute('aria-label'), 'جست‌وجوی پیشرفته کارها');
+});
+
 test('native label is favored over option text, then aria and placeholder', async () => {
   const {floatingLabelText} = await modulePromise;
   const control = field({placeholder:'نامشخص'});

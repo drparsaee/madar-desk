@@ -62,6 +62,8 @@ test('flip tiles are larger and visually split while small screens retain a boun
   assert.match(css,/\.clock-widget--fixed \.clock-widget__flip-page\s*\{/);
   assert.match(css,/font-size:38px/);
   assert.match(css,/\.clock-widget--fixed \.clock-widget__flip-page::after/);
+  assert.match(css,/\.clock-widget--fixed \.clock-widget__display\s*\{[\s\S]*?background:linear-gradient\([\s\S]*?border-radius:17px/);
+  assert.match(css,/\.clock-widget--fixed \.clock-widget__date\s*\{[\s\S]*?border-top:1px/);
   assert.match(css,/@media \(max-width:480px\)/);
   assert.match(css,/pointer-events:none/);
 });

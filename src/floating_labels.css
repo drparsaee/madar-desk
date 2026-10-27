@@ -30,7 +30,7 @@
 
 .madar-fl-caption.madar-fl-raised {
   top: var(--madar-fl-top-y, 8px);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--madar-fl-accent, #476fb5);
 }
 
