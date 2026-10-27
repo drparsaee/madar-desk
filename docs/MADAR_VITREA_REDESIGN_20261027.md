@@ -56,3 +56,13 @@
 ### آخرین آزمون یکپارچه پس از اصلاح انتظار انیمیشن موبایل
 
 اجرای هم‌زمان اولین مجموعهٔ کامل ۴۷۳ تستی، یک شکست زمانی روی assertion فوری `isVisible()` در هنگام transition موبایل داشت؛ سناریوی مستقل PASS بود. آزمون به جای بررسی فوری، اکنون برای وضعیت `visible` با مهلت محدود منتظر می‌ماند و همچنان در صورت بازنشدن واقعی منو FAIL می‌شود. پس از این اصلاح، **`node --test tests/*.test.cjs`: تعداد ۴۷۳، موفق ۴۷۳، شکست ۰، skipped ۰**. آزمون‌های GUI/Native Python: **۴۴/۴۴ PASS**؛ Python compile: **PASS**. ساخت نهایی Vite نیز موفق بود. این نتیجه فقط محدودهٔ همین آزمون‌ها را تأیید می‌کند.
+
+### آزمون واقعی Windows/WebView2 و اصلاح Bridge
+
+بعد از آنکه نسخهٔ اصلی از سورس باز شد، یک مشاهدهٔ واقعی در پنجرهٔ حسابداری خطای `window.pywebview.api[key] is not a function` را آشکار کرد؛ این خطا در Chromium mock وجود نداشت. فراخوانی مستقیم `window.pywebview.api` در هر دو wrapper تزریقی `native_app.py` به انتظار محدود متد مشخص تغییر کرد: حداکثر ۷۵ تلاش با فاصلهٔ ۸۰ms، و سپس رد Promise با خطای معنی‌دار. این تغییر **هیچ مجوز Python یا عملیات دفترکل را توسعه نمی‌دهد**؛ تأیید نویسندگی همچنان در میزبان است. چهار تست مستقل Node در `tests/native_bridge_readiness.test.cjs` مسابقهٔ initialization، خطای مهلت، فراخوانی تک‌بار writer و سازگاری Bridge اصلی را بررسی می‌کنند.
+
+گزارش isolated حقیقی WebView2 با `MADAR_QA_VIEW=bridge-readiness` و پروفایل جداگانهٔ `madar-qa-bridge-readiness-final-20261027` نشان داد: در صفحهٔ اول و حسابداری دو متد `standaloneAccountingRead` و `standaloneAccountingCommand` در `window.pywebview.api` از نوع `function` هستند؛ فراخوانی واقعیِ **فقط‌خواندنی** `standaloneAccountingRead` با `{done:true,ok:true,errorType:""}` تکمیل شد؛ بازگشت به `index.html` نیز DOM فعال داشت و خطای Bridge گزارش نشد. پروندهٔ ایزوله با `WM_CLOSE` بسته شد. هیچ فرمان `standaloneAccountingCommand` در این آزمون فراخوانی نشد و مقادیر مالی در گزارش QA ثبت نشدند.
+
+یک اجرای دیگر با پروفایل **واقعی اما صرفاً برای بررسی نمایش** با `MADAR_QA_VIEW=read-only-runtime-health` گزارش داد `main=true`, `rootLength=54598`, `bridge=object`, `read=function`, `errorPresent=false`. تصویر مستقل از پنجرهٔ باز در `D:\CoS-Test\madar-live-main-internal.png` ثبت شد. این شاهد صرفاً برای سلامت ظاهری و آماده‌بودن Bridge است؛ حسابداریِ دارای اسناد واقعی، ذخیره‌سازی مالی و نسخهٔ Installer هنوز به‌صورت end-to-end تأیید نشده‌اند.
+
+در آخرین تکرار **بعد از اصلاح Bridge**، مجموعهٔ کامل `node --test tests/*.test.cjs` برابر **۴۷۷ آزمون موفق، ۰ شکست، ۰ skipped** شد؛ `python -m py_compile native_app.py` و ۴۴ تست Python مرتبط نیز موفق شدند. این آمار جدید جایگزین ۴۷۳ تستِ پیش از اصلاح Bridge می‌شود.

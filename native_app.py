@@ -2423,9 +2423,20 @@ window.madar = Object.fromEntries(
            'calendarExportIcs','calendarImportPreview',
            'automationEngineStatus','enableAutomationEngine'])
  .map(key => [key, (...args) => new Promise((resolve, reject) => {
-   const invoke = () => window.pywebview.api[key](...args).then(resolve).catch(reject);
-   if (window.pywebview && window.pywebview.api) invoke();
-   else window.addEventListener('pywebviewready', invoke, {once:true});
+   // WebView2 can publish window.pywebview.api before each exported method is
+   // ready after navigation. Never call an undefined bridge entry.
+   const invoke = (attempt = 0) => {
+     const exported = window.pywebview && window.pywebview.api;
+     if (exported && typeof exported[key] === 'function') {
+       try { Promise.resolve(exported[key](...args)).then(resolve, reject); }
+       catch (error) { reject(error); }
+     } else if (attempt < 75) {
+       setTimeout(() => invoke(attempt + 1), 80);
+     } else {
+       reject(new Error('Native bridge method unavailable: ' + key));
+     }
+   };
+   invoke();
  })])
 );
 </script>
@@ -2439,9 +2450,20 @@ ACCOUNTING_JS_BRIDGE = """
 window.madar = Object.fromEntries(
  ['standaloneAccountingRead','standaloneAccountingCommand'].map(key =>
  [key, (...args) => new Promise((resolve, reject) => {
-   const invoke = () => window.pywebview.api[key](...args).then(resolve).catch(reject);
-   if (window.pywebview && window.pywebview.api) invoke();
-   else window.addEventListener('pywebviewready', invoke, {once:true});
+   // The standalone page frequently follows an in-window navigation from the
+   // task desk. Its JavaScript API must not race WebView2 method injection.
+   const invoke = (attempt = 0) => {
+     const exported = window.pywebview && window.pywebview.api;
+     if (exported && typeof exported[key] === 'function') {
+       try { Promise.resolve(exported[key](...args)).then(resolve, reject); }
+       catch (error) { reject(error); }
+     } else if (attempt < 75) {
+       setTimeout(() => invoke(attempt + 1), 80);
+     } else {
+       reject(new Error('Native bridge method unavailable: ' + key));
+     }
+   };
+   invoke();
  })])
 );
 </script>
@@ -2528,8 +2550,38 @@ def main():
                     return False
             window.events.closing += require_backup_before_close
         if os.environ.get("MADAR_QA_REPORT"):
+            bridge_qa_started = threading.Event()
             def diagnostic():
+                if os.environ.get("MADAR_QA_VIEW") == "bridge-readiness":
+                    if bridge_qa_started.is_set():
+                        return
+                    bridge_qa_started.set()
                 time.sleep(2)
+                if os.environ.get("MADAR_QA_VIEW") == "read-only-runtime-health":
+                    # Real-profile smoke is opt-in and must never disclose task
+                    # titles, account details, or mutate any financial record.
+                    details = {}
+                    for _ in range(16):
+                        try:
+                            details = window.evaluate_js("(()=>({"
+                                "path:location.pathname,"
+                                "ready:document.readyState,"
+                                "rootLength:document.getElementById('root')?.innerHTML.length||0,"
+                                "main:!!document.querySelector('.app-shell'),"
+                                "accounting:!!document.querySelector('.sac-root'),"
+                                "loading:!!document.querySelector('.loading'),"
+                                "bridge:typeof window.madar,"
+                                "read:typeof window.pywebview?.api?.standaloneAccountingRead,"
+                                "errorPresent:!!document.querySelector('.sac-alert.error,[role=alert]')"
+                                "}))()")
+                            if details.get("rootLength", 0) > 1000:
+                                break
+                        except Exception as exc:
+                            details = {"diagnosticError": type(exc).__name__}
+                        time.sleep(0.25)
+                    Path(os.environ["MADAR_QA_REPORT"]).write_text(
+                        json.dumps(details, ensure_ascii=False, indent=2), encoding="utf8")
+                    return
                 # First-run isolated profiles initialize the accounting bridge
                 # and board asynchronously; document.readyState alone may be
                 # complete while React's root is still empty. Bound the wait.
@@ -2578,6 +2630,62 @@ def main():
                         time.sleep(0.6)
                     except Exception:
                         pass
+                elif os.environ.get("MADAR_QA_VIEW") == "bridge-readiness":
+                    # Isolated, read-only WebView2 contract probe. Never navigate
+                    # a live accounting profile through synthetic automation.
+                    qa_root = str(Path(os.environ.get("APPDATA", "")).resolve()).lower()
+                    if "madar-qa-bridge-" not in qa_root:
+                        raise PermissionError("Bridge QA requires isolated APPDATA")
+                    def bridge_state():
+                        return window.evaluate_js("(()=>({"
+                            "path:location.pathname,"
+                            "ready:document.readyState,"
+                            "bridge:typeof window.madar,"
+                            "api:typeof window.pywebview?.api,"
+                            "read:typeof window.pywebview?.api?.standaloneAccountingRead,"
+                            "command:typeof window.pywebview?.api?.standaloneAccountingCommand,"
+                            "root:document.getElementById('root')?.innerHTML.length||0,"
+                            "error:document.querySelector('.sac-alert.error')?.textContent.slice(0,160)||''"
+                            "}))()")
+                    try:
+                        values["nativeBridgeBefore"] = bridge_state()
+                        window.load_url(f"http://127.0.0.1:{server.server_port}/accounting.html")
+                        for _ in range(36):
+                            time.sleep(0.25)
+                            try:
+                                current = bridge_state()
+                            except Exception:
+                                continue
+                            if (current and current.get("path") == "/accounting.html" and
+                                    current.get("root", 0) > 500):
+                                break
+                        values["nativeBridgeAccounting"] = bridge_state()
+                        # Exercise the real, read-only Python Bridge method.
+                        # Store only pass/fail metadata, never ledger values.
+                        window.evaluate_js(
+                            "(()=>{window.__madarReadHealth={done:false};"
+                            "Promise.resolve().then(()=>window.madar.standaloneAccountingRead())"
+                            ".then(value=>{window.__madarReadHealth={done:true,"
+                            "ok:!!value&&typeof value==='object',errorType:''}})"
+                            ".catch(error=>{window.__madarReadHealth={done:true,"
+                            "ok:false,errorType:String(error?.name||'Error')}});"
+                            "return true})()")
+                        for _ in range(30):
+                            time.sleep(0.2)
+                            response = window.evaluate_js("window.__madarReadHealth||{}")
+                            if response and response.get("done"):
+                                break
+                        values["nativeAccountingReadHealth"] = response
+                        window.load_url(f"http://127.0.0.1:{server.server_port}/index.html")
+                        for _ in range(30):
+                            time.sleep(0.2)
+                            current = bridge_state()
+                            if (current and current.get("path") == "/index.html" and
+                                    current.get("root", 0) > 1000):
+                                break
+                        values["nativeBridgeAfterReturn"] = bridge_state()
+                    except Exception as exc:
+                        values["nativeBridgeError"] = repr(exc)
                 elif os.environ.get("MADAR_QA_VIEW") in ("board-list-menu", "board-add-list", "board-add-create"):
                     try:
                         control = (".lane-menu-trigger" if os.environ["MADAR_QA_VIEW"] == "board-list-menu"
