@@ -1,0 +1,138 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const Module=require('node:module');
+const esbuild=require('esbuild');
+const React=require('react');
+const {renderToStaticMarkup}=require('react-dom/server');
+
+const root=path.resolve(__dirname,'..');
+const jsx=fs.readFileSync(path.join(root,'src/standalone_accounting_workspace.jsx'),'utf8');
+const css=fs.readFileSync(path.join(root,'src/accounting_vitrea.css'),'utf8');
+const file=path.join(root,'src/standalone_accounting_workspace.jsx');
+const built=esbuild.buildSync({entryPoints:[file],bundle:true,platform:'node',format:'cjs',
+  write:false,jsx:'automatic',loader:{'.css':'empty','.jpg':'dataurl'},
+  external:['react','react/jsx-runtime','lucide-react']}).outputFiles[0].text;
+const mod=new Module(path.join(root,'tests/accounting-vitrea-virtual.cjs'),module);
+mod.filename=path.join(root,'tests/accounting-vitrea-virtual.cjs');
+mod.paths=Module._nodeModulePaths(path.dirname(mod.filename));
+mod._compile(built,mod.filename);
+const {accountingSettlementOverview,accountingSettlementCsv,AccountingVitreaHome}=mod.exports;
+
+const today='2026-10-27';
+const view={
+  currency:'RIAL',parties:{p1:{name:'مشتری الف'},p2:{name:'تأمین‌کننده ب'}},
+  accounts:{bank:{name:'بانک الف',liquid:true,debitMinusCredit:13000}},
+  receipts:{r1:{id:'r1',partyId:'p1',accountId:'bank',date:'2026-10-05',total:1500,reversed:false},
+    r2:{id:'r2',date:'2026-09-13',total:2000,reversed:true},
+    r3:{id:'r3',date:'2025-09-20',total:300}},
+  payments:{p1:{id:'p1',partyId:'p2',accountId:'bank',date:'2026-10-06',total:800,reversed:false},
+    p2:{id:'p2',date:'2026-09-20',total:100,reversed:false}}
+};
+
+test('last 12 Gregorian months use actual posted receipts/payments, exclude reversals and old rows',()=>{
+  const res=accountingSettlementOverview(view,today);
+  assert.equal(res.months.length,12);
+  assert.equal(res.earliest,'2025-11');
+  assert.equal(res.latest,'2026-10');
+  assert.equal(res.received,1500);
+  assert.equal(res.paid,900);
+  assert.equal(res.net,600);
+  assert.equal(res.months.at(-1).received,1500);
+  assert.equal(res.months.at(-1).paid,800);
+  assert.equal(res.months.at(-2).paid,100);
+  assert.equal(res.months.at(-2).received,0);
+  assert.equal(res.entries.length,5);
+  assert.equal(res.entries.find(e=>e.id==='r2').reversed,true);
+});
+
+test('empty account gives no fabricated movements, bank status or successful postings',()=>{
+  const res=accountingSettlementOverview({receipts:{},payments:{}},today);
+  assert.deepEqual(res.entries,[]);
+  assert.equal(res.received,0);
+  assert.equal(res.paid,0);
+  assert(res.months.every(m=>m.received===0&&m.paid===0));
+  assert.equal(res.omitted,0);
+});
+
+test('malformed monetary and date records are counted as omitted, not added',()=>{
+  const res=accountingSettlementOverview({receipts:{
+    unsafe:{id:'unsafe',date:'2026-10-01',total:3.5},
+    future:{id:'future',date:'2026-13-01',total:100},
+    missing:{date:'2026-10-01',total:50},
+    safe:{id:'safe',date:'2026-10-02',total:18}},payments:{}},today);
+  assert.equal(res.omitted,3);
+  assert.equal(res.received,18);
+  assert.deepEqual(res.entries.map(e=>e.id),['safe']);
+});
+
+test('overflow in legal records fails closed for aggregate totals rather than rounding money',()=>{
+  const res=accountingSettlementOverview({receipts:{a:{id:'a',date:'2026-10-01',total:Number.MAX_SAFE_INTEGER},
+    b:{id:'b',date:'2026-10-02',total:1}},payments:{}},today);
+  assert.equal(res.unrepresentable,true);
+  assert.equal(res.received,null);
+  assert.equal(res.months[11].received,null);
+  assert.equal(res.entries.length,2);
+  const split=accountingSettlementOverview({receipts:{a:{id:'a',date:'2026-10-01',total:Number.MAX_SAFE_INTEGER}},
+    payments:{p:{id:'p',date:'2026-10-02',total:1}}},today);
+  assert.equal(split.unrepresentable,true);
+});
+
+test('rendered live settlement homepage labels real totals, bank balances and empty states',()=>{
+  const common={currency:'RIAL',today,canDraft:true,disabled:false,onNavigate:()=>{},onNewInvoice:()=>{}};
+  const html=renderToStaticMarkup(React.createElement(AccountingVitreaHome,{...common,view}));
+  assert.match(html,/دریافت‌ها و پرداخت‌ها/);
+  assert.match(html,/۱٬۵۰۰ ریال/);
+  assert.match(html,/۹۰۰ ریال/);
+  assert.match(html,/خالص گردش نقدی این بازه/);
+  assert.match(html,/مشتری الف/);
+  assert.match(html,/تأمین‌کننده ب/);
+  assert.match(html,/برگشت‌شده/);
+  assert.match(html,/بانک الف/);
+  assert.match(html,/فاکتور جدید/);
+  assert.match(html,/خروجی CSV/);
+  const empty=renderToStaticMarkup(React.createElement(AccountingVitreaHome,
+    {...common,canDraft:false,view:{accounts:{},receipts:{},payments:{},parties:{}}}));
+  assert.match(empty,/در دوازده ماه اخیر دریافت یا پرداخت قطعی ثبت نشده است/);
+  assert.doesNotMatch(empty,/فاکتور جدید/);
+  assert.doesNotMatch(empty,/واریز موفق|تسویه تأییدشده/);
+});
+
+test('CSV contains genuine records and protects formula injection from account and party names',()=>{
+  const entries=accountingSettlementOverview(view,today).entries;
+  const csv=accountingSettlementCsv(entries,{p1:{name:'=1+1'}},
+    {bank:{name:'+test'}},'ریال');
+  assert(csv.startsWith('\ufeff'));
+  assert.match(csv,/"'=1\+1"/);
+  assert.match(csv,/"'\+test"/);
+  assert.match(csv,/"برگشت شده"/);
+  assert.equal(csv.split('\r\n').length,6);
+  assert.match(csv,/"1500"/);
+});
+
+test('accounting home uses live host view, permission gated action and navigates existing flows',()=>{
+  assert.match(jsx,/import '\.\/accounting_vitrea\.css'/);
+  assert.match(jsx,/tab==='overview'\?' sac-overview-work-mode sac-vtr-overview'/);
+  assert.match(jsx,/<AccountingVitreaHome view=\{view\} currency=\{ledgerCurrency\} today=\{today\}/);
+  assert.match(jsx,/onNewInvoice=\{openQuickInvoice\}/);
+  assert.match(jsx,/canDraft&&<button type="button" className="sac-vtr-cta"/);
+  assert.match(jsx,/onNavigate\('settlements'\)/);
+  assert.match(jsx,/onNavigate\('cash'\)/);
+  assert.match(jsx,/onNavigate\('reports'\)/);
+  assert.match(jsx,/accountingSettlementCsv\(filtered,parties,accounts,unit\)/);
+  assert.match(jsx,/<AccountingManagementDashboard view=\{view\}/);
+  assert.doesNotMatch(jsx,/fakePayout|mockPayout|mockBalance/);
+});
+
+test('vitrea theme keeps light, dark, mobile, focus, RTL and original system flows',()=>{
+  assert.match(css,/\.sac-root\.sac-vtr-overview/);
+  assert.match(css,/:root\[data-theme="dark"\] \.sac-root\.sac-vtr-overview/);
+  assert.match(css,/\.sac-vtr-overview-grid,.sac-vtr-bottom-grid\{display:grid/);
+  assert.match(css,/@media\(max-width:1030px\)/);
+  assert.match(css,/@media\(max-width:680px\)/);
+  assert.match(css,/:focus-visible/);
+  assert.match(css,/@media print/);
+  assert(!/\.sac-vtr-home\s*\{[^}]*display\s*:\s*none/.test(css));
+});

@@ -1,9 +1,10 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {ArrowRight,BookOpen,Building2,FileText,Landmark,Layers3,
-  Plus,RefreshCw,ShieldAlert,Users,Wallet} from 'lucide-react';
+import {ArrowLeft,ArrowRight,BookOpen,Building2,Download,FileText,Landmark,Layers3,
+  Plus,RefreshCw,ShieldAlert,TrendingUp,Users,Wallet} from 'lucide-react';
 import './standalone_accounting_workspace.css';
 import './standalone_accounting_ux20.css';
 import './accounting_density.css';
+import './accounting_vitrea.css';
 import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone_invoice_export.js';
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';
@@ -44,6 +45,159 @@ const csvField=value=>{
   const str=String(value??'');
   return '"'+(/^[\s]*[=+@-]/.test(str)?"'"+str:str).replace(/"/g,'""')+'"';
 };
+
+/** Ledger-backed settlements only. Reversed postings are visible but excluded
+ * from totals; no bank payout/reconciliation state is inferred from a receipt. */
+export function accountingSettlementOverview(view,today=standaloneToday()){
+  const base=/^\d{4}-\d{2}-\d{2}$/.test(today)?today:standaloneToday();
+  const anchor=new Date(base+'T00:00:00Z');
+  const months=Array.from({length:12},(_,index)=>{
+    const d=new Date(Date.UTC(anchor.getUTCFullYear(),anchor.getUTCMonth()-11+index,1));
+    return {key:d.toISOString().slice(0,7),received:0n,paid:0n};
+  });
+  const lookup=new Map(months.map(m=>[m.key,m]));
+  const entries=[];let omitted=0;
+  for(const [type,key] of [['receipt','receipts'],['payment','payments']]){
+    const collection=view?.[key]||{};
+    const records=Array.isArray(collection)?collection:Object.values(collection);
+    for(const item of records){
+      if(!item||typeof item.id!=='string'||!item.id||
+         typeof item.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(item.date)||
+         !Number.isSafeInteger(item.total)||item.total<0){omitted++;continue;}
+      const timestamp=Date.parse(item.date+'T00:00:00Z');
+      if(!Number.isFinite(timestamp)||new Date(timestamp).toISOString().slice(0,10)!==item.date){omitted++;continue;}
+      const record={id:item.id,type,date:item.date,total:item.total,
+        partyId:item.partyId,accountId:item.accountId,reversed:item.reversed===true};
+      entries.push(record);
+      const month=lookup.get(item.date.slice(0,7));
+      if(month&&!record.reversed){
+        if(type==='receipt')month.received+=BigInt(item.total);
+        else month.paid+=BigInt(item.total);
+      }
+    }
+  }
+  entries.sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const received=months.reduce((sum,m)=>sum+m.received,0n);
+  const paid=months.reduce((sum,m)=>sum+m.paid,0n);
+  const safe=n=>n<=BigInt(Number.MAX_SAFE_INTEGER)&&n>=-BigInt(Number.MAX_SAFE_INTEGER)?Number(n):null;
+  const unrepresentable=safe(received)===null||safe(paid)===null||
+    safe(received+paid)===null||
+    months.some(m=>safe(m.received)===null||safe(m.paid)===null);
+  return {months:months.map(m=>({...m,received:safe(m.received),paid:safe(m.paid)})),
+    entries,received:safe(received),paid:safe(paid),net:safe(received-paid),omitted,unrepresentable,
+    earliest:months[0].key,latest:months[11].key};
+}
+
+export function accountingSettlementCsv(entries,parties={},accounts={},unit='ریال'){
+  const rows=[['شناسه','نوع عملیات','تاریخ میلادی','طرف حساب','حساب نقدی',
+    'مبلغ ('+unit+')','وضعیت'],...entries.map(entry=>[
+      entry.id,entry.type==='receipt'?'دریافت':'پرداخت',entry.date,
+      parties[entry.partyId]?.name||entry.partyId||'',
+      accounts[entry.accountId]?.name||entry.accountId||'',entry.total,
+      entry.reversed?'برگشت شده':'ثبت شده'])];
+  return '\ufeff'+rows.map(row=>row.map(csvField).join(',')).join('\r\n');
+}
+
+export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNavigate,onNewInvoice}){
+  const [filter,setFilter]=useState('all');
+  const overview=useMemo(()=>accountingSettlementOverview(view,today),[view,today]);
+  const parties=view.parties||{},accounts=view.accounts||{};
+  const unit=currency==='TOMAN'?'تومان':'ریال';
+  const amount=value=>formatStandaloneMoney(value,currency);
+  const filtered=overview.entries.filter(entry=>filter==='all'?true:
+    filter==='reversed'?entry.reversed:entry.type===filter);
+  const banks=Object.entries(accounts).filter(([,a])=>a?.liquid===true&&
+    Number.isSafeInteger(a.debitMinusCredit));
+  const maximum=Math.max(0,...overview.months.flatMap(m=>[m.received,m.paid]).filter(Number.isSafeInteger));
+  const activity=overview.unrepresentable?null:
+    overview.received+overview.paid;
+  const ratio=activity>0?overview.received/activity*100:0;
+  const download=()=>downloadStandaloneBlob({
+    filename:'madar-settlements-'+today+'.csv',
+    blob:new Blob([accountingSettlementCsv(filtered,parties,accounts,unit)],
+      {type:'text/csv;charset=utf-8'})
+  });
+  const periodTitle=`${overview.earliest} تا ${overview.latest} (ماه میلادی)`;
+  return <div className="sac-vtr-home" aria-label="نمای دریافت و پرداخت حسابداری">
+    <header className="sac-vtr-hero">
+      <div className="sac-vtr-heading"><span className="sac-vtr-eyebrow">MADAR / FINANCIAL FLOWS</span>
+        <h2>دریافت‌ها و پرداخت‌ها</h2><p>گردش ثبت‌شدهٔ دفتر جاری، بدون محاسبهٔ تسویهٔ بانکی تأییدنشده</p></div>
+      <div className="sac-vtr-hero-stats" aria-label="خلاصه گردش دوازده ماه اخیر">
+        <div className="sac-vtr-hero-stat"><span className="sac-vtr-stat-icon"><Download size={17}/></span><div><small>دریافت ثبت‌شده</small><strong dir="auto">{amount(overview.received)}</strong></div></div>
+        <div className="sac-vtr-hero-stat"><span className="sac-vtr-stat-icon"><ArrowRight size={17}/></span><div><small>پرداخت ثبت‌شده</small><strong dir="auto">{amount(overview.paid)}</strong></div></div>
+        <div className="sac-vtr-hero-stat"><span className="sac-vtr-stat-icon"><TrendingUp size={17}/></span><div><small>خالص گردش نقدی این بازه</small><strong dir="auto">{amount(overview.net)}</strong></div></div>
+      </div>
+      {canDraft&&<button type="button" className="sac-vtr-cta" disabled={disabled}
+        onClick={onNewInvoice}><Plus size={17}/> فاکتور جدید</button>}
+    </header>
+    {overview.omitted>0&&<div className="sac-vtr-warning" role="status">
+      {overview.omitted.toLocaleString('fa-IR')} رکورد با مبلغ یا تاریخ نامعتبر از این نما کنار گذاشته شد. اطلاعات اصلی تغییر نکرده است.</div>}
+    {overview.unrepresentable&&<div className="sac-vtr-warning" role="status">
+      جمع برخی مبالغ از محدوده محاسبه دقیق رابط فراتر است. نمودار و نسبت‌های مرتبط نمایش داده نمی‌شوند؛ برای بررسی ارقام به دفترکل مراجعه کنید.</div>}
+    <div className="sac-vtr-overview-grid">
+      <section className="sac-vtr-panel sac-vtr-chart-panel" aria-label="نمودار گردش دوازده ماه اخیر">
+        <div className="sac-vtr-panel-head"><div><h3>گردش ماهانه</h3><small>{periodTitle}</small></div>
+          <button type="button" onClick={()=>onNavigate('reports')} aria-label="نمایش گزارش کامل گردش‌ها"><ArrowLeft size={17}/></button></div>
+        <div className="sac-vtr-chart-total"><strong>{amount(overview.received)}</strong><span>جمع دریافت‌های ثبت‌شده در بازه</span></div>
+        <div className="sac-vtr-legend"><span><i className="receipt"/> دریافت</span><span><i className="payment"/> پرداخت</span></div>
+        {!overview.unrepresentable&&maximum>0?<div className="sac-vtr-month-bars" role="img"
+          aria-label="نمودار دوازده ماه اخیر؛ دریافت و پرداخت ماهانه">
+          {overview.months.map(m=><div className="sac-vtr-month" key={m.key}
+            title={`${m.key}: دریافت ${amount(m.received)}، پرداخت ${amount(m.paid)}`}>
+            <div className="sac-vtr-bars"><span className="sac-vtr-bar receipt" style={{height:(m.received/maximum*100)+'%'}}/>
+              <span className="sac-vtr-bar payment" style={{height:(m.paid/maximum*100)+'%'}}/></div>
+            <small dir="ltr">{m.key.slice(5)}</small></div>)}
+        </div>:<div className="sac-vtr-empty-chart">{overview.unrepresentable?
+          'جمع مبالغ برای رسم نمودار دقیق بیش از محدودهٔ امن است.':
+          'در دوازده ماه اخیر دریافت یا پرداخت قطعی ثبت نشده است.'}</div>}
+      </section>
+      <section className="sac-vtr-panel sac-vtr-ring-panel" aria-label="ترکیب گردش ثبت‌شده">
+        <div className="sac-vtr-panel-head"><div><h3>ترکیب گردش نقدی</h3><small>سهم دریافت و پرداخت از کل گردش ۱۲ ماه اخیر</small></div></div>
+        <div className={'sac-vtr-ring'+(activity&&!overview.unrepresentable?'':' empty')}
+          style={{'--vtr-ratio':ratio+'%'}} role="img"
+          aria-label={`سهم دریافت ${activity?ratio.toFixed(1):0} درصد از کل گردش`}>
+          <div><strong>{activity&&!overview.unrepresentable?Math.round(ratio).toLocaleString('fa-IR')+'٪':'—'}</strong>
+            <small>سهم دریافت</small></div></div>
+        <div className="sac-vtr-ring-legend"><div><i className="receipt"/><span>دریافت</span><b dir="auto">{amount(overview.received)}</b></div>
+          <div><i className="payment"/><span>پرداخت</span><b dir="auto">{amount(overview.paid)}</b></div></div>
+        <p className="sac-vtr-note">این نمودار نسبت مبالغ ثبت‌شده را نشان می‌دهد؛ موجودی بانک یا وضعیت تسویه نیست.</p>
+      </section>
+    </div>
+    <div className="sac-vtr-bottom-grid">
+      <section className="sac-vtr-panel sac-vtr-records" aria-label="آخرین دریافت‌ها و پرداخت‌ها">
+        <div className="sac-vtr-panel-head"><div><h3>آخرین دریافت‌ها و پرداخت‌ها</h3>
+          <small>سوابق واقعی دفتر جاری؛ تراکنش برگشت‌خورده جدا مشخص شده است</small></div>
+          <button type="button" onClick={download} disabled={!filtered.length} className="sac-vtr-export"><Download size={15}/> خروجی CSV</button></div>
+        <div className="sac-vtr-tabs" role="group" aria-label="فیلتر نوع عملیات">
+          {[['all','همه'],['receipt','دریافت‌ها'],['payment','پرداخت‌ها'],['reversed','برگشت‌شده']].map(([value,label])=><button
+            type="button" key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}
+            className={filter===value?'active':''}>{label}</button>)}</div>
+        <div className="sac-vtr-table-scroll"><table><thead><tr><th>عملیات / شناسه</th><th>طرف‌حساب</th>
+          <th>مبلغ ({unit})</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>
+          {filtered.slice(0,9).map(r=><tr key={r.type+'-'+r.id}>
+            <td><strong>{r.type==='receipt'?'دریافت':'پرداخت'}</strong><small dir="ltr">{r.id}</small></td>
+            <td>{parties[r.partyId]?.name||r.partyId||'نامشخص'}</td>
+            <td dir="auto" className="sac-vtr-value">{amount(r.total)}</td>
+            <td><span className={'sac-vtr-status '+(r.reversed?'reversed':'posted')}>
+              {r.reversed?'برگشت‌شده':'ثبت‌شده'}</span></td>
+            <td>{displayAccountingDate(r.date)}</td></tr>)}
+          {!filtered.length&&<tr key="no-settlements"><td colSpan={5} className="sac-vtr-no-records">رکوردی با این فیلتر ثبت نشده است.</td></tr>}
+        </tbody></table></div>
+        <div className="sac-vtr-table-footer"><span>{filtered.length.toLocaleString('fa-IR')} رکورد مطابق فیلتر</span>
+          <button type="button" onClick={()=>onNavigate('settlements')}>مشاهده همه در بخش دریافت و پرداخت <ArrowLeft size={15}/></button></div>
+      </section>
+      <aside className="sac-vtr-panel sac-vtr-banking" aria-label="حساب‌های نقدی و مسیر تطبیق بانکی">
+        <div className="sac-vtr-panel-head"><div><h3>صندوق، بانک و تطبیق</h3><small>مانده حساب‌های نقدی در دفترکل</small></div></div>
+        {banks.length?banks.slice(0,5).map(([id,bank])=><div key={id} className="sac-vtr-account">
+          <span className="sac-vtr-account-symbol"><Landmark size={17}/></span><div><strong>{bank.name||id}</strong><small dir="ltr">{id}</small></div>
+          <b dir="auto">{amount(bank.debitMinusCredit)}</b></div>):<p className="sac-vtr-no-bank">اطلاعات حساب نقدی از دفتر میزبان دریافت نشده است.</p>}
+        <div className="sac-vtr-bank-message"><ShieldAlert size={17}/><span>وضعیت تطبیق هر صورت‌حساب فقط پس از بررسی عملیات بانکی قابل تأیید است.</span></div>
+        <button type="button" className="sac-vtr-bank-link" onClick={()=>onNavigate('cash')}>
+          مشاهده صندوق، بانک و مغایرت <ArrowLeft size={16}/></button>
+      </aside>
+    </div>
+  </div>;
+}
 export function nextAccountingNumber(records,prefix,year){
   const esc=prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const pat=new RegExp('^'+esc+'-'+year+'-([0-9]{1,8})$');
@@ -875,7 +1029,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   };
 
   return <div dir="rtl" className={'sac-root'+(tab==='invoice'?' sac-invoice-work-mode':
-    tab==='overview'?' sac-overview-work-mode':'')}
+    tab==='overview'?' sac-overview-work-mode sac-vtr-overview':'')}
     aria-label="حسابداری مستقل مدار">
     <AccountingTopRibbon tab={tab} sections={SECTIONS}
       onNavigate={gotoTab} onNewInvoice={openQuickInvoice}
@@ -1181,8 +1335,13 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             </Panel>}
           </>}
           {tab==='overview'&&<>
-            <AccountingManagementDashboard view={view} currency={ledgerCurrency}
-              onNavigate={gotoTab}/>
+            <AccountingVitreaHome view={view} currency={ledgerCurrency} today={today}
+              canDraft={canManage||canDraft} disabled={busy||pendingRetry}
+              onNavigate={gotoTab} onNewInvoice={openQuickInvoice}/>
+            <details className="sac-vtr-management-details"><summary>گزارش‌های تحلیلی و یادآورهای مدیریتی</summary>
+              <AccountingManagementDashboard view={view} currency={ledgerCurrency}
+                onNavigate={gotoTab}/>
+            </details>
             <details className="sac-dashboard-legacy-details">
               <summary>جزئیات دفترکل، مانده‌های قبلی و سوابق انتقالی</summary>
             {historical&&<Panel title="حسابداری منتقل‌شده از پارسیان"
