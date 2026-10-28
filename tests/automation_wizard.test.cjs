@@ -47,6 +47,7 @@ test('valid wizard output passes real Python rule.upsert and executes its event'
     {rule:logic.buildAutomationRule({...base,id:'check-rule',trigger:'checklist_completed'}),eventData:{checklistId:'check-1'}},
     {rule:logic.buildAutomationRule({...base,id:'field-rule',trigger:'custom_field_changed'}),eventData:{fieldId:'field-1'}},
     {rule:logic.buildAutomationRule({...base,id:'due-rule',trigger:'due_soon',dueDay:'1'}),eventData:{dueWithinDays:1}},
+    {rule:logic.buildAutomationRule({...base,id:'due-advanced-rule',trigger:'due_soon',dueDay:'1',dueListId:'waiting',duePriority:'high'}),eventData:{dueWithinDays:1,toColumnId:'waiting',priority:'high'}},
     {rule:logic.buildAutomationRule({...base,id:'notify-rule',trigger:'card_moved',actionType:'notify',recipient:'bob',message:'کارت جابه‌جا شد'}),eventData:{toColumnId:'list-abc'}},
   ];
   const script=`import sys,json,collab
@@ -67,7 +68,7 @@ for index,case in enumerate(cases):
     else:
         assert len(fired["state"]["notifications"])==1,index
 print("accepted "+str(len(cases)))`;
-  assert.equal(pythonCheck(script,cases),'accepted 7');
+  assert.equal(pythonCheck(script,cases),'accepted 8');
 });
 
 test('wizard refuses unsupported scheduling, actions, unsafe conditions and incomplete forms',()=>{
@@ -79,6 +80,12 @@ test('wizard refuses unsupported scheduling, actions, unsafe conditions and inco
   assert.throws(()=>logic.buildAutomationRule({...base,trigger:'label_changed',limitToList:true,listId:'abc'}),/فهرست/);
   assert.throws(()=>logic.buildAutomationRule({...base,trigger:'due_soon',dueDay:'8'}),/موعد/);
   assert.throws(()=>logic.buildAutomationRule({...base,trigger:'card_created',dueDay:'1'}),/موعد/);
+  assert.throws(()=>logic.buildAutomationRule({...base,trigger:'card_created',dueListId:'waiting'}),/فهرست/);
+  assert.throws(()=>logic.buildAutomationRule({...base,trigger:'label_changed',duePriority:'high'}),/اولویت/);
+  assert.throws(()=>logic.buildAutomationRule({...base,trigger:'due_soon',duePriority:10}),/اولویت/);
+  assert.throws(()=>logic.buildAutomationRule({...base,trigger:'due_soon',dueListId:'x'.repeat(101)}),/فهرست/);
+  assert.deepEqual(logic.buildAutomationRule({...base,trigger:'due_soon',dueDay:'2',dueListId:'waiting',duePriority:'high'}).conditions,
+    [{field:'dueWithinDays',equals:2},{field:'toColumnId',equals:'waiting'},{field:'priority',equals:'high'}]);
   assert.deepEqual(logic.buildAutomationRule({...base,trigger:'due_soon',dueDay:'0'}).conditions,
     [{field:'dueWithinDays',equals:0}]);
 });
@@ -189,4 +196,106 @@ test('component interaction flows through trigger, action, review and collabComm
   assert.deepEqual(issued[0].rule.actions,[{type:'comment',text:'ثبت خودکار پس از انتقال'}]);
   assert.equal(issued[0].rule.trigger,'card_moved');
   assert.ok(textOf(render()).includes('قانون در پروژه ثبت شد'));
+});
+
+test('due Advanced tabs save only event-backed date, list and priority conditions',async()=>{
+  let cursor=0;
+  const slots=[];
+  const shim={
+    ...React,
+    useState(initial){
+      const position=cursor++;
+      if(!(position in slots))slots[position]=typeof initial==='function'?initial():initial;
+      return [slots[position],value=>{
+        slots[position]=typeof value==='function'?value(slots[position]):value;
+      }];
+    },
+    useRef(initial){
+      const position=cursor++;
+      if(!(position in slots))slots[position]={current:initial};
+      return slots[position];
+    },
+    useCallback:callback=>callback,
+    useEffect:()=>{},
+  };
+  const source=path.join(root,'src/rulespanel.jsx');
+  const compiled=esbuild.buildSync({entryPoints:[source],bundle:true,platform:'node',format:'cjs',
+    write:false,loader:{'.css':'empty'},external:['react','react-dom','lucide-react']});
+  const instance=new Module(source,module);
+  instance.filename=source;instance.paths=Module._nodeModulePaths(path.dirname(source));
+  instance.require=id=>id==='react'?shim:Module.prototype.require.call(instance,id);
+  instance._compile(compiled.outputFiles[0].text,source);
+
+  const issued=[];
+  const buttonScopes=[];
+  const props={project:{id:'p1',name:'آزمون موعد'},users:[],listOptions:[{id:'waiting',label:'در انتظار'}],
+    priorityOptions:[{id:'high',label:'بالا'},{id:'medium',label:'متوسط'}],
+    onClose:()=>{},onManageButtons:scope=>buttonScopes.push(scope),
+    api:{collabRead:async()=>[],collabCommand:async command=>issued.push(command)}};
+  const render=()=>{cursor=0;return instance.exports.RulesPanel(props);};
+  const elements=(node,found=[])=>{
+    if(Array.isArray(node))node.forEach(item=>elements(item,found));
+    else if(node?.props){found.push(node);elements(node.props.children,found);}
+    return found;
+  };
+  const textOf=node=>{
+    if(node===null||node===undefined||typeof node==='boolean')return '';
+    if(Array.isArray(node))return node.map(textOf).join(' ');
+    if(typeof node==='string'||typeof node==='number')return String(node);
+    return node.props?textOf(node.props.children):'';
+  };
+  const button=label=>elements(render()).find(node=>node.type==='button'&&textOf(node).includes(label));
+  const click=label=>{
+    const target=button(label);
+    assert.ok(target,'Missing button: '+label);
+    assert.notEqual(target.props.disabled,true);
+    return target.props.onClick();
+  };
+  const changeSelect=(label,value)=>{
+    const element=elements(render()).find(node=>node.type==='select'&&node.props['aria-label']===label);
+    assert.ok(element,'Missing selector: '+label);
+    element.props.onChange({target:{value}});
+  };
+
+  click('دکمه‌های کارت');
+  click('دکمه‌های برد');
+  assert.deepEqual(buttonScopes,['card','board']);
+  click('موعد کارت');
+  click('قانون موعد جدید');
+  click('Advanced');
+  for(const label of ['Basic','Dates','Checklist','Content','Fields']){
+    const tab=elements(render()).find(node=>node.props?.role==='tab'&&textOf(node).includes(label));
+    assert.ok(tab,'Missing Advanced tab: '+label);
+  }
+  assert.equal(button('Advanced').props['aria-expanded'],true);
+  changeSelect('فهرست کارت در موعد','waiting');
+  click('Dates');
+  changeSelect('روز مانده به موعد','2');
+  click('Fields');
+  changeSelect('اولویت کارت در موعد','high');
+  click('Checklist');
+  assert.match(textOf(render()),/موتور موعد شناسه یا وضعیت چک‌لیست را ارسال نمی‌کند/);
+  click('Content');
+  assert.match(textOf(render()),/فیلتر عنوان، متن، پیوست و محتوای کارت/);
+  click('انجام شد');
+  assert.match(textOf(render()),/در انتظار/);
+  assert.match(textOf(render()),/بالا/);
+  click('ادامه');
+  click('ثبت نظر خودکار');
+  const textarea=elements(render()).find(node=>node.type==='textarea');
+  textarea.props.onChange({target:{value:'هشدار موعد'}});
+  click('ادامه');
+  assert.match(textOf(render()),/اولویت:\s+بالا/);
+  await click('ذخیره و فعال‌سازی');
+  assert.equal(issued.length,1);
+  assert.deepEqual(issued[0].rule.conditions,[
+    {field:'dueWithinDays',equals:2},
+    {field:'toColumnId',equals:'waiting'},
+    {field:'priority',equals:'high'},
+  ]);
+  click('قانون موعد جدید');
+  click('Advanced');
+  assert.equal(button('Advanced').props['aria-expanded'],true);
+  assert.equal(elements(render()).find(node=>node.props?.['aria-label']==='فهرست کارت در موعد').props.value,'');
+  assert.doesNotMatch(textOf(render()),/3 شرط فعال/);
 });

@@ -89,6 +89,38 @@
 .rule-condition small{color:var(--rule-muted)}
 .rule-due-condition{justify-content:space-between;flex-wrap:wrap;gap:15px}
 .rule-due-condition label{font-size:11px;display:flex;flex-direction:column;gap:5px;min-width:210px}
+.rule-due-advanced{margin-top:15px}
+.rule-due-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 17px;border:1px solid var(--rule-border);border-radius:13px;background:var(--rule-layer)}
+.rule-due-toolbar>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rule-due-toolbar strong{font-size:12px}
+.rule-due-toolbar small{color:var(--rule-muted)}
+.rule-advanced-trigger{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--rule-line);background:var(--rule-surface);border-radius:10px;padding:9px 12px;font-weight:750!important;direction:ltr;flex-shrink:0}
+.rule-advanced-trigger:hover,.rule-advanced-trigger.active{border-color:var(--rule-blue);color:var(--rule-blue)!important;background:var(--rule-soft)}
+.rule-advanced-count{display:grid;place-items:center;min-width:21px;height:21px;padding:0 4px;border-radius:50%;background:var(--rule-blue);color:var(--rule-surface);font-size:11px;line-height:1}
+.rule-filter-chips{display:flex;flex-wrap:wrap;gap:7px;padding-top:10px}
+.rule-filter-chips>span{display:inline-flex;align-items:center;gap:8px;font-size:11px;background:var(--rule-soft);color:var(--rule-text);border:1px solid var(--rule-line);border-radius:99px;padding:4px 9px}
+.rule-filter-chips button{display:inline-grid;place-items:center;padding:2px;border:0;border-radius:50%;background:transparent;color:var(--rule-muted)}
+.rule-filter-chips button:hover{background:var(--rule-border);color:var(--rule-text)}
+.rule-advanced-popover{width:min(560px,100%);margin:12px 0 0 auto;border:1px solid var(--rule-border);border-radius:17px;background:var(--rule-surface);box-shadow:0 18px 44px #07122634;overflow:hidden}
+.rule-advanced-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:17px 19px 13px}
+.rule-advanced-head>div{display:flex;flex-direction:column;gap:2px}
+.rule-advanced-head strong{font-size:14px}
+.rule-advanced-head small{color:var(--rule-muted)}
+.rule-advanced-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:0 12px;border-bottom:1px solid var(--rule-border)}
+.rule-advanced-tabs button{min-width:0;display:flex;flex-direction:column;align-items:center;gap:0;padding:9px 3px 10px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--rule-muted)!important;line-height:1.35}
+.rule-advanced-tabs button:hover{color:var(--rule-text)!important;background:var(--rule-layer)}
+.rule-advanced-tabs button.active{border-bottom-color:var(--rule-blue);color:var(--rule-blue)!important;background:var(--rule-soft)}
+.rule-advanced-tabs strong{font-size:11px;font-weight:750}
+.rule-advanced-tabs small{font-size:10px}
+.rule-advanced-body{min-height:167px;padding:21px 23px;display:flex;flex-direction:column;align-items:stretch;gap:9px}
+.rule-advanced-body h3{font-size:13px}
+.rule-advanced-body>p:not(.rule-advanced-unavailable){font-size:11px;color:var(--rule-muted)}
+.rule-advanced-field{display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:750;margin-top:7px}
+.rule-advanced-unavailable{display:flex;align-items:flex-start;gap:9px;background:var(--rule-layer);color:var(--rule-muted);border:1px dashed var(--rule-line);border-radius:10px;padding:11px 12px;font-size:11px;line-height:1.7}
+.rule-advanced-unavailable svg{flex-shrink:0;color:var(--rule-blue);margin-top:1px}
+.rule-advanced-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 19px;border-top:1px solid var(--rule-border);background:var(--rule-layer)}
+.rule-advanced-footer small{color:var(--rule-muted)}
+.rule-advanced-footer .rule-primary-button{min-height:34px;padding:7px 18px}
 .rule-dialog select,.rule-dialog textarea{font:inherit;width:100%;background:var(--rule-surface);border:1px solid var(--rule-line);border-radius:10px;color:var(--rule-text);padding:10px 12px;min-height:40px}
 .rule-dialog textarea{resize:vertical;min-height:105px;line-height:1.9}
 .rule-unsupported{display:flex;align-items:center;gap:9px;color:var(--rule-muted);padding:15px;border-radius:10px;background:var(--rule-layer)}
@@ -128,4 +160,5 @@
 :root[data-theme="dark"] .rule-notice{background:#1a463a;color:#a1e4c5;border-color:#316854}
 @media(max-width:750px){.rule-backdrop{padding:8px;align-items:stretch}.rule-dialog{width:100%;height:100%;max-height:none;min-height:0;border-radius:16px}.rule-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.rule-sidebar{flex-direction:row;overflow-x:auto;gap:6px;padding:8px;border-left:0;border-bottom:1px solid var(--rule-border)}.rule-sidebar-label,.rule-sidebar-foot,.rule-nav-chevron{display:none}.rule-nav-button{width:auto;white-space:nowrap;min-height:36px;padding:8px 11px;flex-shrink:0;gap:6px}.rule-nav-button svg{height:15px;width:15px}.rule-workspace{padding:20px}.rule-head{min-height:63px;padding:10px 16px}.rule-title-icon{height:37px;width:37px}.rule-title strong{font-size:15px}.rule-section-title{margin-bottom:20px}.rule-dialog h2{font-size:19px}}
 @media(max-width:480px){.rule-workspace{padding:16px 13px}.rule-group-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-steps li{font-size:9px;gap:4px}.rule-step-number{width:21px;height:21px}.rule-section-title{flex-wrap:wrap}.rule-choice-grid{grid-template-columns:1fr}.rule-action{min-height:95px;padding:14px}.rule-metrics{gap:8px}.rule-metrics>div{padding:12px}.rule-list-row{gap:8px;padding:11px}.rule-list-visual{display:none}.rule-status{padding:2px 6px}.rule-due-scheduler{align-items:flex-start;flex-direction:column}}
+@media(max-width:480px){.rule-due-toolbar{flex-wrap:wrap}.rule-advanced-trigger{width:100%}.rule-advanced-head{padding:13px}.rule-advanced-tabs{padding:0 4px}.rule-advanced-tabs strong{font-size:9px}.rule-advanced-tabs small{font-size:9px}.rule-advanced-body{padding:17px 13px;min-height:150px}.rule-advanced-footer{padding:10px 13px}}
 @media(prefers-reduced-motion:reduce){.rule-dialog *{scroll-behavior:auto}}

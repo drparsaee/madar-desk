@@ -26,7 +26,7 @@ export const ACTION_INFO = {
 const IDENTIFIER=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/;
 const USERNAME=/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/;
 
-export function buildAutomationRule({id,projectId,trigger,actionType,recipient,message,limitToList=false,listId='',dueDay=''}) {
+export function buildAutomationRule({id,projectId,trigger,actionType,recipient,message,limitToList=false,listId='',dueDay='',dueListId='',duePriority=''}) {
   if(!IDENTIFIER.test(id||'')||!IDENTIFIER.test(projectId||''))throw Error('شناسه قانون یا پروژه معتبر نیست.');
   if(!Object.hasOwn(TRIGGER_INFO,trigger))throw Error('رویداد انتخاب‌شده پشتیبانی نمی‌شود.');
   if(!Object.hasOwn(ACTION_INFO,actionType))throw Error('عمل انتخاب‌شده پشتیبانی نمی‌شود.');
@@ -49,6 +49,15 @@ export function buildAutomationRule({id,projectId,trigger,actionType,recipient,m
     }
     conditions.push({field:'dueWithinDays',equals:day});
   }
+  // The due scheduler publishes these two scalar values from the card itself.
+  // Other host-allowlisted conditions are not necessarily present in due events.
+  for(const [value,field,label] of [[dueListId,'toColumnId','فهرست'],[duePriority,'priority','اولویت']]){
+    if(value===''||value===null||value===undefined)continue;
+    if(trigger!=='due_soon'||typeof value!=='string'||!value.trim()||value.length>100){
+      throw Error('فیلتر '+label+' برای رویداد موعد معتبر نیست.');
+    }
+    conditions.push({field,equals:value});
+  }
   return {
     id,projectId,trigger,conditions,
     actions:[actionType==='notify'?{type:'notify',users:[recipient],message:text}:{type:'comment',text}],
@@ -65,5 +74,6 @@ export function describeRule(rule){
     recipient:action?.type==='notify'?(action.users||[]).join('، '):'',
     destination:rule.conditions?.find(c=>c.field==='toColumnId')?.equals||'',
     dueDay:rule.conditions?.find(c=>c.field==='dueWithinDays')?.equals,
+    duePriority:rule.trigger==='due_soon'?rule.conditions?.find(c=>c.field==='priority')?.equals:undefined,
   };
 }

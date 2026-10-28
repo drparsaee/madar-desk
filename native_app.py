@@ -39,6 +39,7 @@ from cloud_continuity import CloudConflict, PeerJournal
 from data_model import (normalize_plus, validate_plus, _legacy_checklist_items,
                         DEFAULT_PRIORITY_DEFINITIONS, priority_definition_ids)
 import collab
+import automation_buttons
 import finance
 from automation_due import due_events
 from automation_events import card_change_events
@@ -414,6 +415,7 @@ class Bridge:
         self.profile_cache_path = datadir() / "lan-profiles-cache.json"
         self.backups_dir = datadir() / "backups"
         self.collab_path = datadir() / "collab.json"
+        self.automation_buttons_path = datadir() / "automation-buttons.json"
         self.finance_path = datadir() / "finance.json"
         self.finance_outbox_path = datadir() / "finance-completion-outbox.json"
         self.automation_outbox_path = datadir() / "automation-card-outbox.json"
@@ -1914,6 +1916,84 @@ class Bridge:
                 self._commit_domain("collab", result["state"])
             return result["result"]
 
+    def _automation_buttons_read_local(self, request, *, actor, accounts):
+        if not isinstance(request, dict) or set(request) - {"projectId", "boardId"}:
+            raise ValueError("Invalid button listing request")
+        with self._lock:
+            return automation_buttons.list_buttons(
+                automation_buttons.load(self.automation_buttons_path),
+                actor=actor, accounts=accounts, app_state=self.getState(),
+                project_id=request.get("projectId", ""),
+                board_id=request.get("boardId", ""))
+
+    def _automation_buttons_mutate_local(self, command, *, actor, accounts):
+        with self._lock, _state_write_guard(self.automation_buttons_path):
+            output = automation_buttons.mutate(
+                automation_buttons.load(self.automation_buttons_path), command,
+                actor=actor, accounts=accounts, app_state=self.getState(),
+                now=datetime.now(timezone.utc).isoformat())
+            if output["changed"]:
+                automation_buttons.persist(self.automation_buttons_path, output["state"])
+            return output["result"]
+
+    def _automation_button_execute_local(self, command, *, actor, accounts):
+        # The execution receipt, comments and notices commit in ONE existing
+        # collaboration domain transaction. Replays cannot double-create them.
+        with self._lock, _state_write_guard(self.automation_buttons_path):
+            output = automation_buttons.execute(
+                automation_buttons.load(self.automation_buttons_path),
+                self._load_collab(), command,
+                actor=actor, accounts=accounts, app_state=self.getState(),
+                now=datetime.now(timezone.utc).isoformat())
+            if output["changed"]:
+                self._commit_domain("collab", output["state"])
+            return output["result"]
+
+    def automationButtonsList(self, request):
+        if self.connection.get("mode") == "client":
+            if not isinstance(request, dict) or set(request) - {"projectId", "boardId"}:
+                raise ValueError("Invalid button listing request")
+            return self._remote_request("/api/buttons?" + urlencode(request))["items"]
+        if self.lan:
+            return self.lan.automation_buttons_list(self.lan.authenticate_owner_token(), request)
+        return self._automation_buttons_read_local(
+            request, actor="local", accounts=self._solo_collab_context()[0])
+
+    def automationButtonsSave(self, definition):
+        command = {"type": "button.upsert", "eventId": "button-" + secrets.token_hex(16),
+                   "button": definition}
+        if self.connection.get("mode") == "client":
+            return self._remote_request("/api/buttons", command)["result"]
+        if self.lan:
+            return self.lan.automation_buttons_command(self.lan.authenticate_owner_token(), command)
+        return self._automation_buttons_mutate_local(
+            command, actor="local", accounts=self._solo_collab_context()[0])
+
+    def automationButtonsDelete(self, button_id):
+        command = {"type": "button.delete", "eventId": "button-" + secrets.token_hex(16),
+                   "buttonId": button_id}
+        if self.connection.get("mode") == "client":
+            return self._remote_request("/api/buttons", command)["result"]
+        if self.lan:
+            return self.lan.automation_buttons_command(self.lan.authenticate_owner_token(), command)
+        return self._automation_buttons_mutate_local(
+            command, actor="local", accounts=self._solo_collab_context()[0])
+
+    def automationButtonRun(self, request):
+        if not isinstance(request, dict) or set(request) - {"buttonId", "cardId", "eventId"}:
+            raise ValueError("Invalid button execution request")
+        command = {"type": "button.execute", "eventId": request.get("eventId") or
+                   "button-" + secrets.token_hex(16),
+                   "buttonId": request.get("buttonId")}
+        if request.get("cardId"):
+            command["cardId"] = request["cardId"]
+        if self.connection.get("mode") == "client":
+            return self._remote_request("/api/buttons", command)["result"]
+        if self.lan:
+            return self.lan.automation_buttons_command(self.lan.authenticate_owner_token(), command)
+        return self._automation_button_execute_local(
+            command, actor="local", accounts=self._solo_collab_context()[0])
+
     def _attachment_store(self):
         if self.connection.get("mode") == "client":
             raise PermissionError("Attachments belong to the authorized LAN host")
@@ -2412,7 +2492,9 @@ window.madar = Object.fromEntries(
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
   'getPreferences','setPreferences','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
-  .concat(['collabRead','collabCommand','driveFolderList','driveFolderRestore',
+  .concat(['collabRead','collabCommand','automationButtonsList',
+           'automationButtonsSave','automationButtonsDelete','automationButtonRun',
+           'driveFolderList','driveFolderRestore',
            'cloudPeerStatus','cloudPeerConfigure','cloudPeerGenerate','cloudPeerForget',
            'financeRead','financeOverview','financeStatus','financeCommand',
            'accountingRead','accountingCommand',

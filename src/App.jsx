@@ -17,6 +17,7 @@ import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription}
 import {CardComments,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
 import {FinancePanel} from './financepanel.jsx';
 import {RulesPanel} from './rulespanel.jsx';
+import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
 import {CardAttachments} from './attachments.jsx';
 import {archiveBoardState,restoreBoardState,renameBoardState,moveCardToBoard,boardStageUpdate,legacyStatusForStage} from './boardops.js';
@@ -215,6 +216,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
+  const [automationButtonsOpen,setAutomationButtonsOpen]=useState(false);
   const drawerRef=useRef(null);
   const onCloseRef=useRef(onClose);
   onCloseRef.current=onClose;
@@ -279,7 +281,17 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>jumpToSection('tags')} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
         <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
         <button type="button" onClick={()=>{setReportComposerOpen(true);jumpToSection('reports');}} aria-controls="task-section-reports"><MessageCircle size={15}/> گزارش</button>
+        <AutomationButtonsLauncher scope="card" onClick={()=>setAutomationButtonsOpen(open=>!open)} disabled={!task.boardId}/>
       </nav>
+      {task.boardId&&typeof api?.automationButtonsList==='function'&&
+        <AutomationButtonStrip api={api} projectId={task.projectId} boardId={task.boardId}
+          scope="card" cardId={task.id} canRun={canEdit} onCloseCard={onClose}/>}
+      {automationButtonsOpen&&<div className="edit-section task-automation-buttons">
+        <AutomationButtonsPanel api={api} project={projects.find(p=>p.id===task.projectId)}
+          boardId={task.boardId||''} users={users} cardId={task.id}
+          initialScope="card" canManage={canManage} canRun={canEdit}
+          onCloseCard={onClose}/>
+      </div>}
       <div className="edit-grid" id="task-section-metadata" tabIndex={-1}>
         <label>پروژه<select disabled={!canEdit} value={task.projectId} onChange={e=>update({projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         {boards.filter(b=>b.projectId===task.projectId&&!b.archived).length>1&&
@@ -599,6 +611,7 @@ export default function App(){
   const [profitVisible,setProfitVisible]=useState(false);
   const [rulesOpen,setRulesOpen]=useState(false);
   const [automationListId,setAutomationListId]=useState(null);
+  const [automationButtonsScope,setAutomationButtonsScope]=useState(null);
   const [reportingOpen,setReportingOpen]=useState(false);
   const [trelloImportOpen,setTrelloImportOpen]=useState(false);
   const [portableExportOpen,setPortableExportOpen]=useState(false);
@@ -1386,7 +1399,7 @@ export default function App(){
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
-        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
+        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}{show('automationRules')&&activeBoard&&<AutomationButtonsLauncher scope="board" onClick={()=>setAutomationButtonsScope('board')}/>}</div>}
         {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
@@ -1517,7 +1530,15 @@ export default function App(){
       ?<PlannerPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} calendar={calendar} onClose={()=>setPlannerOpen(false)} onOpenTask={id=>{setPlannerOpen(false);setEditorId(id);}} accountId={plannerIdentity(lanStatus)}/>
       :<Modal title="برنامه‌ریزی شخصی" onClose={()=>setPlannerOpen(false)}><p className="dialog-body">شناسه سرور یا حساب کاربری مشخص نیست. برای جلوگیری از تداخل برنامه‌های شخصی، ابتدا اتصال را تکمیل کنید.</p></Modal>)}
     {show('automationRules')&&rulesOpen&&selectedProject&&<RulesPanel api={api} project={selectedProject} users={users}
-      initialListId={automationListId} onClose={()=>{setRulesOpen(false);setAutomationListId(null);}}/>}
+      initialListId={automationListId} listOptions={activeBoard?activeBoardLists(activeBoard):viewStages}
+      priorityOptions={priorities}
+      onManageButtons={scope=>{setRulesOpen(false);setAutomationListId(null);setAutomationButtonsScope(scope);}}
+      onClose={()=>{setRulesOpen(false);setAutomationListId(null);}}/>}
+    {show('automationRules')&&automationButtonsScope&&selectedProject&&activeBoard&&
+      <AutomationButtonsPanel modal api={api} project={selectedProject} boardId={activeBoard.id}
+        users={users} initialScope={automationButtonsScope}
+        cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
+        canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
     {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onDelete={()=>deleteTask(activeTask.id)}/>}
 

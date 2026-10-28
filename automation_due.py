@@ -41,7 +41,19 @@ def due_events(cards, *, today, horizon_days=7):
         if not 0 <= delta <= horizon_days:
             continue
         digest = hashlib.sha256(f"{card['id']}|{value}|{today.isoformat()}".encode("utf8")).hexdigest()[:28]
+        # Expose bounded, scalar card properties to the existing rule engine.
+        # Multi-value labels/assignees/checklists are deliberately omitted:
+        # a single equality value cannot describe multiple memberships.
+        data = {"dueWithinDays": delta}
+        target_list = card.get("listId") or card.get("status")
+        if isinstance(target_list, str) and 0 < len(target_list) <= 100:
+            data["toColumnId"] = target_list
+        priority = card.get("priority")
+        if isinstance(priority, str) and 0 < len(priority) <= 100:
+            data["priority"] = priority
+        if type(card.get("completed")) is bool:
+            data["completed"] = card["completed"]
         result.append({"type": "event.publish", "eventId": "due-" + digest,
                        "cardId": card["id"], "trigger": "due_soon",
-                       "data": {"dueWithinDays": delta}})
+                       "data": data})
     return result

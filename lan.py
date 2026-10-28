@@ -33,6 +33,7 @@ from role_profiles import (BUILTIN_LABELS, MAX_ROLES, MODE_RANK,
                            DISPLAY_FEATURE_TIERS, LEGACY_DISPLAY_ROLE,
                            default_roles, effective_display, public_role, validate_role)
 import collab
+import automation_buttons
 import finance
 
 ROLES = {"admin", "editor", "viewer"}
@@ -777,6 +778,23 @@ class LanService:
                 self._commit_domain("collab", output["state"])
             return output["result"]
 
+    def automation_buttons_list(self, token, request):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            return self.bridge._automation_buttons_read_local(
+                request, actor=who["username"], accounts=self.users)
+
+    def automation_buttons_command(self, token, command):
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if not isinstance(command, dict):
+                raise ValueError("Invalid button command")
+            if command.get("type") == "button.execute":
+                return self.bridge._automation_button_execute_local(
+                    command, actor=who["username"], accounts=self.users)
+            return self.bridge._automation_buttons_mutate_local(
+                command, actor=who["username"], accounts=self.users)
+
     def finance_read(self, token, project_id=""):
         with self.lock, self.bridge._lock:
             who = self.account_for(token)
@@ -1087,7 +1105,8 @@ class LanService:
                                     "/api/standalone-accounting", "/api/standalone-accounting/prepare",
                                     "/api/standalone-accounting/quote",
                                     "/api/rial-journal", "/api/rial-journal/activate",
-                                    "/api/rules", "/api/scheduler", "/api/attachments"):
+                                    "/api/rules", "/api/scheduler", "/api/attachments",
+                                    "/api/buttons"):
                     return self.reply(404, {"error": "مسیر پیدا نشد."})
                 token = self.headers.get("Authorization", "").removeprefix("Bearer ")
                 payload = {}
@@ -1132,6 +1151,14 @@ class LanService:
                                 "projectId" if endpoint == "/api/rules" else "cardId", [""])[0])})
                     if self.command == "POST" and endpoint == "/api/collab":
                         return self.reply(200, {"result": service.collab_command(token, payload)})
+                    if self.command == "GET" and endpoint == "/api/buttons":
+                        params = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+                        if set(params) - {"projectId", "boardId"} or any(len(v) != 1 for v in params.values()):
+                            raise ValueError("Invalid button listing query")
+                        return self.reply(200, {"items": service.automation_buttons_list(
+                            token, {key: value[0] for key, value in params.items()})})
+                    if self.command == "POST" and endpoint == "/api/buttons":
+                        return self.reply(200, {"result": service.automation_buttons_command(token, payload)})
                     if self.command == "GET" and endpoint == "/api/finance":
                         params = parse_qs(urlparse(self.path).query)
                         return self.reply(200, {"invoices": service.finance_read(
