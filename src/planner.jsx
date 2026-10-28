@@ -167,6 +167,8 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
     typeof window !== 'undefined' && !window.madar ? 'solo' : '');
   const scope = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : identity;
   const [loaded, setLoaded] = useState(null);
+  const loadedRef = useRef(null);
+  const writeQueue = useRef(Promise.resolve());
   const [error, setError] = useState('');
   const [day, setDay] = useState(today);
   const [mode, setMode] = useState('month');
@@ -203,14 +205,38 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
 
   useEffect(() => {
     setLoaded(null);
+    loadedRef.current = null;
     if (!scope) return;
-    try {
-      storageKey(scope);
-      setLoaded({scope, value: readPlanner(window.localStorage, scope)});
-      setError('');
-    } catch (exception) {
-      setError(exception?.message || 'دسترسی به ذخیره شخصی ممکن نیست.');
-    }
+    let active = true;
+    const load = async () => {
+      try {
+        storageKey(scope);
+        let value;
+        if (window.madar?.plannerRead) {
+          const persisted = await window.madar.plannerRead(scope);
+          if (persisted) {
+            value = normalizePlanner(persisted);
+          } else {
+            // One-time migration for data available at this browser origin.
+            // Older random-port WebView storage is preserved for recovery.
+            value = readPlanner(window.localStorage, scope);
+            if (value.inbox.length || value.entries.length) {
+              value = normalizePlanner(await window.madar.plannerWrite(scope, value));
+            }
+          }
+        } else {
+          value = readPlanner(window.localStorage, scope);
+        }
+        if (!active) return;
+        loadedRef.current = {scope, value};
+        setLoaded({scope, value});
+        setError('');
+      } catch (exception) {
+        if (active) setError(exception?.message || 'دسترسی به ذخیره شخصی ممکن نیست.');
+      }
+    };
+    load();
+    return () => {active = false;};
   }, [scope]);
 
   const state = loaded?.scope === scope ? loaded.value : null;
@@ -233,22 +259,32 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
   const periodTitle = monthsFormatter(calendar).format(new Date(day + 'T12:00:00Z'));
 
   const change = mutate => {
-    if (!state) return false;
-    try {
-      const next = normalizePlanner(mutate(state));
-      writePlanner(window.localStorage, scope, next);
-      setLoaded({scope, value: next});
-      setError('');
-      return true;
-    } catch (exception) {
-      setError(exception?.message || 'ذخیره اطلاعات شخصی ناموفق بود.');
-      return false;
-    }
+    const commit = writeQueue.current.catch(() => {}).then(async () => {
+      const current = loadedRef.current?.scope === scope ? loadedRef.current.value : null;
+      if (!current) return false;
+      try {
+        let next = normalizePlanner(mutate(current));
+        if (window.madar?.plannerWrite) {
+          next = normalizePlanner(await window.madar.plannerWrite(scope, next));
+        } else {
+          writePlanner(window.localStorage, scope, next);
+        }
+        loadedRef.current = {scope, value: next};
+        setLoaded({scope, value: next});
+        setError('');
+        return true;
+      } catch (exception) {
+        setError(exception?.message || 'ذخیره اطلاعات شخصی ناموفق بود.');
+        return false;
+      }
+    });
+    writeQueue.current = commit;
+    return commit;
   };
-  const addItem = event => {
+  const addItem = async event => {
     event.preventDefault();
     if (!newTitle.trim()) return;
-    const saved = change(state => addInboxItem(state, {
+    const saved = await change(state => addInboxItem(state, {
       id: createId(), title: newTitle, notes,
       createdDate: isoToday(), dueDate,
       repeat: {frequency, interval: 1, calendar}, remindTime
@@ -260,15 +296,14 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
   const finish = id => change(state => completeInboxItem(state, id, day));
   const planPersonal = id => change(state => planEntry(state,
     {id: createId(), source: 'personal', refId: id, date: day}));
-  const planTask = () => {
+  const planTask = async () => {
     if (!taskToPlan || !visibleTasks.some(task => task.id === taskToPlan)) return;
-    change(state => planEntry(state, {id: createId(), source: 'task', refId: taskToPlan, date: day}));
-    setTaskToPlan('');
+    if (await change(state => planEntry(state, {id: createId(), source: 'task', refId: taskToPlan, date: day}))) setTaskToPlan('');
   };
-  const saveEdit = event => {
+  const saveEdit = async event => {
     event.preventDefault();
     if (!editing) return;
-    if (change(state => editInboxItem(state, editing.id, {
+    if (await change(state => editInboxItem(state, editing.id, {
       title: editing.title, notes: editing.notes, dueDate: editing.dueDate,
       repeat: editing.repeat, remindTime: editing.remindTime
     }))) setEditing(null);

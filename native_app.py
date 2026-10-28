@@ -848,6 +848,18 @@ class Bridge:
                     "revision": snapshot.revision if snapshot else None,
                     "ready": self.connection.get("mode") != "client"}
 
+    def plannerRead(self, account_id):
+        """Read private Planner state from the Windows profile, not a random HTTP port."""
+        from planner_persistence import PlannerPersistence
+        with self._lock:
+            return PlannerPersistence(self.path.parent).read(account_id)
+
+    def plannerWrite(self, account_id, state):
+        """Durably save personal Planner data with validation and recovery copy."""
+        from planner_persistence import PlannerPersistence
+        with self._lock:
+            return PlannerPersistence(self.path.parent).write(account_id, state)
+
     def automationEngineStatus(self):
         """Expose only non-sensitive engine counts on its owning host."""
         if self.connection.get("mode") == "client":
@@ -2606,7 +2618,7 @@ window.madar = Object.fromEntries(
   'lanStatus','lanDiscover','hostServiceStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
   'lanDisplayRoles','lanSaveDisplayRole','lanDeleteDisplayRole',
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
-  'getPreferences','setPreferences','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
+  'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
   .concat(['collabRead','collabCommand','automationButtonsList',
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',

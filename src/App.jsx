@@ -1570,7 +1570,10 @@ export default function App(){
             </div>}
           </div>}
         </section>}
-        <footer className="app-footer"><span>مدار · نسخه آزمایشی {packageInfo.version}</span><span>برای تست کاربر؛ اطلاعات واقعی وارد نکنید</span></footer>
+        <footer className="app-footer">
+          <span>مدار · نسخه {packageInfo.version}</span>
+          <a href="https://packpoc.com" target="_blank" rel="noopener noreferrer">Powered by packpoc.com</a>
+        </footer>
       </div>
     </main>
     {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}

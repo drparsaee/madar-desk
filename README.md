@@ -6,7 +6,7 @@
 
 The active source branch is `main` of the private **LocalForge** repository
 `localadmin/madar-desk`. The package source version is currently
-`1.0.0-rc.15`; the much older `v0.3-preview` instructions below are retained
+`1.0.0`; the much older `v0.3-preview` instructions below are retained
 as historical notes, **not** as current release instructions.
 
 Current source includes a Vitrea-inspired task-management shell and separate
@@ -24,15 +24,20 @@ as its canonical currency; the historical toman overview below does not
 define the authoritative ledger.
 
 Builds have immutable release names. `npm run dist` currently targets the
-`v1.0-rc15-UserTest-20261028` candidate and deliberately refuses to overwrite an
+`v1.0.0-Customer-20261028` release and deliberately refuses to overwrite an
 existing executable. For a new candidate, first select a distinct release
 filename and run `scripts/ensure_new_release.py`, then build it using
 PyInstaller with a matching distinct `--name` after `npm run build`.
 Do not rename or overwrite an existing installed EXE.
 
-The RC15 user-test bundle includes the approved final SVG/ICO branding.
-Testers should run `release/Run-Madar-UserTest.cmd` to isolate their test
-profile and read `release/Madar-UserTest-README.txt` before using the app.
+The customer ZIP bundles the approved final SVG/ICO branding and an opt-in
+per-user installer. Read `docs/MADAR_CUSTOMER_RELEASE.md` and run
+`Install-Madar.cmd` from the extracted ZIP to install a versioned executable
+without moving or replacing the original `%APPDATA%\MadarDesk` profile.
+The installer aborts if Madar is running and snapshots the full profile before
+switching versions. It does not independently preserve historical WebView2
+localStorage from old random-port runs or data held by a separate Windows
+Host service; migration and production acceptance for those remain open.
 Neither a successful build nor an isolated smoke run verifies live accounting
 or multi-computer LAN acceptance.
 
