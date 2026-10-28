@@ -9,10 +9,10 @@ test('decorative old sidebar promo is fully absent from JSX and CSS',()=>{
   assert.doesNotMatch(read('src/styles.css'),/\.sidebar-help|\.help-icon/);
 });
 
-test('one finance management link goes to verified standalone dashboard, not old finance hub',()=>{
+test('accounting category routes to verified standalone dashboard, not old finance hub',()=>{
   const source=read('src/App.jsx');
-  assert.equal((source.match(/مدیریت مالی<\/button>/g)||[]).length,1);
-  assert.match(source,/canViewStandalone&&show\('accountingDashboard'\)&&<button/);
+  assert.equal((source.match(/ورود به نرم‌افزار حسابداری<\/button>/g)||[]).length,1);
+  assert.match(source,/canViewStandalone&&show\('accountingDashboard'\)&&<details className="sidebar-group"/);
   assert.match(source,/window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.doesNotMatch(source,/setFinanceHubOpen\(true\)|<FinanceOverview\b/);
   assert.match(read('src/standalone_accounting_workspace.jsx'),/useState\('overview'\)/);

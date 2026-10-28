@@ -1,0 +1,45 @@
+/* Compact right-to-left navigation: frequent actions visible, secondary tools grouped. */
+.app-shell.vitrea-layout > .sidebar { direction:rtl; text-align:right; }
+.app-shell.vitrea-layout > .sidebar .sidebar-settings,
+.app-shell.vitrea-layout > .sidebar .sidebar-nav button {
+  direction:rtl;
+  justify-content:flex-start;
+  text-align:right;
+  width:100%;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-settings svg:last-child {margin-right:0;}
+.app-shell.vitrea-layout > .sidebar .sidebar-bottom {display:grid;gap:4px;}
+.app-shell.vitrea-layout > .sidebar .sidebar-group {
+  margin:2px 6px 8px;
+  border:1px solid var(--vs-edge,#a6b2c466);
+  border-radius:12px;
+  min-width:0;
+  overflow:hidden;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group > summary {
+  display:flex;align-items:center;gap:9px;
+  min-height:38px;padding:8px 11px;
+  cursor:pointer;list-style:none;
+  color:var(--vs-ink,#263851);
+  font-size:11.5px;font-weight:680;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group > summary::-webkit-details-marker {display:none;}
+.app-shell.vitrea-layout > .sidebar .sidebar-group > summary > svg:last-child {
+  margin-inline-start:auto;transition:transform .15s ease;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group[open] > summary > svg:last-child {transform:rotate(180deg);}
+.app-shell.vitrea-layout > .sidebar .sidebar-group > summary:is(:hover,:focus-visible) {
+  background:var(--vs-hover,#e5edfa);outline-offset:-3px;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group .sidebar-nav {
+  margin:0;padding:3px 5px 7px;
+  border-block-start:1px solid var(--vs-edge,#a6b2c466);
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group .sidebar-nav button {
+  min-height:35px;padding:7px 9px;font-size:11px;
+}
+.app-shell.vitrea-layout > .sidebar .sidebar-group--admin {margin:0 0 5px;}
+.app-shell.vitrea-layout > .sidebar .sidebar-bottom > .sidebar-settings {font-weight:700;}
+@media(max-width:860px) {
+  .app-shell.vitrea-layout > .sidebar .sidebar-group > summary {min-height:42px;}
+}

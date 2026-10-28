@@ -2199,6 +2199,11 @@ class Bridge:
             return self.state
 
     def driveFolderBackup(self):
+        folder = self.offline.folder_status()
+        if not folder.get("configured"):
+            raise RuntimeError("ابتدا پوشه پشتیبان در Google Drive for desktop را انتخاب کنید.")
+        if not folder.get("available"):
+            raise RuntimeError("پوشه پشتیبان در دسترس نیست؛ اتصال یا مسیر پوشه را بررسی کنید.")
         if self.connection.get("mode") == "client" and self.offline.has_pending():
             return self.offline.publish(json.loads(self.offline.pending.read_text(encoding="utf8")), force=True)
         state = self.getState()

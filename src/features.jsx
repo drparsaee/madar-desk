@@ -214,11 +214,16 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  const userFeatureKeys=lanAvailableUserFeatures(activeTemplate,activeMode);
  const invalidDisplayRole=!lanCanAssignDisplayRole(displayRoles,displayRole,role);
  const saveUser=()=>run(async()=>{if(invalidDisplayRole)throw Error('قالب مدیرکل فقط با مجوز فنی مدیر میزبان مجاز است؛ مجوز مدیر نیز به انتخاب قالب مدیرکل نیاز دارد.');
-   await api.lanSaveUser({username:name.trim(),password:userPassword,role,displayRole,
-     displayMode:customUserDisplay?activeMode:null,
-     displayFeatures:customUserDisplay?userFeatureKeys.filter(key=>userDisplayFeatures.includes(key)):null,
+   const payload={username:name.trim(),password:userPassword,role,displayRole,
      projects:role==='admin'||scope==='all'?null:selectedProjects,displayName:userDisplayName,
-     avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto});
+     avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto};
+   // A missing override means "use the role template" to the LAN host.
+   // Sending null is a different operation, which the host currently rejects.
+   if(customUserDisplay){
+     payload.displayMode=activeMode;
+     payload.displayFeatures=userFeatureKeys.filter(key=>userDisplayFeatures.includes(key));
+   }
+   await api.lanSaveUser(payload);
    setUsers(await api.lanUsers());resetUserForm();setNotice('حساب، قالب نمایش و مجوز فنی ذخیره شد.');});
  const resetPassword=()=>run(async()=>{await api.lanResetPassword(name,userPassword);setUserPassword('');setNotice('رمز قبلی باطل و رمز جدید فعال شد؛ نشست‌های قبلی نیز لغو شدند.');});
  const deleteUser=u=>run(async()=>{await api.lanDeleteUser(u);setUsers(await api.lanUsers());setNotice('حساب حذف شد.');});

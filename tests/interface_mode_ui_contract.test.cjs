@@ -118,7 +118,7 @@ test('today: task-side finance panels remain role-gated; management finance open
   assert.ok(route,'standalone route action must exist');
   assert.match(route[1],/dirty\.current\|\|saving\.current\|\|blocked\.current/);
   assert.match(route[1],/window\.location\.assign\('\.\/accounting\.html'\)/);
-  assert.match(app,/مدیریت مالی<\/button>/);
+  assert.match(app,/ورود به نرم‌افزار حسابداری<\/button>/);
   assert.equal(matching('FinanceOverview').length,0,'legacy financial hub must not be mounted');
   const projectFinance=exactOne('button',/setFinanceOpen\(true\)/);
   assert.ok(guardContains(projectFinance,/\bcanManage\b/)||displayFeature(projectFinance,'projectFinance'),
@@ -133,7 +133,8 @@ test('today: safety and account services remain present in visible application s
   assert.match(app,/const openNetwork=\(\)=>\{setLanInitialView\('connection'\);setLanOpen\(true\);\}/);
   assert.match(app,/showDetails=\{openNetwork\}/);
   assert.match(app,/onClick=\{openUserManagement\}/);
-  assert.match(app,/canManage&&lanStatus\.mode!=='solo'/);
+  assert.match(app,/canManage&&<button type="button" onClick=\{openUserManagement\}/);
+  assert.match(app,/setLanInitialView\(lanStatus\.mode==='solo'\?'connection':'users'\)/);
   assert.equal(matching('SyncIndicator').length,1);
   assert.equal(matching('SearchPlus').length,1);
   assert.ok(matching('div',/className="kanban"/).length>0);

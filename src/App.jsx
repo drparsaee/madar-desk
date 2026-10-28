@@ -63,6 +63,8 @@ import './vitrea_navigation.css';
 import './vitrea_design_tokens.css';
 import './workspace_empty.css';
 import './trello_quick_add.css';
+import './sidebar_compact.css';
+import './backup_easy.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -357,7 +359,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   </aside></div>;
 }
 
-function DrivePanel({data,onClose,onRestore}){
+function DrivePanel({data,onClose,onRestore,isClient=false}){
   const [id,setId]=useState(data.settings.googleClientId||'');
   const [connected,setConnected]=useState(false);
   const [backups,setBackups]=useState([]);
@@ -392,9 +394,32 @@ function DrivePanel({data,onClose,onRestore}){
     if(result?.name){setFolderFiles(await api.driveFolderList());setMessage('نسخه اطلاعات داخل پوشه همگام‌شده ثبت شد: '+result.name);}
     else setMessage('ابتدا پوشه Google Drive for desktop را انتخاب و در ویندوز قابل‌دسترسی کنید.');
   });
-  return <Modal title="پشتیبان‌گیری و انتقال اطلاعات" onClose={onClose} width={570}>
+  return <Modal title="پشتیبان‌گیری" onClose={onClose} width={610}>
     <div className="dialog-body cloud-panel">
-      <div className="cloud-hero"><div className="cloud-hero-icon"><Cloud size={27}/></div><div><strong>اطلاعات تو، در هر دو کامپیوتر</strong><p>نسخه پشتیبان را در فضای خصوصی برنامه در Google Drive ذخیره کن و در سیستم دوم بازیابی کن.</p></div></div>
+      <div className="cloud-hero"><div className="cloud-hero-icon"><HardDriveDownload size={27}/></div><div><strong>پشتیبان‌گیری، بدون تنظیمات فنی</strong><p>یک نسخه از اطلاعات اصلی برنامه نگه دارید. برای نگهداری نسخه در فضای ابری، کافی است پوشه همگام‌شده را انتخاب کنید؛ نیازی به گرفتن API یا شناسه گوگل نیست.</p></div></div>
+      <section className="backup-easy-quick" aria-label="پشتیبان‌گیری سریع">
+        <div className="backup-easy-quick__item"><div><strong>۱. ذخیره روی این رایانه</strong><small>{isClient?'ایجاد پشتیبان به رایانه میزبان محدود است.':'نسخه‌ای از اطلاعات اصلی ذخیره می‌شود. پیوست‌ها و حساب‌های شبکه جداگانه‌اند.'}</small></div>
+          <button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{
+            const result=await api.createLocalBackup();
+            setLocalBackups(await api.listLocalBackups());
+            setMessage('نسخه پشتیبان محلی ایجاد شد: '+result.name+' (شامل همه فایل‌های پیوست یا حساب‌های LAN نیست).');
+          })}><HardDriveDownload size={17}/> ایجاد پشتیبان</button>
+        </div>
+        <div className="backup-easy-quick__item"><div><strong>۲. نگهداری در پوشه همگام‌شده (اختیاری)</strong><small>برنامه Google Drive for desktop همگام‌سازی پوشه را انجام می‌دهد؛ این کار به OAuth یا Google Cloud Console نیاز ندارد.</small></div>
+          <div className="backup-easy-quick__buttons">
+            <button className="btn secondary" disabled={!!busy} onClick={selectFolder}><FolderOpen size={16}/> انتخاب پوشه</button>
+            {folder.configured&&<button className="btn secondary" disabled={!!busy||!folder.available} onClick={folderBackup}><CloudUpload size={16}/> ذخیره در پوشه</button>}
+          </div>
+        </div>
+        {folder.configured&&<p className="backup-easy-quick__path" role="status">پوشه انتخاب‌شده: <span dir="ltr">{folder.folder}</span> · {folder.available?'در دسترس':'در دسترس نیست'}</p>}
+        {!!localBackups.length&&<div className="backup-easy-recent"><strong>آخرین نسخه‌های محلی</strong>{localBackups.slice(0,3).map(item=><div key={item.name}><small dir="ltr">{item.name}</small><button disabled={!!busy} onClick={()=>operation('restore-local',async()=>{
+          if(!window.confirm('این نسخه اطلاعات فعلی را جایگزین می‌کند. پیش از بازیابی، از اطلاعات فعلی نسخه ایمنی گرفته می‌شود. ادامه می‌دهید؟'))return;
+          onRestore(await api.restoreLocalBackup(item.name));
+        })}>بازیابی</button></div>)}</div>}
+        <p className="backup-easy-limitation">این‌ها پشتیبان کامل همه اجزای مدار نیستند؛ به‌ویژه فایل‌های پیوست، حساب‌های LAN و اطلاعات شخصی برنامه‌ریز پوشش جداگانه دارند.</p>
+      </section>
+      {message&&<div className="inline-message" role="status">{message}</div>}
+      <details className="backup-easy-more"><summary><Settings2 size={17}/> روش‌های بیشتر، بازیابی و تنظیمات پیشرفته <ChevronDown size={16}/></summary><div className="backup-easy-more__content">
       <div className="cloud-state"><span className={'connection-dot '+(connected?'online':'')}/><span>{connected?'حساب Google Drive متصل است':'هنوز به حساب Google متصل نشده‌ای'}</span><small>{isDesktop?'برنامه ویندوز':'حالت پیش‌نمایش'}</small></div>
       <div className="drive-simple"><strong><Cloud size={18}/> اتصال ساده با Google Drive for desktop</strong><p>۱. برنامه رسمی Google Drive for desktop را روی هر سیستم نصب و با حساب Google یکسان وارد شو. ۲. یک پوشه همگام‌شده برای مدار انتخاب کن. ۳. نسخه‌های بازیابی بدون تنظیم OAuth Client ID داخل همان پوشه نگهداری می‌شوند.</p><div className="drive-simple-actions"><button disabled={!!busy} className="btn primary" onClick={selectFolder}><FolderOpen size={17}/> انتخاب پوشه همگام‌شده</button>{folder.configured&&<button disabled={!!busy||!folder.available} className="btn secondary" onClick={folderBackup}><CloudUpload size={17}/> ذخیره نسخه حالا</button>}{folder.configured&&<button disabled={!!busy} className="btn secondary" onClick={()=>operation('list-folder',async()=>setFolderFiles(await api.driveFolderList()))}><RefreshCw size={15}/> فهرست نسخه‌ها</button>}</div>{folder.configured&&<div className="drive-path"><span className={folder.available?'positive':'warning'}>{folder.available?'پوشه در دسترس است':'پوشه در دسترس نیست'}</span><code dir="ltr">{folder.folder}</code></div>}{folderFiles.length>0&&<div className="drive-folder-files"><strong>نسخه‌های موجود در پوشه</strong>{folderFiles.slice(0,12).map(file=><div key={file.name}><small dir="ltr" title={file.name}>{file.name}</small><button disabled={!!busy} onClick={()=>operation('restore-folder',async()=>{if(!window.confirm('این نسخه جایگزین اطلاعات محلی می‌شود و از نسخه فعلی بکاپ ایمن گرفته خواهد شد. ادامه می‌دهید؟'))return;onRestore(await api.driveFolderRestore(file.name));})}>بازیابی</button></div>)}</div>}<small>Google Drive for desktop باید فایل‌ها را واقعاً با اینترنت همگام کند. این روش جایگزین سرور مشترک چندکاربره نیست؛ هنگامی که سرور قطع باشد، ویرایش‌ها در کلاینت صف می‌شوند و پس از اتصال دوباره با بررسی تعارض اعمال خواهند شد. فایل‌های SMB منتقل نمی‌شوند.</small></div>
       <div className="drive-peer">
@@ -434,8 +459,8 @@ function DrivePanel({data,onClose,onRestore}){
             const response=await api.enableAutomationEngine();setAutomationStatus(response);setMessage('موتور رویدادها فعال شد و پشتیبان اولیه ثبت شد: '+response.preActivationBackup);
           })}>فعال‌سازی موتور اتوماسیون با پشتیبان ایمنی</button></>}
       </section>}
-      {message&&<div className="inline-message" role="status">{message}</div>}
       <p className="cloud-note"><ShieldCheck size={15}/> روش API از پوشه خصوصی appData استفاده می‌کند؛ روش Drive for desktop از پوشه انتخابی داخل ویندوز. حساب‌های LAN و رمزها در این پشتیبان‌ها قرار نمی‌گیرند.</p>
+      </div></details>
     </div>
   </Modal>;
 }
@@ -750,8 +775,9 @@ export default function App(){
   };
   const openNetwork=()=>{setLanInitialView('connection');setLanOpen(true);};
   const openUserManagement=()=>{
-    if(!canManage||lanStatus.mode==='solo')return;
-    setLanInitialView('users');setLanOpen(true);
+    if(!canManage)return;
+    // Solo is a valid entry point into setup, not a silent dead button.
+    setLanInitialView(lanStatus.mode==='solo'?'connection':'users');setLanOpen(true);
   };
   useEffect(()=>{setProfitVisible(false);},[selected,boardId]);
   useEffect(()=>{
@@ -1288,8 +1314,9 @@ export default function App(){
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/></button>
-      {canManage&&lanStatus.mode!=='solo'&&<button type="button" onClick={openUserManagement}
-        title="تعریف کاربران" aria-label="تعریف کاربران"><Users size={19}/></button>}
+      {canManage&&<button type="button" onClick={openUserManagement}
+        title={lanStatus.mode==='solo'?'تعریف کاربر: ابتدا میزبان شبکه را فعال کنید':'تعریف کاربران'}
+        aria-label="تعریف کاربران"><Users size={19}/></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
         title="Google Drive" aria-label="Google Drive"><Cloud size={19}/></button>
       {canManage&&<button type="button" title={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
@@ -1300,7 +1327,7 @@ export default function App(){
       <button type="button" title="تنظیمات" aria-label="تنظیمات مدار"
         onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/></button>
     </nav>
-    <aside id="madar-sidebar" role={mobileNavOpen||desktopNavOpen?'dialog':undefined}
+    <aside id="madar-sidebar" dir="rtl" role={mobileNavOpen||desktopNavOpen?'dialog':undefined}
       aria-modal={mobileNavOpen||desktopNavOpen?'true':undefined}
       aria-label={mobileNavOpen||desktopNavOpen?'فهرست پیمایش مدار':undefined}
       inert={!mobileNavOpen&&!desktopNavOpen}
@@ -1315,25 +1342,31 @@ export default function App(){
         <select id="madar-active-workspace" aria-label="انتخاب فضای کاری" value={activeWorkspaceId||''} onChange={e=>{selectWorkspace(e.target.value);setMobileNavOpen(false);}} style={{width:'100%',padding:'9px',borderRadius:9}}>
           {workspaces.filter(w=>!w.archived).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
-        {show('workspaceManagement')&&<button type="button" title="مدیریت فضاهای کاری" onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> مدیریت فضاهای کاری</button>}
       </div>
       <nav className="sidebar-nav" aria-label="پیمایش برنامه">
         <button title="همه کارها" className={selected==='all'?'active':''} onClick={()=>{setSelected('all');setBoardId(null);}}><LayoutGrid size={18}/> همه کارها <span>{filtered.length}</span></button>
         <button title="کارهای مهم" onClick={()=>{setSelected('all');setFilter('high');}}><Flag size={18}/> کارهای مهم</button>
-        <button type="button" title="زباله‌دان کارت‌ها" onClick={()=>setTrashOpen(true)} aria-label="زباله‌دان کارت‌ها"><Trash2 size={18}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
-        {show('reporting')&&<button title="گزارش و تحلیل" onClick={()=>setReportingOpen(true)}><BarChart3 size={18}/> گزارش و تحلیل</button>}
-        {show('planner')&&<button title="برنامه‌ریزی شخصی" onClick={()=>setPlannerOpen(true)}><CalendarDays size={18}/> برنامه‌ریزی شخصی</button>}
-        {show('activity')&&<button title="تاریخچه فعالیت" onClick={()=>setActivityOpen(true)}><Activity size={18}/> تاریخچه فعالیت</button>}
-        {show('timeDashboard')&&<button title="داشبورد زمان" onClick={()=>{setSelected('all');setFilter('all');setMode('time');}}><BarChart3 size={18}/> داشبورد زمان</button>}
-        {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard} title="ورود به داشبورد و دفتر حسابداری مستقل"><Wallet size={18}/> مدیریت مالی</button>}
-        {canManage&&show('accountingDashboard')&&<button type="button" onClick={()=>setRialJournalOpen(true)}
-          aria-label="دفتر روزنامه ریالی V2 فقط خواندنی"><FileText size={18}/>
-          دفتر ریالی V2 (آزمایشی)</button>}
-        {show('trelloImport')&&<button title="ورود فایل Trello" onClick={()=>setTrelloImportOpen(true)}><FileInput size={18}/> ورود فایل Trello</button>}
-        {show('trelloImport')&&<button title="خروجی عملیاتی قابل‌انتقال" onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={18}/> خروجی عملیاتی قابل‌انتقال</button>}
-        {show('calendarInterop')&&<button title="تبادل فایل تقویم" onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={18}/> تبادل فایل تقویم</button>}
-        {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button title="کلید API امن" onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={18}/> کلید API امن</button>}
       </nav>
+      <details className="sidebar-group" aria-label="ابزارهای برنامه">
+        <summary><BarChart3 size={17}/> گزارش‌ها و ابزارها <ChevronDown size={15}/></summary>
+        <nav className="sidebar-nav" aria-label="ابزارهای تکمیلی">
+          {show('reporting')&&<button onClick={()=>setReportingOpen(true)}><BarChart3 size={17}/> گزارش و تحلیل</button>}
+          {show('planner')&&<button onClick={()=>setPlannerOpen(true)}><CalendarDays size={17}/> برنامه‌ریزی شخصی</button>}
+          {show('activity')&&<button onClick={()=>setActivityOpen(true)}><Activity size={17}/> تاریخچه فعالیت</button>}
+          {show('timeDashboard')&&<button onClick={()=>{setSelected('all');setMode('time');setFilter('all');}}><Clock3 size={17}/> داشبورد زمان</button>}
+          <button onClick={()=>setTrashOpen(true)}><Trash2 size={17}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
+          {show('trelloImport')&&<button onClick={()=>setTrelloImportOpen(true)}><FileInput size={17}/> ورود فایل Trello</button>}
+          {show('trelloImport')&&<button onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={17}/> خروجی قابل‌انتقال</button>}
+          {show('calendarInterop')&&<button onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={17}/> تبادل فایل تقویم</button>}
+        </nav>
+      </details>
+      {canViewStandalone&&show('accountingDashboard')&&<details className="sidebar-group" aria-label="بخش حسابداری">
+        <summary><Wallet size={17}/> حسابداری <ChevronDown size={15}/></summary>
+        <nav className="sidebar-nav" aria-label="برنامه حسابداری مستقل">
+          <button type="button" onClick={openStandaloneDashboard}><Wallet size={17}/> ورود به نرم‌افزار حسابداری</button>
+          {canManage&&<button type="button" onClick={()=>setRialJournalOpen(true)}><FileText size={17}/> دفتر ریالی V2 (آزمایشی)</button>}
+        </nav>
+      </details>}
       <div className="side-project-header"><span className="sidebar-section">پروژه‌های من</span>{canManage&&<button className="sidebar-plus" onClick={()=>setProjectModal(true)} aria-label="پروژه جدید"><Plus size={18}/></button>}</div>
       <nav className="sidebar-nav projects-nav" aria-label="پروژه‌ها">
         {visibleProjects.map(p=><div className="project-entry" key={p.id}><button title={'پروژه '+p.name} className={selected===p.id?'active':''} onClick={()=>{setSelected(p.id);setBoardId(null);setFilter('all');}}><span className="project-dot" style={{background:p.color}}/>{p.name}<span>{tasks.filter(t=>t.projectId===p.id&&!t.archived&&t.deleted!==true&&(!boards.length||workspaceBoards.some(b=>b.id===t.boardId))).length}</span></button>{show('projectAdministration')&&<button className="project-options" aria-label={'تنظیمات پروژه '+p.name} onClick={()=>{setProjectSettings(p.id);setProjectName(p.name);}}><MoreHorizontal size={15}/></button>}</div>)}
@@ -1346,8 +1379,16 @@ export default function App(){
         </details>}
       </div>}
       <div className="sidebar-bottom">
-        <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری و Drive <ArrowUpLeft size={15}/></button>
-        <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات و مراحل برد</button>
+        {canManage&&<details className="sidebar-group sidebar-group--admin" aria-label="ابزارهای مدیریتی">
+          <summary><ShieldCheck size={17}/> مدیریت <ChevronDown size={15}/></summary>
+          <nav className="sidebar-nav" aria-label="مدیریت و دسترسی‌ها">
+            {show('workspaceManagement')&&<button onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> فضاهای کاری</button>}
+            <button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>
+            {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> کلید API امن</button>}
+          </nav>
+        </details>}
+        <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری</button>
+        <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات</button>
         <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
       </div>
     </aside>
@@ -1553,6 +1594,6 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
-    {cloudOpen&&<DrivePanel data={data} onClose={()=>setCloudOpen(false)} onRestore={restoreState}/>}
+    {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'} onClose={()=>setCloudOpen(false)} onRestore={restoreState}/>}
   </div>;
 }

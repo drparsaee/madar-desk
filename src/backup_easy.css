@@ -1,0 +1,29 @@
+.cloud-panel .backup-easy-quick {
+  display:grid;gap:12px;margin:12px 0;
+  border-radius:16px;direction:rtl;
+}
+.backup-easy-quick__item {
+  display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;
+  border:1px solid var(--vs-edge,#d3deeb);border-radius:13px;
+  background:var(--vs-well,rgba(190,206,228,.15));padding:12px;
+}
+.backup-easy-quick__item > div:first-child {flex:1 1 240px;display:grid;gap:6px;}
+.backup-easy-quick__item strong {font-size:13px;color:var(--vs-ink,#263c59);}
+.backup-easy-quick__item small,.backup-easy-limitation {font-size:11px;line-height:1.9;color:var(--vs-muted,#697b93);}
+.backup-easy-quick__buttons {display:flex;gap:8px;flex-wrap:wrap;}
+.backup-easy-quick__path {font-size:11px;word-break:break-word;line-height:1.8;margin:0;}
+.backup-easy-recent {display:grid;gap:7px;padding:9px 12px;border:1px solid var(--vs-edge,#d3deeb);border-radius:12px;}
+.backup-easy-recent > div {display:flex;gap:8px;align-items:center;justify-content:space-between;min-width:0;}
+.backup-easy-recent small {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%;}
+.backup-easy-recent button {padding:6px 9px;border:1px solid var(--vs-edge,#d3deeb);border-radius:8px;}
+.backup-easy-recent button:hover,.backup-easy-recent button:focus-visible {background:var(--vs-hover,#e4edfa);}
+.backup-easy-limitation {margin:0;}
+.backup-easy-more {border:1px solid var(--vs-edge,#d3deeb);border-radius:13px;overflow:hidden;}
+.backup-easy-more > summary {display:flex;gap:9px;align-items:center;list-style:none;padding:13px;cursor:pointer;font-weight:700;font-size:12px;text-align:right;}
+.backup-easy-more > summary::-webkit-details-marker {display:none;}
+.backup-easy-more > summary svg:last-child {margin-inline-start:auto;}
+.backup-easy-more[open] > summary svg:last-child {transform:rotate(180deg);}
+.backup-easy-more > summary:is(:hover,:focus-visible) {background:var(--vs-hover,#e5effb);}
+.backup-easy-more__content {padding:10px;border-top:1px solid var(--vs-edge,#d3deeb);display:grid;gap:8px;}
+.backup-easy-more__content > .cloud-state,.backup-easy-more__content > .local-backups {margin-block:4px;}
+@media(max-width:620px) {.backup-easy-quick__item > .btn,.backup-easy-quick__buttons {width:100%;}.backup-easy-quick__buttons > .btn {flex:1;}}

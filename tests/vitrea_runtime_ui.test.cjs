@@ -153,8 +153,8 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       assert.equal(await page.locator('.vitrea-header-clock .clock-widget__date').evaluate(
         el=>getComputedStyle(el).borderTopWidth),'0px',
         'The date must share a seamless background with the clock');
-      assert.equal(await page.locator('.vitrea-quickdock button[aria-label="تعریف کاربران"]').count(),0,
-        'Solo mode must not present a fake user creation action');
+      assert.equal(await page.locator('.vitrea-quickdock button[aria-label="تعریف کاربران"]').count(),1,
+        'Solo admin should have the user-management entry but must reach LAN setup, not a fake account form');
       await page.locator('.vitrea-quickdock .sync-indicator--dock').click();
       await page.getByRole('dialog',{name:'شبکه محلی و کاربران'}).waitFor({state:'visible'});
       assert.match(await page.locator('.lan-modal').innerText(),

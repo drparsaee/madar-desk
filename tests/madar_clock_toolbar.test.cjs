@@ -43,7 +43,7 @@ test('connection status sits first in the left dock with refresh directly below,
   for(const label of ['اعلان‌ها','تعریف کاربران','Google Drive','تنظیمات مدار']){
     assert.ok(dock.includes('aria-label="'+label+'"'),label+' action missing from dock');
   }
-  assert.match(dock,/canManage&&lanStatus\.mode!=='solo'/);
+  assert.match(dock,/canManage&&<button type="button" onClick=\{openUserManagement\}/);
   assert.doesNotMatch(dock,/aria-label="شبکه محلی"/);
   assert.equal((dock.match(/<Settings2\b/g)||[]).length,1);
   assert.match(app,/className="vitrea-account-capsule"/);

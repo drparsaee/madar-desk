@@ -113,7 +113,7 @@ test('normal board, reporting, planner, suggestions and card editor exclude dele
 });
 
 test('Trash sidebar opens the modal and only deleted project/workspace cards are enumerated',()=>{
-  assert.match(appText,/onClick=\{\(\)=>setTrashOpen\(true\)\} aria-label="زباله‌دان کارت‌ها"/);
+  assert.match(appText,/aria-label="ابزارهای تکمیلی"[\s\S]*?onClick=\{\(\)=>setTrashOpen\(true\)\}/);
   const selected=section('const trashCards=','const duplicateTask=');
   assert.match(selected,/t\.deleted===true/);
   assert.match(selected,/projects\.some\(p=>p\.id===t\.projectId\)/);

@@ -25,7 +25,7 @@ test('accounting page has a separate Vite input and a return path', () => {
 
 test('main app opens standalone URL without passing tasks or project snapshots', () => {
   const app = source('src/App.jsx');
-  assert.match(app, /مدیریت مالی<\/button>/);
+  assert.match(app, /ورود به نرم‌افزار حسابداری<\/button>/);
   assert.match(app, /window\.location\.assign\('\.\/accounting\.html'\)/);
   assert.doesNotMatch(app, /حسابداری مرتبط با کارت‌ها \(قدیمی\)/);
   assert.match(app, /prepareStandaloneFromTask\(api,/);
@@ -37,7 +37,7 @@ test('accounting entry respects financeView and standalone host-verified edit ca
   assert.match(app,/canViewStandalone=canManage/);
   assert.match(app,/financeView===true/);
   assert.match(app,/financeEdit===true/);
-  assert.match(app,/canViewStandalone&&show\('accountingDashboard'\)&&<button/);
+  assert.match(app,/canViewStandalone&&show\('accountingDashboard'\)&&<details className="sidebar-group"/);
   assert.match(entry,/payload\?\.capabilities\?\.canManage===true/);
   assert.match(entry,/payload\?\.capabilities\?\.canDraft===true/);
   assert.doesNotMatch(entry,/canManage=\{Boolean\(window\.madar\)\}/);

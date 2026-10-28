@@ -25,8 +25,8 @@ const render=(mode,role,initialView='users')=>renderToStaticMarkup(React.createE
 
 test('dock network status and users icon do not open the same view',()=>{
   assert.match(jsx,/showDetails=\{openNetwork\}/);
-  assert.match(jsx,/canManage&&lanStatus\.mode!=='solo'&&<button[^>]+onClick=\{openUserManagement\}/);
-  assert.match(jsx,/setLanInitialView\('users'\);setLanOpen\(true\)/);
+  assert.match(jsx,/canManage&&<button[^>]+onClick=\{openUserManagement\}/);
+  assert.match(jsx,/setLanInitialView\(lanStatus\.mode==='solo'\?'connection':'users'\);setLanOpen\(true\)/);
   assert.match(jsx,/setLanInitialView\('connection'\);setLanOpen\(true\)/);
   assert.match(jsx,/initialView=\{lanInitialView\}/);
   assert.doesNotMatch(jsx,/aria-label="شبکه محلی"/);
