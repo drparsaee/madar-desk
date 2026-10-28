@@ -1,6 +1,6 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Archive, ArrowLeft, ArrowRight, Check, Ellipsis, Palette, Plus, Settings2, X} from 'lucide-react';
+import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Ellipsis, Palette, Plus, Settings2, X} from 'lucide-react';
 
 const inset = 8;
 export function lanePopupPosition(anchor, popup, width, height) {
@@ -14,6 +14,16 @@ export function lanePopupPosition(anchor, popup, width, height) {
   };
 }
 
+export function laneContextPopupPosition(point, popup, width, height) {
+  const w = Math.min(popup.width || 280, Math.max(0, width - inset * 2));
+  const h = Math.min(popup.height || 300, Math.max(0, height - inset * 2));
+  const preferredTop = point.y + h + inset <= height ? point.y : point.y - h - 5;
+  return {
+    left: Math.max(inset, Math.min(width - inset - w, point.x)),
+    top: Math.max(inset, Math.min(height - inset - h, preferredTop)),
+  };
+}
+
 /**
  * Each board list owns its configuration. Popup is rendered through a portal,
  * not into the horizontally scrolling board, to prevent CSS overflow clipping.
@@ -21,22 +31,34 @@ export function lanePopupPosition(anchor, popup, width, height) {
  */
 export function LaneActionsMenu({
   stage, count, canManage, canEdit, index, total, onSave,
-  onMove, onArchive, onAddCard,
+  onMove, onArchive, onAddCard, onAddCardTop, onToggleCollapse,
+  contextRequest, collapsed=false,
 }) {
   const [open,setOpen]=useState(false);
   const [name,setName]=useState(stage.label);
   const [subtitle,setSubtitle]=useState(stage.subtitle||'');
   const [position,setPosition]=useState(null);
+  const [contextPoint,setContextPoint]=useState(null);
   const trigger=useRef(null);
   const panel=useRef(null);
   const id='lane-actions-'+stage.id.replace(/[^a-zA-Z0-9_-]/g,'_');
   const openMenu=()=>{
     setName(stage.label);
     setSubtitle(stage.subtitle||'');
+    setContextPoint(null);
     setPosition(null);
     setOpen(v=>!v);
   };
   const closeMenu=()=>setOpen(false);
+  useEffect(()=>{
+    if((contextRequest?.stageId??contextRequest?.id)!==stage.id||
+       !Number.isFinite(contextRequest.x)||!Number.isFinite(contextRequest.y))return;
+    setName(stage.label);
+    setSubtitle(stage.subtitle||'');
+    setContextPoint({x:contextRequest.x,y:contextRequest.y});
+    setPosition(null);
+    setOpen(true);
+  },[contextRequest,stage.id]);
   useEffect(()=>{
     if(!open)return;
     const close=e=>{
@@ -56,12 +78,15 @@ export function LaneActionsMenu({
     };
   },[open]);
   useLayoutEffect(()=>{
-    if(!open||!trigger.current||!panel.current)return;
+    if(!open||!panel.current||(!contextPoint&&!trigger.current))return;
     let frame=0;
     const update=()=>{
-      const a=trigger.current?.getBoundingClientRect(),p=panel.current?.getBoundingClientRect();
+      const a=contextPoint||trigger.current?.getBoundingClientRect();
+      const p=panel.current?.getBoundingClientRect();
       if(a&&p){
-        const next=lanePopupPosition(a,p,window.innerWidth,window.innerHeight);
+        const next=contextPoint
+          ?laneContextPopupPosition(contextPoint,p,window.innerWidth,window.innerHeight)
+          :lanePopupPosition(a,p,window.innerWidth,window.innerHeight);
         setPosition(prev=>prev?.left===next.left&&prev?.top===next.top?prev:next);
       }
     };
@@ -77,10 +102,10 @@ export function LaneActionsMenu({
       window.removeEventListener('resize',schedule);
       document.removeEventListener('scroll',schedule,true);
     };
-  },[open]);
+  },[open,contextPoint]);
   const save=e=>{
     e.preventDefault();
-    if(!canManage||!name.trim())return;
+    if(!canManage||!onSave||!name.trim())return;
     onSave?.({label:name.trim(),subtitle:subtitle.trim()});
     closeMenu();
     trigger.current?.focus();
@@ -97,8 +122,15 @@ export function LaneActionsMenu({
         <div className="lane-actions-popover__head"><strong>عملیات ستون</strong>
           <button type="button" aria-label="بستن عملیات ستون" onClick={closeMenu}><X size={16}/></button>
         </div>
-        <button type="button" className="lane-actions-popover__action" disabled={!canEdit}
-          onClick={()=>{closeMenu();onAddCard?.();}}><Plus size={16}/> افزودن کارت</button>
+        <button type="button" className="lane-actions-popover__action" disabled={!canEdit||!onAddCard}
+          onClick={()=>{if(!canEdit||!onAddCard)return;closeMenu();onAddCard();}}><Plus size={16}/> افزودن کارت</button>
+        <button type="button" className="lane-actions-popover__action" disabled={!canEdit||!onAddCardTop}
+          onClick={()=>{if(!canEdit||!onAddCardTop)return;closeMenu();onAddCardTop();}}><Plus size={16}/> افزودن کارت در ابتدای ستون</button>
+        <button type="button" className="lane-actions-popover__action" disabled={!onToggleCollapse}
+          onClick={()=>{if(!onToggleCollapse)return;closeMenu();onToggleCollapse();}}>
+          {collapsed?<ChevronsUpDown size={16}/>:<ChevronsDownUp size={16}/>}
+          {collapsed?'بازکردن ستون':'جمع‌کردن ستون'}
+        </button>
         {canManage&&<>
           <form className="lane-actions-popover__editor" onSubmit={save}>
             <label>نام ستون
@@ -107,15 +139,15 @@ export function LaneActionsMenu({
             <label>توضیح کوتاه
               <input maxLength={180} value={subtitle} onChange={e=>setSubtitle(e.target.value)}/>
             </label>
-            <button type="submit" className="lane-actions-popover__save" disabled={!name.trim()}><Check size={15}/> ذخیره تغییرات</button>
+            <button type="submit" className="lane-actions-popover__save" disabled={!onSave||!name.trim()}><Check size={15}/> ذخیره تغییرات</button>
           </form>
           <label className="lane-actions-popover__color"><Palette size={16}/> رنگ ستون
-            <input type="color" aria-label={'رنگ ستون '+stage.label} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'}
+            <input type="color" aria-label={'رنگ ستون '+stage.label} disabled={!onSave} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'}
               onChange={e=>onSave?.({color:e.target.value})}/>
           </label>
           <div className="lane-actions-popover__moves" role="group" aria-label="جابجایی ستون">
-            <button type="button" disabled={index===0} onClick={()=>{onMove?.(-1);closeMenu();}}><ArrowRight size={15}/> یک ستون به راست</button>
-            <button type="button" disabled={index>=total-1} onClick={()=>{onMove?.(1);closeMenu();}}><ArrowLeft size={15}/> یک ستون به چپ</button>
+            <button type="button" disabled={!onMove||index===0} onClick={()=>{onMove?.(-1);closeMenu();}}><ArrowRight size={15}/> یک ستون به راست</button>
+            <button type="button" disabled={!onMove||index>=total-1} onClick={()=>{onMove?.(1);closeMenu();}}><ArrowLeft size={15}/> یک ستون به چپ</button>
           </div>
           {onArchive&&<button type="button" className="lane-actions-popover__action lane-actions-popover__archive"
             disabled={total<=1} onClick={()=>{closeMenu();onArchive?.();}}>

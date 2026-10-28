@@ -296,6 +296,10 @@ def _check_base(state):
             _error(here + ".status", "unknown legacy column")
         if not isinstance(task.get("priority"), str) or task["priority"] not in priority_ids:
             _error(here + ".priority", "unknown priority definition")
+        # Visual card completion is independent of workflow status: a `done`
+        # status transition may create durable finance completion events.
+        if "completed" in task:
+            _boolean(task["completed"], here + ".completed")
         _amount(task.get("cost", 0), here + ".cost")
         if "orderCustomerName" in task:
             _string(task["orderCustomerName"], here + ".orderCustomerName",

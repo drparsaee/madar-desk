@@ -157,15 +157,15 @@ function Empty({title,description,onAdd}){
   return <div className="lane-empty"><span className="lane-empty-icon"><Plus size={18}/></span><strong>{title}</strong><small>{description}</small>{onAdd&&<button onClick={onAdd}>افزودن کار <Plus size={14}/></button>}</div>;
 }
 
-function TaskCard({task,project,users,onOpen,onDrag,onToggleStep,onCardDrop,onKeyboardReorder,calendar,priorities,canEdit=true,canManage=false,showCosts=true}){
+function TaskCard({task,project,users,onOpen,onDrag,onToggleStep,onToggleComplete,onCardDrop,onKeyboardReorder,calendar,priorities,canEdit=true,canManage=false,showCosts=true}){
   const [collapsed,setCollapsed]=useState(true);
   const done=task.checklist.filter(i=>i.done).length;
   const percent=task.checklist.length?Math.round(done/task.checklist.length*100):0;
   const report=task.reports[task.reports.length-1];
   const priority=priorityById(priorities,task.priority);
-  return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect} style={{'--priority-color':priority.color}} draggable={canEdit} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown':undefined} aria-label={'جزئیات '+task.title}>
+  return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect+(task.completed===true?' task-card--completed':'')} style={{'--priority-color':priority.color}} draggable={canEdit} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown':undefined} aria-label={'جزئیات '+task.title}>
     {task.cover?.type==='color'&&/^#[0-9a-f]{6}$/i.test(task.cover.color)&&<div className={'task-card-cover task-card-cover-'+(task.cover.size==='full'?'full':'strip')} style={{backgroundColor:task.cover.color}}/>}
-    <div className="task-card-top"><span className="project-tiny"><i style={{background:project?.color||'#7790aa'}}></i>{project?.name||'پروژه'}</span><MoreHorizontal size={17} strokeWidth={1.8}/></div>
+    <div className="task-card-top"><span className="project-tiny"><i style={{background:project?.color||'#7790aa'}}></i>{project?.name||'پروژه'}</span><button type="button" disabled={!canEdit} className="task-complete-toggle" aria-label={(task.completed===true?'برگرداندن از تکمیل ':'تکمیل کارت ')+task.title} title={task.completed===true?'برگرداندن از تکمیل':'تکمیل کارت'} aria-pressed={task.completed===true} onClick={e=>{e.preventDefault();e.stopPropagation();onToggleComplete?.(task.id);}} onKeyDown={e=>e.stopPropagation()}><Check size={15}/></button></div>
     <div className="task-title">{task.title}</div>
     {task.description&&<div className="task-description">{task.description}</div>}
     {!!task.labels?.length&&<div className="tags">{task.labels.map((l,i)=><LabelChip key={i} label={task.labelColors?.[l]?{name:l,color:task.labelColors[l]}:l}/>)}</div>}
@@ -572,6 +572,9 @@ export default function App(){
   const [advanced,setAdvanced]=useState({priority:'all',member:'all',label:'all',status:'all',due:'all',attachments:false});
   const [editorId,setEditorId]=useState(null);
   const [adding,setAdding]=useState(null);
+  const [collapsedLists,setCollapsedLists]=useState({});
+  const [laneContextRequest,setLaneContextRequest]=useState(null);
+  const laneContextSequence=useRef(0);
   const [projectModal,setProjectModal]=useState(false);
   const [workspaceProjectToAttach,setWorkspaceProjectToAttach]=useState('');
   const [projectSettings,setProjectSettings]=useState(null);
@@ -923,6 +926,14 @@ export default function App(){
   const trashCards=tasks.filter(t=>t.deleted===true &&
     projects.some(p=>p.id===t.projectId) &&
     (!t.boardId||boards.some(b=>b.id===t.boardId&&b.workspaceId===activeWorkspaceId)));
+  const toggleCardComplete=id=>{
+    if(!canEdit)return;
+    const task=tasks.find(t=>t.id===id&&t.deleted!==true);
+    if(!task)return;
+    // Completion is separate from legacy status/listId: changing status to
+    // "done" would enqueue financial completion events on the native host.
+    taskUpdate(id,{completed:task.completed!==true});
+  };
   const createTask=()=>{
     const title=draftTitle.trim().replace(/\s+/g,' ');
     if(!title||!adding)return;
@@ -938,17 +949,22 @@ export default function App(){
       setAdding(null);setToast('ستون مقصد دیگر فعال نیست؛ دوباره افزودن کارت را انتخاب کنید.');
       return;
     }
+    const placement=['start','end','before','after'].includes(adding.placement)?adding.placement:'end';
+    const anchorCardId=adding.anchorCardId||null;
     const t={id:uid(),projectId:adding.projectId,boardId:targetBoard.id,
       listId:stage,title,description:'',status:legacyStatusForStage(stage,stages)||stage,
-      priority:'medium',dueDate:'',labels:[],checklist:[],reports:[],assignees:[],
+      priority:'medium',completed:false,dueDate:'',labels:[],checklist:[],reports:[],assignees:[],
       costEnabled:null,fileLinks:[],estimatedMinutes:0,actualMinutes:0,cost:0,
       createdAt:now(),updatedAt:now()};
     change(s=>{
       // The currently selected workspace and board must still own the list.
       const board=s.boards.find(b=>b.id===targetBoard.id&&b.workspaceId===activeWorkspaceId&&!b.archived);
       if(!board||!board.stages.some(item=>item.id===stage&&!item.archived))return s;
+      if((placement==='before'||placement==='after')&&
+        !s.tasks.some(item=>item.id===anchorCardId&&item.boardId===board.id&&item.listId===stage&&item.deleted!==true))return s;
       const next={...s,tasks:[t,...s.tasks]};
-      try{return moveCardInState(next,{cardId:t.id,toListId:stage,placement:'end'});}
+      try{return moveCardInState(next,{cardId:t.id,toBoardId:board.id,toListId:stage,
+        ...(placement==='before'||placement==='after'?{anchorCardId}:{}),placement});}
       catch{return s;}
     });
     setAdding(null);setDraftTitle('');setToast('کارت اضافه شد؛ برای تکمیل جزئیات روی آن کلیک کنید.');
@@ -975,7 +991,8 @@ export default function App(){
     });
     setEditorId(t.id);setToast('تسک مشابه ساخته شد؛ هزینه‌ها و مراحل تکمیل‌شده منتقل نشدند.');
   };
-  const openAdd=status=>{
+  const openAdd=(status,placement='end',anchorCardId=null)=>{
+    if(!canEdit)return;
     if(!workspaceBoards.length){
       setAdding(null);
       setToast('این فضای کاری هنوز برد ندارد؛ ابتدا پروژه و برد بسازید.');
@@ -989,13 +1006,37 @@ export default function App(){
       setToast('برای افزودن کارت، یکی از ستون‌های برد فعال را انتخاب کنید.');
       return;
     }
+    if((placement==='before'||placement==='after')&&
+      !tasks.some(t=>t.id===anchorCardId&&t.boardId===board.id&&t.listId===status&&t.deleted!==true)){
+      setToast('جایگاه درج کارت تغییر کرده است؛ دوباره انتخاب کنید.');return;
+    }
     // The aggregate overview is never a card destination. Show the actual
     // board first, then reveal the quick composer directly in its list.
     setSelected(projectId);setBoardId(board.id);setMode('board');
     setDraftBoardId(board.id);setDraftStatus(status);setDraftProject(projectId);
     setDraftPriority('medium');setDraftTitle('');
-    setAdding({boardId:board.id,projectId,listId:status});
+    setAdding({boardId:board.id,projectId,listId:status,placement,anchorCardId});
   };
+  const renderLaneComposer=stage=><form className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
+    onSubmit={event=>{event.preventDefault();createTask();}}>
+    <textarea autoFocus rows={3} maxLength={300} required
+      aria-label="عنوان کارت جدید" placeholder="عنوان کارت را بنویسید…"
+      value={draftTitle} onChange={event=>setDraftTitle(event.target.value)}
+      onKeyDown={event=>{
+        if(event.key==='Escape'){
+          event.preventDefault();event.stopPropagation();setAdding(null);setDraftTitle('');
+        }else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){
+          event.preventDefault();if(draftTitle.trim())createTask();
+        }
+      }}/>
+    <div className="lane-quick-add__actions">
+      <button type="submit" className="lane-quick-add__save" disabled={!draftTitle.trim()}>
+        <Plus size={15}/> افزودن کارت</button>
+      <button type="button" className="lane-quick-add__cancel" title="انصراف"
+        aria-label="بستن افزودن کارت" onClick={()=>{setAdding(null);setDraftTitle('');}}><X size={19}/></button>
+      <small>Enter: افزودن · Shift+Enter: خط جدید</small>
+    </div>
+  </form>;
   const attachExistingProject=projectId=>{
     if(!canManage||!activeWorkspaceId)return;
     const project=projects.find(p=>p.id===projectId);
@@ -1320,36 +1361,52 @@ export default function App(){
           <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
-            return <section className="kanban-lane" key={stage.id} style={{'--stage-accent':stage.color}} onDragOver={e=>{if(canEdit||canManage){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();const plain=e.dataTransfer.getData('text/plain');const draggedStage=e.dataTransfer.getData('application/x-madar-stage')||(plain.startsWith('madar-stage:')?plain.slice(12):'');if(draggedStage){if(canManage)reorderStage(draggedStage,stage.id);return;}if(!canEdit)return;const id=e.dataTransfer.getData('application/x-madar-card')||plain;const task=tasks.find(t=>t.id===id);if(!task||activeBoard&&task.boardId!==activeBoard.id)return;const originBoard=boards.find(b=>b.id===task.boardId);if(task.boardId&&(!originBoard||!originBoard.stages.some(s=>s.id===stage.id)))return;if(activeBoard)reorderCard(id,stage.id);else taskUpdate(id,task.boardId?{listId:stage.id}:{status:stage.id});}}>
-              <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions"><LaneActionsMenu stage={stage} count={tasks.filter(task=>task.boardId===activeBoard?.id&&task.listId===stage.id&&task.deleted!==true).length} canManage={canManage&&show('boardAdministration')} canEdit={canEdit} index={viewStages.indexOf(stage)} total={viewStages.length} onSave={fields=>updateStagePresentation(stage.id,fields)} onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}} onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined} onAddCard={()=>openAdd(stage.id)}/></div></div>
+            const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;
+            const isCollapsed=collapsedLists[listKey]===true;
+            const toggleCollapse=()=>setCollapsedLists(current=>({...current,[listKey]:!current[listKey]}));
+            const laneMenu=<LaneActionsMenu stage={stage} count={items.length}
+              canManage={canManage&&show('boardAdministration')} canEdit={canEdit}
+              index={viewStages.indexOf(stage)} total={viewStages.length}
+              onSave={fields=>updateStagePresentation(stage.id,fields)}
+              onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}}
+              onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined}
+              onAddCard={()=>openAdd(stage.id)} onAddCardTop={()=>openAdd(stage.id,'start')}
+              onToggleCollapse={toggleCollapse} collapsed={isCollapsed}
+              contextRequest={laneContextRequest?.stageId===stage.id?laneContextRequest:null}/>;
+            return <section className={'kanban-lane'+(isCollapsed?' kanban-lane--collapsed':'')} key={stage.id}
+              style={{'--stage-accent':stage.color}} aria-label={'ستون '+stage.label}
+              onContextMenu={event=>{
+                if(event.target.closest('.task-card,button,input,textarea,select,[role="button"],.lane-quick-add'))return;
+                event.preventDefault();
+                setLaneContextRequest({stageId:stage.id,id:++laneContextSequence.current,x:event.clientX,y:event.clientY});
+              }}
+              onDragOver={e=>{if(!isCollapsed&&(canEdit||canManage)){e.preventDefault();e.dataTransfer.dropEffect='move';}}}
+              onDrop={e=>{if(isCollapsed)return;e.preventDefault();const plain=e.dataTransfer.getData('text/plain');const draggedStage=e.dataTransfer.getData('application/x-madar-stage')||(plain.startsWith('madar-stage:')?plain.slice(12):'');if(draggedStage){if(canManage)reorderStage(draggedStage,stage.id);return;}if(!canEdit)return;const id=e.dataTransfer.getData('application/x-madar-card')||plain;const task=tasks.find(t=>t.id===id);if(!task||activeBoard&&task.boardId!==activeBoard.id)return;const originBoard=boards.find(b=>b.id===task.boardId);if(task.boardId&&(!originBoard||!originBoard.stages.some(s=>s.id===stage.id)))return;if(activeBoard)reorderCard(id,stage.id);else taskUpdate(id,task.boardId?{listId:stage.id}:{status:stage.id});}}>
+              {isCollapsed?<div className="lane-collapsed-content">
+                <button type="button" className="lane-expand-control" aria-label={'بازکردن ستون '+stage.label}
+                  aria-expanded={false} title={'بازکردن '+stage.label} onClick={toggleCollapse}><ChevronLeft size={19}/></button>
+                <span className="lane-collapsed-count" title={items.length+' کارت'}>{items.length.toLocaleString('fa-IR')}</span>
+                <strong className="lane-collapsed-title" title={stage.label}>{stage.label}</strong>
+                <div className="lane-collapsed-menu">{laneMenu}</div>
+              </div>:<>
+              <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions"><button className="lane-collapse-toggle" type="button" title={'جمع‌کردن '+stage.label} aria-label={'جمع‌کردن ستون '+stage.label} aria-expanded={true} onClick={toggleCollapse}><ChevronLeft size={17}/></button>{laneMenu}</div></div>
               <div className="lane-subtitle">{stage.subtitle}</div>
-              <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><TaskCard key={t.id} task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleStep={toggleChecklistStep}/>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
-              {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id?
-                <form className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
-                  onSubmit={event=>{event.preventDefault();createTask();}}>
-                  <textarea autoFocus rows={3} maxLength={300} required
-                    aria-label="عنوان کارت جدید"
-                    placeholder="عنوان کارت را بنویسید…"
-                    value={draftTitle} onChange={event=>setDraftTitle(event.target.value)}
-                    onKeyDown={event=>{
-                      if(event.key==='Escape'){
-                        event.preventDefault();setAdding(null);setDraftTitle('');
-                      }else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){
-                        event.preventDefault();if(draftTitle.trim())createTask();
-                      }
-                    }}/>
-                  <div className="lane-quick-add__actions">
-                    <button type="submit" className="lane-quick-add__save"
-                      disabled={!draftTitle.trim()}><Plus size={15}/> افزودن کارت</button>
-                    <button type="button" className="lane-quick-add__cancel"
-                      title="انصراف" aria-label="بستن افزودن کارت"
-                      onClick={()=>{setAdding(null);setDraftTitle('');}}><X size={19}/></button>
-                    <small>Enter: افزودن · Shift+Enter: خط جدید</small>
-                  </div>
-                </form>:
-                <button type="button" className="lane-add-card" onClick={()=>openAdd(stage.id)}>
+              <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><React.Fragment key={t.id}>
+                {canEdit&&<div className="lane-insert-slot">
+                  {adding?.boardId===activeBoard?.id&&adding?.listId===stage.id&&
+                    ((adding?.placement==='before'&&adding?.anchorCardId===t.id)||(adding?.placement==='start'&&i===0))
+                    ?renderLaneComposer(stage)
+                    :<button type="button" className="lane-insert-before" aria-label={i===0?'افزودن کارت در ابتدای '+stage.label:'افزودن کارت پیش از '+t.title} title={i===0?'افزودن کارت در بالا':'افزودن کارت در این موقعیت'} onClick={()=>openAdd(stage.id,'before',t.id)}><Plus size={13}/> افزودن کارت</button>}
+                </div>}
+                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
+              </React.Fragment>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
+              {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id&&
+                (adding.placement==='end'||(adding.placement==='start'&&items.length===0))
+                ?renderLaneComposer(stage)
+                :<button type="button" className="lane-add-card" onClick={()=>openAdd(stage.id,'end')}>
                   <Plus size={16}/> افزودن کارت
                 </button>)}
+              </>}
             </section>;
           })}
           {canManage&&show('boardAdministration')&&

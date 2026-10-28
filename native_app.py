@@ -184,6 +184,8 @@ def is_valid(state):
     for task in state["tasks"]:
         if isinstance(task, dict) and "deleted" in task and type(task["deleted"]) is not bool:
             raise ValueError("حذف موقت کارت باید از نوع بولی باشد.")
+        if isinstance(task, dict) and "completed" in task and type(task["completed"]) is not bool:
+            raise ValueError("تکمیل کارت باید از نوع بولی باشد.")
         if (not isinstance(task, dict) or not isinstance(task.get("id"), str)
                 or task["id"] in task_ids or task.get("projectId") not in ids
                 or not isinstance(task.get("title"), str) or len(task["title"]) > 300

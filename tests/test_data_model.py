@@ -33,6 +33,24 @@ def legacy():
 
 
 class MigrationTests(unittest.TestCase):
+    def test_card_completion_boolean_is_persistent_and_independent_of_financial_status(self):
+        source = legacy()
+        original = copy.deepcopy(source["tasks"][0])
+        source["tasks"][0]["completed"] = True
+        normalized = normalize_plus(source)
+        self.assertTrue(validate_plus(normalized))
+        card = normalized["tasks"][0]
+        self.assertIs(card["completed"], True)
+        for field in ("status", "cost", "checklist", "reports", "projectId"):
+            self.assertEqual(card[field], original[field])
+        card["completed"] = False
+        self.assertTrue(validate_plus(normalized))
+        self.assertEqual(card["status"], "active")
+        for invalid in (1, "true", None):
+            card["completed"] = invalid
+            with self.assertRaisesRegex(ValueError, "completed"):
+                validate_plus(normalized)
+
     def test_order_customer_label_is_bounded_and_remains_nonfinancial(self):
         state = normalize_plus(legacy())
         task = state["tasks"][0]
