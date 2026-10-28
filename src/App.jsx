@@ -98,6 +98,8 @@ const mockBridge={
   driveRestore:async()=>{throw new Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
   driveDisconnect:async()=>({connected:false}),
   lanStatus:async()=>({mode:'solo',user:{username:'local',role:'admin',projects:null}}),
+  lanDiscover:async()=>[],
+  hostServiceStatus:async()=>({supported:false,installed:false,running:false}),
   lanHost:async()=>{throw Error('امکان شبکه در نسخه EXE فعال است.');},
   lanJoin:async()=>{throw Error('امکان شبکه در نسخه EXE فعال است.');},
   lanLeave:async()=>({mode:'solo'}),
@@ -141,6 +143,7 @@ const mockBridge={
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
   createLocalBackup:async()=>{throw Error('نسخه پشتیبان داخلی فقط در EXE فعال است.');},
   listLocalBackups:async()=>[],
+  automaticBackupStatus:async()=>({running:false,intervalSeconds:30,complete:false,scope:null}),
   restoreLocalBackup:async()=>{throw Error('بازیابی داخلی فقط در EXE فعال است.');}
   ,collabRead:async()=>[],
   collabCommand:async()=>{throw Error('گفتگو در نسخه نمایشی وب غیرفعال است.');}
@@ -394,12 +397,14 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
   const [showPeerCode,setShowPeerCode]=useState(false);
   const [storageStatus,setStorageStatus]=useState(null);
   const [automationStatus,setAutomationStatus]=useState(null);
+  const [automaticBackup,setAutomaticBackup]=useState(null);
   useEffect(()=>{api.driveStatus().then(s=>{setConnected(s.connected);if(s.clientId)setId(s.clientId);}).catch(e=>setMessage(e.message));},[]);
   useEffect(()=>{api.listLocalBackups().then(setLocalBackups).catch(()=>{});},[]);
   useEffect(()=>{api.driveFolderStatus().then(setFolder).catch(e=>setMessage(e.message));api.driveFolderList().then(setFolderFiles).catch(()=>{});},[]);
   useEffect(()=>{api.cloudPeerStatus().then(setPeerStatus).catch(()=>{});},[]);
   useEffect(()=>{if(typeof api.storageStatus==='function')api.storageStatus().then(setStorageStatus).catch(e=>setMessage(e.message));},[]);
   useEffect(()=>{if(typeof api.automationEngineStatus==='function')api.automationEngineStatus().then(setAutomationStatus).catch(e=>setMessage(e.message));},[]);
+  useEffect(()=>{if(typeof api.automaticBackupStatus==='function')api.automaticBackupStatus().then(setAutomaticBackup).catch(()=>{});},[]);
   const operation=async(name,fn)=>{setBusy(name);setMessage('');try{await fn();}catch(e){setMessage(e.message||String(e));}finally{setBusy('');}};
   const fetchBackups=async()=>{const items=await api.driveList();setBackups(items);};
   const connect=()=>operation('connect',async()=>{await api.driveConnect(id.trim());setConnected(true);setMessage('حساب Google Drive متصل شد.');await fetchBackups();});
@@ -418,6 +423,7 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
     <div className="dialog-body cloud-panel">
       <div className="cloud-hero"><div className="cloud-hero-icon"><HardDriveDownload size={27}/></div><div><strong>پشتیبان‌گیری، بدون تنظیمات فنی</strong><p>یک نسخه از اطلاعات اصلی برنامه نگه دارید. برای نگهداری نسخه در فضای ابری، کافی است پوشه همگام‌شده را انتخاب کنید؛ نیازی به گرفتن API یا شناسه گوگل نیست.</p></div></div>
       <section className="backup-easy-quick" aria-label="پشتیبان‌گیری سریع">
+        {automaticBackup&&<p className="backup-easy-limitation" role="status">{isClient?'پشتیبان‌گیری خودکار روی رایانه میزبان انجام می‌شود.':automaticBackup.running?'پشتیبان خودکار اطلاعات اصلی هر ۳۰ ثانیه تغییرات را بررسی می‌کند و فقط در صورت تغییر نسخه تازه می‌سازد.':'پشتیبان خودکار ۳۰ثانیه‌ای در این فرایند فعال نیست.'} این نسخه‌ها کامل نیستند و پیوست‌ها و حساب‌های شبکه را شامل نمی‌شوند.</p>}
         <div className="backup-easy-quick__item"><div><strong>۱. ذخیره روی این رایانه</strong><small>{isClient?'ایجاد پشتیبان به رایانه میزبان محدود است.':'نسخه‌ای از اطلاعات اصلی ذخیره می‌شود. پیوست‌ها و حساب‌های شبکه جداگانه‌اند.'}</small></div>
           <button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{
             const result=await api.createLocalBackup();

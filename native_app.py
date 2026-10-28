@@ -21,6 +21,7 @@ from pathlib import Path
 import secrets
 import shutil
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -420,6 +421,8 @@ class Bridge:
         self.finance_outbox_path = datadir() / "finance-completion-outbox.json"
         self.automation_outbox_path = datadir() / "automation-card-outbox.json"
         self._finance_warning = ""
+        self._lan_discovery = None
+        self._lan_discovery_error = ""
         self.peer_code_path = datadir() / "cloud-peer-code.bin"
         self.offline = OfflineStore(datadir())
         self._network_available = True
@@ -448,6 +451,7 @@ class Bridge:
         self.remote_token = None
         self.remote_revision = None
         self.remote_user = None
+        self._last_client_reconnect_attempt = 0.0
         self.connection = self._connection_config()
         if self.connection.get("mode") == "server":
             self.lan = LanService(self, self.lan_users_path,
@@ -457,6 +461,7 @@ class Bridge:
             try:
                 self._migrate_local_assignees_to_owner()
                 self.lan.start()
+                self._start_lan_discovery()
             except OSError:
                 # A port failure must not corrupt or lock the offline data.
                 self.connection = {"mode": "solo", "error": "پورت سرور در دسترس نیست."}
@@ -484,6 +489,31 @@ class Bridge:
         if not self.connection_path.exists():
             return {"mode": "solo"}
         return json.loads(self.connection_path.read_text(encoding="utf8"))
+
+    def _stop_lan_discovery(self):
+        responder = self._lan_discovery
+        self._lan_discovery = None
+        if responder is not None:
+            responder.stop()
+
+    def _start_lan_discovery(self):
+        """Advertise only a live HTTPS LAN Host; discovery grants no trust."""
+        if not self.lan or not self.lan.server or not self.lan.certfile:
+            self._stop_lan_discovery()
+            return
+        if self._lan_discovery is not None and self._lan_discovery.running:
+            return
+        try:
+            from lan_discovery import DiscoveryResponder
+            responder = DiscoveryResponder(socket.gethostname()[:64],
+                                           self.lan.port, self.lan.certfile)
+            responder.start()
+            self._lan_discovery = responder
+            self._lan_discovery_error = ""
+        except (OSError, ValueError, RuntimeError) as error:
+            # Other LAN services must continue even if UDP is blocked or
+            # already owned. Do not claim this host is discoverable.
+            self._lan_discovery_error = str(error)
 
     def getPreferences(self):
         if not self.preferences_path.exists():
@@ -981,6 +1011,11 @@ class Bridge:
             if e.code == 409:
                 raise RuntimeError("CONFLICT: نسخه سرور تغییر کرده است. " + detail[:160]) from e
             if e.code in (401, 403):
+                if e.code == 401 and not login:
+                    # An expired/revoked session can be restored from the
+                    # existing Windows-protected credentials on the next poll.
+                    self.remote_token = None
+                    self._network_available = False
                 raise PermissionError("دسترسی رد شد یا نشست منقضی شده است: " + detail[:160]) from e
             raise RuntimeError(f"خطای سرویس HTTP {e.code}: {detail[:180]}") from e
         except Exception as exc:
@@ -1026,9 +1061,45 @@ class Bridge:
             self.remote_user = None
             raise
 
+    def _maybe_reconnect_client(self):
+        """Reconnect a previously paired client, retaining unsent local edits.
+
+        Only the existing DPAPI-protected login is used. No discovered host
+        address or fingerprint is trusted as a replacement for the saved pin.
+        Call under ``_lock``; bounded retry frequency avoids LAN storms.
+        """
+        if self.connection.get("mode") != "client":
+            return False
+        if self._network_available and self.remote_token:
+            return False
+        stamp = time.monotonic()
+        if stamp - self._last_client_reconnect_attempt < 10:
+            return False
+        self._last_client_reconnect_attempt = stamp
+        credentials = json.loads(protect_windows(self.client_auth_path.read_bytes(), True))
+        if not all(isinstance(credentials.get(k), str) and credentials[k]
+                   for k in ("username", "password")):
+            raise ValueError("اطلاعات ورود ذخیره‌شده معتبر نیست.")
+        configured = self.connection.copy()
+        self._remote_login(configured["url"], credentials["username"],
+                           credentials["password"],
+                           fingerprint=configured.get("fingerprint", ""))
+        # _remote_login's offline.remember intentionally preserves the local
+        # pending queue. Reconcile through the authoritative Host before ACK.
+        self._sync_client_from_host()
+        self.connection.pop("error", None)
+        return True
+
     def lanStatus(self, refresh=False):
         mode = self.connection.get("mode", "solo")
         if mode == "client":
+            if refresh is True and (not self.remote_token or not self._network_available):
+                with self._lock:
+                    try:
+                        self._maybe_reconnect_client()
+                    except (OSError, ValueError, RuntimeError, PermissionError, KeyError) as error:
+                        self._network_available = False
+                        self.connection["error"] = str(error)
             if refresh is True and self.remote_token and self._network_available:
                 try:
                     fresh = self._remote_request("/api/me").get("user")
@@ -1054,6 +1125,40 @@ class Bridge:
                 "user": self.lan.list_profiles(self.lan.authenticate_owner_token())[0]
                 if mode == "server" else self.lanProfiles()[0],
                 "error": self.connection.get("error", "")}
+
+    def lanDiscover(self):
+        """Find LAN hosts without sending credentials or trusting UDP metadata.
+
+        A discovered fingerprint is merely a hint; the user still has to
+        verify it with the host before HTTPS authentication can begin.
+        """
+        from lan_discovery import discover_hosts
+        return discover_hosts(timeout=1.5)
+
+    def hostServiceStatus(self):
+        """Read the optional background Windows service state without changing it."""
+        if sys.platform != "win32":
+            return {"supported": False, "installed": False, "running": False}
+        try:
+            result = subprocess.run(["sc.exe", "query", "MadarHost"],
+                                    capture_output=True, text=True, timeout=4,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if result.returncode != 0:
+                return {"supported": True, "installed": False, "running": False}
+            running = bool(re.search(r"(?m)^\s*STATE\s*:\s*4\s+", result.stdout))
+            return {"supported": True, "installed": True, "running": running}
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return {"supported": True, "installed": False, "running": False,
+                    "error": "استعلام وضعیت سرویس ممکن نشد: " + str(error)}
+
+    def automaticBackupStatus(self):
+        """Report the local host-only 30-second task snapshot scheduler."""
+        scheduler = getattr(self, "_host_periodic_backup", None)
+        if scheduler is not None:
+            return scheduler.status()
+        return {"running": False, "intervalSeconds": 30, "complete": False,
+                "scope": None, "lastSuccess": None,
+                "mode": self.connection.get("mode", "solo")}
 
     def integrationIssueKey(self, username, permissions=None, lifetime_seconds=3600):
         """Explicit administrator action on the local HTTPS LAN host only."""
@@ -1114,6 +1219,7 @@ class Bridge:
         if self.lan and (str(self.lan.certfile or "") != certfile
                          or str(self.lan.keyfile or "") != keyfile
                          or self.lan.port != port):
+            self._stop_lan_discovery()
             self.lan.stop()
             self.lan = None
         if self.lan is None:
@@ -1123,6 +1229,7 @@ class Bridge:
             self.lan.setup_owner(username, password)
         self._migrate_local_assignees_to_owner()
         self.lan.start()
+        self._start_lan_discovery()
         self._save_connection({"mode": "server", "port": self.lan.port,
                                "transport": "https" if certfile else "http",
                                "certfile": certfile, "keyfile": keyfile})
@@ -1173,6 +1280,7 @@ class Bridge:
     def lanLeave(self):
         self._clear_profile_cache()
         if self.lan:
+            self._stop_lan_discovery()
             self.lan.stop()
             self.lan = None
         self.remote_token = None
@@ -2173,6 +2281,7 @@ class Bridge:
             self._scheduler_stop.set()
         if getattr(self, "_scheduler_thread", None):
             self._scheduler_thread.join(timeout=2)
+        self._stop_lan_discovery()
 
     def chooseDriveFolder(self):
         """User explicitly selects a Google Drive for desktop synced directory."""
@@ -2233,6 +2342,8 @@ class Bridge:
         with self._lock:
             if self.connection.get("mode") == "client":
                 try:
+                    if not self._network_available or not self.remote_token:
+                        self._maybe_reconnect_client()
                     return self._sync_client_from_host()
                 except PermissionError:
                     raise
@@ -2492,10 +2603,10 @@ JS_BRIDGE = """
 window.madar = Object.fromEntries(
  ['getState','getStateForUi','saveState','exportBackup','importBackup','driveStatus',
   'driveConnect','driveDisconnect','driveList','driveUpload','driveRestore',
-  'lanStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
+  'lanStatus','lanDiscover','hostServiceStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
   'lanDisplayRoles','lanSaveDisplayRole','lanDeleteDisplayRole',
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
-  'getPreferences','setPreferences','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup',
+  'getPreferences','setPreferences','openSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
   .concat(['collabRead','collabCommand','automationButtonsList',
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',
@@ -2584,14 +2695,23 @@ def main():
     # host, the accounting SQLite is initialized explicitly before the first
     # validated snapshot. A LAN client must not back up its empty local copy.
     financial_backup = None
+    periodic_backup = None
     exit_financial_backup_done = False
     if api.connection.get("mode") != "client":
         from standalone_accounting_auto_backup import AutomaticStandaloneBackups
+        from host_backup_scheduler import HostBackupScheduler
         api._standalone_accounting_store()
         financial_backup = AutomaticStandaloneBackups(
             api.path.parent, plaintext_acknowledged=True)
         financial_backup.backup_now()  # Fail startup if a valid backup cannot be made.
         financial_backup.start()
+        try:
+            periodic_backup = HostBackupScheduler(api)
+            periodic_backup.start()  # Initial validated task snapshot before GUI.
+            api._host_periodic_backup = periodic_backup
+        except Exception:
+            financial_backup.stop()
+            raise
     api.startScheduledJobs()
     class StaticHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -2892,6 +3012,8 @@ def main():
     finally:
         api.stopScheduledJobs()
         try:
+            if periodic_backup is not None:
+                periodic_backup.stop()
             if financial_backup is not None:
                 financial_backup.stop()
                 if not exit_financial_backup_done:

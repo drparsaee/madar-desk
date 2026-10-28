@@ -138,6 +138,11 @@ async function checkUserShortcut(page,mode){
   if(mode==='solo'){
     await modal.getByText('تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان شبکه فعال می‌شود',{exact:false})
       .waitFor({state:'visible'});
+    await modal.getByRole('button',{name:'جست‌وجوی میزبان در شبکه'}).waitFor({state:'visible'});
+    const advanced=modal.locator('details.lan-advanced');
+    assert.equal(await advanced.getAttribute('open'),null,
+      'easy LAN discovery is shown first and manual server settings start collapsed');
+    await advanced.locator(':scope > summary').click();
     await modal.getByText('فعال‌کردن سرور محلی').waitFor({state:'visible'});
     await modal.getByText('اتصال به سرور دیگر').waitFor({state:'visible'});
     assert.equal(await modal.getByText('ساخت حساب جدید').count(),0);

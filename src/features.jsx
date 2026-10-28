@@ -20,6 +20,26 @@ export const costTotal=tasks=>tasks.reduce((acc,t)=>acc+(t.cost||0)+t.checklist.
 export const cardCostEnabled=(task,project)=>task.costEnabled===null||task.costEnabled===undefined?!!project?.costEnabled:task.costEnabled===true;
 export const validLanFingerprint=value=>/^(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{2}(?::[a-fA-F0-9]{2}){31})$/.test(String(value||'').trim());
 export const normalizeLanFingerprint=value=>String(value||'').trim().replace(/:/g,'');
+// Discovery packets are hints, never certificate trust anchors. Only advertise
+// HTTPS endpoints with an explicit port; the native client enforces private IPs.
+export function lanDiscoveredHttpsHosts(entries){
+ if(!Array.isArray(entries))return [];
+ const seen=new Set();
+ return entries.flatMap(entry=>{
+   if(!entry||typeof entry.url!=='string')return [];
+   const url=entry.url.trim();
+   let parsed;
+   try{parsed=new URL(url);}catch{return [];}
+   // URL.port becomes empty for the standard TLS port 443, even when the
+   // original URL contains `:443`; the native LAN API requires that port.
+   const authority=/^https:\/\/([^/?#]+)/i.exec(url)?.[1]||'';
+   if(parsed.protocol!=='https:'||!parsed.hostname||!/:\d{1,5}$/.test(authority)||
+      parsed.username||parsed.password||parsed.pathname!=='/'||parsed.search||parsed.hash||seen.has(url))return [];
+   seen.add(url);
+   return [{name:typeof entry.name==='string'&&entry.name.trim()?entry.name.trim():parsed.hostname,
+     url,fingerprint:validLanFingerprint(entry.fingerprint)?normalizeLanFingerprint(entry.fingerprint):''}];
+ });
+}
 export function MoneyField({value,onChange,disabled=false,placeholder='0',label='مبلغ به تومان'}){
  return <div className="money-input"><input dir="ltr" inputMode="numeric" aria-label={label} disabled={disabled} placeholder={placeholder} value={money(value)} onChange={e=>onChange(parseMoney(e.target.value))}/><span>تومان</span></div>;
 }
@@ -143,6 +163,14 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  const [certfile,setCertfile]=useState('');
  const [keyfile,setKeyfile]=useState('');
  const [fingerprint,setFingerprint]=useState('');
+ const [hosts,setHosts]=useState([]);
+ const [discoveryStatus,setDiscoveryStatus]=useState('idle');
+ const [discoveryError,setDiscoveryError]=useState('');
+ const [selectedHostUrl,setSelectedHostUrl]=useState('');
+ const [pairUsername,setPairUsername]=useState('');
+ const [pairPassword,setPairPassword]=useState('');
+ const [pairPinConfirmed,setPairPinConfirmed]=useState(false);
+ const [serviceStatus,setServiceStatus]=useState(null);
  const [users,setUsers]=useState([]);
  const [displayRoles,setDisplayRoles]=useState(LAN_BUILTIN_DISPLAY_ROLES);
  const [displayRole,setDisplayRole]=useState('employee');
@@ -180,6 +208,57 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  });
  const httpsTarget=/^https:\/\//i.test(url.trim());
  const validPin=validLanFingerprint(fingerprint);
+ const selectedHost=hosts.find(host=>host.url===selectedHostUrl);
+ const pairReady=!!selectedHost&&validPin&&pairPinConfirmed&&!!pairUsername.trim()&&!!pairPassword;
+ const hostServiceMessage=serviceStatus?.error?
+   'وضعیت سرویس میزبان قابل بررسی نیست: '+serviceStatus.error:
+   serviceStatus?.supported===false?
+     'استعلام سرویس ویندوز در این محیط پشتیبانی نمی‌شود. تنظیمات پیشرفته فقط میزبان موقت داخل برنامه را اجرا می‌کند.':
+     serviceStatus?.supported===true&&serviceStatus.installed===true?
+       serviceStatus.running===true?'طبق گزارش سیستم، سرویس میزبان نصب و در حال اجراست.':
+         'طبق گزارش سیستم، سرویس میزبان نصب شده ولی اجرا نمی‌شود.':
+       serviceStatus?.supported===true&&serviceStatus.installed===false?
+         'سرویس دائمی هنوز نصب نشده است؛ نصب یک‌باره با دسترسی مدیر ویندوز انجام می‌شود. تنظیمات پیشرفته فقط میزبان موقت داخل برنامه را اجرا می‌کند.':
+         'میزبان دائمی باید توسط مدیر ویندوز نصب شود؛ تنظیمات پیشرفته فقط میزبان موقت است.';
+ const scanHosts=async()=>{
+   setDiscoveryError('');
+   if(typeof api?.lanDiscover!=='function'){
+     setDiscoveryStatus('unsupported');setHosts([]);setSelectedHostUrl('');return;
+   }
+   setDiscoveryStatus('scanning');
+   try{
+     const result=await api.lanDiscover();
+     if(!Array.isArray(result))throw Error('پاسخ جست‌وجوی میزبان معتبر نیست.');
+     const secure=lanDiscoveredHttpsHosts(result);
+     setHosts(secure);setSelectedHostUrl(current=>secure.some(host=>host.url===current)?current:'');
+     setDiscoveryStatus('done');
+   }catch(e){
+     setHosts([]);setSelectedHostUrl('');
+     setDiscoveryStatus('error');setDiscoveryError(e.message||String(e));
+   }
+ };
+ React.useEffect(()=>{
+   if(status?.mode!=='solo')return;
+   scanHosts();
+   if(typeof api?.hostServiceStatus==='function'){
+     api.hostServiceStatus().then(value=>{
+       setServiceStatus(value&&typeof value==='object'?value:null);
+     }).catch(()=>setServiceStatus(null));
+   }
+ },[status?.mode]);
+ const selectDiscoveredHost=host=>{
+   setSelectedHostUrl(host.url);setUrl(host.url);
+   // Broadcast fingerprints are unverified. Only a value entered by the user
+   // after comparing with the actual host may be used for pinning.
+   setFingerprint('');setPairPinConfirmed(false);setPairPassword('');
+   setError('');setNotice('');
+ };
+ const handlePairJoin=()=>run(async()=>{
+   if(!pairReady||!selectedHost.url.startsWith('https://'))throw Error('نشانی HTTPS و اثر انگشت تأییدشده میزبان لازم است.');
+   const s=await api.lanJoin(selectedHost.url,pairUsername.trim(),pairPassword,normalizeLanFingerprint(fingerprint));
+   setMode(s.mode);await onConnected();
+   setPairPassword('');setNotice('اتصال امن به میزبان انتخابی برقرار شد.');
+ });
  const handleHost=()=>run(async()=>{
    const s=await api.lanHost(username,password,parseInt(port,10),secureHost?certfile.trim():'',secureHost?keyfile.trim():'');
    setMode(s.mode);setNotice(secureHost?'میزبان HTTPS راه‌اندازی شد. اثرانگشت SHA-256 را از پنل میزبان به کلاینت‌ها بده.':'میزبان HTTP قدیمی راه‌اندازی شد؛ ارتباط رمزگذاری نمی‌شود.');
@@ -264,7 +343,46 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
   {status?.mode==='solo'&&<p className="lan-help" role="note">تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان شبکه فعال می‌شود؛ حالت شخصی حساب شبکه‌ای ندارد.</p>}
   <details className="lan-density__help"><summary><ShieldCheck size={15}/> راهنمای اتصال امن و اثر انگشت گواهی</summary><p className="lan-help">برای اتصال امن، میزبان را با گواهی و کلید PEM راه‌اندازی کن، نشانی HTTPS را به کلاینت بده و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP قدیمی فقط برای شبکه مورداعتماد است و رمزگذاری ندارد.</p></details>
   {status?.error&&<p className="lan-error">{status.error}</p>}
-  {status?.mode==='solo'?<div className="lan-modes">
+  {status?.mode==='solo'?<div className="lan-connect-setup">
+    <section className="lan-pairing setting-block" aria-label="اتصال ساده به شبکه">
+      <h3><Users size={17}/> اتصال ساده به شبکه</h3>
+      <p className="lan-help">میزبان HTTPS را در شبکه پیدا کن، اثر انگشت گواهی را از روی رایانه میزبان بررسی کن و با حسابی که مدیر ساخته وارد شو.</p>
+      <div className="lan-pairing__search"><button type="button" className="btn primary" disabled={discoveryStatus==='scanning'||busy}
+        onClick={scanHosts}><RefreshCw size={16}/> {discoveryStatus==='scanning'?'در حال جست‌وجو…':'جست‌وجوی میزبان در شبکه'}</button>
+        {discoveryStatus==='unsupported'&&<small role="status">جست‌وجوی خودکار در این نسخه موجود نیست؛ از تنظیمات پیشرفته استفاده کن.</small>}
+        {discoveryStatus==='scanning'&&<small role="status">در حال پیدا کردن میزبان‌های HTTPS…</small>}
+        {discoveryStatus==='done'&&!hosts.length&&<small role="status">میزبان HTTPS پیدا نشد. فعال بودن میزبان و اتصال هر دو رایانه به شبکه را بررسی کن.</small>}
+        {discoveryStatus==='error'&&<small role="alert">{discoveryError}</small>}
+      </div>
+      {!!hosts.length&&<div className="lan-pairing__hosts" role="group" aria-label="میزبان‌های HTTPS کشف‌شده">
+        {hosts.map(host=><button type="button" key={host.url} className={'lan-pairing__host '+(selectedHostUrl===host.url?'selected':'')}
+          aria-pressed={selectedHostUrl===host.url} disabled={busy} onClick={()=>selectDiscoveredHost(host)}>
+          <strong>{host.name}</strong><code dir="ltr">{host.url}</code>
+          <span>{selectedHostUrl===host.url?'انتخاب‌شده':'انتخاب میزبان'}</span>
+        </button>)}
+      </div>}
+      {selectedHost&&<div className="lan-pairing__verify">
+        <strong>تأیید هویت میزبان: {selectedHost.name}</strong>
+        <label>نشانی HTTPS انتخاب‌شده<input readOnly dir="ltr" value={selectedHost.url}/></label>
+        {selectedHost.fingerprint&&<p className="lan-pairing__untrusted">اثر انگشت اعلام‌شده در شبکه (تأییدنشده):
+          <code dir="ltr">{selectedHost.fingerprint}</code></p>}
+        <p className="lan-help">اثر انگشت کامل SHA-256 را مستقیماً از صفحه میزبان یا مسیر مطمئن دیگری دریافت و با میزبان مقایسه کن. مقدار اعلام‌شده در شبکه به‌تنهایی قابل اعتماد نیست.</p>
+        <label>اثر انگشت بررسی‌شده میزبان<input dir="ltr" autoComplete="off" spellCheck={false}
+          placeholder="۶۴ رقم SHA-256 از خود میزبان" value={fingerprint}
+          onChange={e=>{setFingerprint(e.target.value);setPairPinConfirmed(false);}}/></label>
+        <label className="lan-pairing__confirm"><input type="checkbox" checked={pairPinConfirmed}
+          disabled={!validPin} onChange={e=>setPairPinConfirmed(e.target.checked)}/>
+          <span>اثر انگشت واردشده را جداگانه با رایانه میزبان تطبیق دادم.</span></label>
+        <div className="setting-grid">
+          <label>نام کاربری شبکه<input autoComplete="username" value={pairUsername} onChange={e=>setPairUsername(e.target.value)}/></label>
+          <label>رمز حساب شبکه<input type="password" autoComplete="current-password" value={pairPassword} onChange={e=>setPairPassword(e.target.value)}/></label>
+        </div>
+        <button className="btn primary" type="button" disabled={!pairReady||busy} onClick={handlePairJoin}>اتصال امن و دریافت کارها</button>
+      </div>}
+      <p className="lan-help lan-pairing__service">{hostServiceMessage}</p>
+    </section>
+    <details className="lan-advanced"><summary><Settings2 size={16}/> تنظیمات پیشرفته: میزبان و اتصال دستی</summary>
+    <div className="lan-modes">
     <div className="setting-block"><h3><Cloud size={17}/> فعال‌کردن سرور محلی</h3>
       <div className="setting-grid"><label>نام مدیر<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="admin"/></label><label>رمز مدیر (حداقل ۱۰ نویسه)<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>پورت<input dir="ltr" value={port} onChange={e=>setPort(e.target.value)}/></label></div>
       <label className="lan-tls-toggle"><input type="checkbox" checked={secureHost} onChange={e=>setSecureHost(e.target.checked)}/> HTTPS با گواهی و کلید PEM</label>
@@ -277,6 +395,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
       <div className="setting-grid"><label>نام کاربری<input value={username} onChange={e=>setUsername(e.target.value)}/></label><label>رمز<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label></div>
       <button disabled={busy||!username.trim()||!password||!(url.trim().startsWith('http://')||httpsTarget)||(httpsTarget&&!validPin)} className="btn secondary" onClick={handleJoin}>اتصال و دریافت کارها</button>
     </div>
+    </div></details>
   </div>:
    <><div className="lan-connected"><span>{status?.mode==='server'?('پورت میزبان: '+status.port):('نشانی: '+status?.url)}</span><span>سطح دسترسی: <RoleBadge role={status?.user?.role}/></span><span>{status?.transport==='https'?'اتصال HTTPS':'اتصال HTTP قدیمی (بدون رمزگذاری)'}</span>{status?.mode==='server'&&status?.fingerprint&&<span>اثر انگشت SHA-256 گواهی میزبان: <code dir="ltr">{status.fingerprint}</code></span>}</div><div className="lan-actions"><button className="btn secondary" onClick={onConnected}><RefreshCw size={16}/> تازه‌سازی اطلاعات</button>{canManage&&<button className="btn primary" aria-label="تعریف کاربر و تعیین سطح دسترسی" onClick={loadUsers}><Plus size={16}/> تعریف کاربر</button>}<button className="btn secondary" disabled={busy} onClick={handleLeave}>خروج از شبکه</button></div></>}
   {view==='users'&&canManage&&<div className="users-manager">

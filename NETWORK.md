@@ -19,10 +19,10 @@ the physical two-Windows-PC acceptance gate**.
 
 1. Start Madar Desk, open **شبکه محلی و کاربران**.
 2. Choose **فعال‌کردن سرور محلی**, enter an English owner username, a strong password (minimum 10 characters) and port (default 48370).
-3. Find the LAN IPv4 address of that computer (PowerShell: `ipconfig`). The URL will look like `http://192.168.1.20:48370`.
+3. Find the LAN IPv4 address of that computer (PowerShell: `ipconfig`). For the recommended HTTPS transport, the URL looks like `https://192.168.1.20:48370` and clients must verify the complete certificate fingerprint. The legacy HTTP transport is unencrypted.
 4. Allow this port **only on Windows Firewall Private profile and only for your trusted LAN subnet**. Do not forward this port on the router or expose it on the Internet.
 5. Open **مدیریت کاربران**. Create colleagues with role **Admin**, **Editor**, or **Viewer** and grant the allowed projects or all projects.
-6. Keep the program running on this PC. The host owns the authoritative local
+6. In legacy GUI-host mode, keep the program running on this PC. Alternatively use the separately provisioned background Windows service described below. The host owns the authoritative local
    state (`tasks.json` in legacy mode or `madar-unified.sqlite3` after explicit
    opt-in migration). Never sync the active SQLite file through a shared drive.
 
@@ -30,7 +30,7 @@ the physical two-Windows-PC acceptance gate**.
 
 1. Run a copy of the same EXE. Open **شبکه محلی و کاربران**, enter the host's LAN URL and your own account credentials.
 2. The client reads and writes through an authenticated LAN API rather than sharing the JSON database folder.
-3. Connected clients poll about every 3 seconds and see saved changes.
+3. Connected desktop clients check for saved changes on the UI refresh cycle (currently 15 seconds), and may refresh explicitly. This is polling, not push.
 4. **Viewer:** read only; **Editor:** task modifications within authorized projects, no project or global settings edits; **Admin:** management including user accounts.
 
 ## Sync and security constraints
@@ -40,5 +40,11 @@ the physical two-Windows-PC acceptance gate**.
 - **Important:** HTTP connections remain unencrypted. Use HTTPS with a verified
   certificate fingerprint for credentials and sensitive task information. Do
   not expose either service to the public Internet or port-forward it.
-- The host must stay on. LAN synchronization is near-real-time polling, not offline edits that later merge. Closing the host interrupts client access. No automatic conflict merge.
+- The host computer and its LAN listener must stay on. In GUI-host mode, closing the desktop window stops that listener; when the optional Windows service is installed and running on its separate data authority, GUI closure does not stop it. Offline edits may be queued but are not acknowledged by the host until successfully reconciled; conflicting edits are not silently merged.
 - For Google Drive data transfers, make backups on the host, not on a client. Google Drive remains separate from LAN collaboration.
+
+## Optional background Windows service / LAN discovery
+
+See `HOST_SERVICE_SETUP_FA.md` for the opt-in `MadarHost.exe` service and its dedicated `ProgramData` data authority. Its HTTPS LAN listener can run while the GUI is closed. The service does **not** automatically adopt the GUI user's existing `%APPDATA%\MadarDesk` tasks, attachments, finance or accounts; users must not confuse a fresh service host with their previous data authority. No actual installation or two-physical-PC acceptance is implied by the source tests.
+
+Configured HTTPS hosts may advertise an **untrusted** discovery hint on UDP 48371/48372 (`LAN_DISCOVERY.md`). The GUI simplifies finding a host, but a user must independently confirm the full TLS fingerprint before authenticated login; never trust UDP-supplied fingerprints as pinned keys. The host-only 30-second backup scheduler captures changed task/unified database revisions, with explicitly partial scope.

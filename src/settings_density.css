@@ -69,6 +69,40 @@
 .lan-density .lan-modes{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px;margin-top:12px}
 .lan-density .lan-modes .setting-block{min-width:0;gap:9px;padding:12px 14px}
 .lan-density .lan-modes .setting-grid{gap:8px}
+.lan-connect-setup{display:grid;gap:12px;min-width:0}
+.lan-density .lan-pairing{min-width:0;margin:0;display:grid;gap:10px;padding:14px;
+  border:1px solid var(--density-line);border-radius:12px;background:var(--density-surface)}
+.lan-pairing>h3{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--density-ink);margin:0}
+.lan-pairing>.lan-help{margin:0;line-height:1.8}
+.lan-pairing__search{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.lan-pairing__search small{line-height:1.7;flex:1 1 240px}
+.lan-pairing__hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px}
+.lan-pairing__host{display:grid;min-width:0;gap:5px;text-align:start;align-content:start;
+  padding:11px;border:1px solid var(--density-line);border-radius:9px;background:var(--surface,#fff);
+  color:var(--text,#263b54);cursor:pointer}
+.lan-pairing__host.selected{border:2px solid #4c83c6;padding:10px;background:var(--density-surface)}
+.lan-pairing__host code,.lan-pairing__untrusted code{display:block;direction:ltr;text-align:left;
+  white-space:normal;overflow-wrap:anywhere;font-size:11px;line-height:1.6}
+.lan-pairing__host span{font-size:11px;color:var(--density-ink)}
+.lan-pairing__verify{display:grid;gap:10px;min-width:0;padding:12px;border:1px solid var(--density-line);
+  border-radius:9px}
+.lan-pairing__verify>strong{color:var(--density-ink)}
+.lan-pairing__verify label{display:grid;gap:5px;min-width:0;font-size:12px}
+.lan-pairing__verify :is(input:not([type="checkbox"])){min-width:0;width:100%;padding:8px 10px;
+  border:1px solid var(--density-line);border-radius:8px;background:var(--surface,#fff);color:var(--text,#263b54)}
+.lan-pairing__verify input[readonly]{opacity:.85;cursor:default}
+.lan-pairing__verify .lan-pairing__confirm{display:flex;align-items:flex-start;gap:8px;line-height:1.7}
+.lan-pairing__confirm input{margin-top:4px;flex:none}
+.lan-pairing__verify .setting-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lan-pairing__verify .btn{justify-self:start}
+.lan-pairing__untrusted{margin:0;overflow-wrap:anywhere;line-height:1.7;font-size:11px}
+.lan-pairing__service{padding-top:8px;border-top:1px solid var(--density-line)}
+.lan-advanced{min-width:0;border:1px solid var(--density-line);border-radius:11px}
+.lan-advanced>summary{display:flex;align-items:center;gap:8px;padding:12px;cursor:pointer;color:var(--density-ink);
+  font-size:12px;font-weight:700}
+.lan-advanced>.lan-modes{margin:0!important;padding:0 12px 12px}
+.lan-density :is(.lan-pairing__host,.lan-advanced>summary,.lan-pairing__verify input):focus-visible{
+  outline:3px solid #5086e2;outline-offset:2px}
 .lan-density .lan-connected{padding:9px 12px;margin-bottom:9px;gap:9px;font-size:11px}
 .lan-density .lan-actions{gap:7px;margin:8px 0}
 .lan-density .lan-actions .btn{min-height:35px;padding:7px 11px;font-size:11px}
@@ -134,6 +168,9 @@
 :root[data-theme="dark"] .lan-density__editor .lan-density__actions{background:var(--density-surface)}
 :root[data-theme="dark"] .lan-density :is(.lan-density__directory,.lan-density__editor) :is(input,select):not([type="checkbox"]):not([type="color"]){background:#142237;color:#e0ebfa;border-color:#38516e}
 :root[data-theme="dark"] .lan-density__directory h3,:root[data-theme="dark"] .lan-density__editor h4{color:var(--density-ink)}
+:root[data-theme="dark"] .lan-pairing__host,:root[data-theme="dark"] .lan-pairing__verify :is(input:not([type="checkbox"])){
+  background:#142237;color:#e0ebfa;border-color:#38516e}
+:root[data-theme="dark"] .lan-pairing__host.selected{background:#203b57;border-color:#8db8ff}
 :root[data-theme="dark"] .settings-density__disclosure>summary small,:root[data-theme="dark"] .lan-density .lan-display-roles>summary small,:root[data-theme="dark"] .lan-density__optional>summary small{color:#a4b8d1}
 
 /* Workspaces are rendered by App's generic Modal, not SettingsPanel.
@@ -194,6 +231,10 @@
   .settings-density__quick-grid{grid-template-columns:1fr;gap:8px}
   .settings-density__quick-grid>.setting-block:last-child{grid-column:auto}
   .lan-density__directory,.lan-density__editor{padding:10px}
+  .lan-density .lan-pairing{padding:11px}
+  .lan-pairing__verify .setting-grid{grid-template-columns:1fr}
+  .lan-pairing__hosts{grid-template-columns:minmax(0,1fr)}
+  .lan-pairing__search>.btn,.lan-pairing__verify>.btn{width:100%;justify-content:center}
   .lan-density__editor .setting-grid{grid-template-columns:1fr}
   .lan-density .scope-list{grid-template-columns:1fr}
   .lan-density__actions{bottom:-10px}
