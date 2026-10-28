@@ -300,6 +300,12 @@ body:has(.lane-actions-popover) .madar-fl-layer{z-index:94}
 .lane-actions-popover__archive { color: #a44145 !important; }
 .lane-actions-popover__archive small { font-size: 9px; }
 .lane-actions-popover__hint { display: flex; align-items: center; gap: 6px; padding: 8px 2px 1px; color: #6b7b90; }
+.lane-actions-popover__group { border-block-start: 1px solid #e2e8ef; padding-block: 5px; }
+.lane-actions-popover__group > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 7px; border-radius: 8px; font-weight: 650; }
+.lane-actions-popover__group > summary:is(:hover,:focus-visible) { background: #ecf2f9; }
+.lane-actions-popover__choices { display: grid; gap: 2px; padding-inline-start: 14px; }
+.lane-actions-popover__choices button { text-align: start; padding-inline: 10px; }
+.lane-actions-popover__choices small { padding: 9px; color: #718198; }
 
 :root[data-theme="dark"] .kanban > .kanban-lane { border-color: #32455f; }
 :root[data-theme="dark"] .kanban .task-card--completed { border-color: #4f997f; }
@@ -330,6 +336,8 @@ body:has(.lane-actions-popover) .madar-fl-layer{z-index:94}
 :root[data-theme="dark"] .lane-actions-popover button:is(:hover, :focus-visible):not(:disabled) { background: #2c4160; }
 :root[data-theme="dark"] .lane-actions-popover__editor .lane-actions-popover__save { background: #304b75; color: #deecff; }
 :root[data-theme="dark"] .lane-actions-popover__archive { color: #ffb3b8 !important; }
+:root[data-theme="dark"] .lane-actions-popover__group { border-color: #3b4f67; }
+:root[data-theme="dark"] .lane-actions-popover__group > summary:is(:hover,:focus-visible) { background: #2c4160; }
 
 @media (max-width: 600px) {
   .kanban { --kanban-column-width: min(276px, calc(100vw - 28px)); gap: 9px; }

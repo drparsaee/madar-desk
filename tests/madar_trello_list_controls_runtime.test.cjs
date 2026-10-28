@@ -196,7 +196,7 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       await lane.locator('.lane-head').click({button:'right'});
       const menu=page.getByRole('dialog',{name:'تنظیمات ستون شروع'});
       await menu.waitFor({state:'visible'});
-      assert.equal(await menu.getByText('عملیات ستون').count(),1);
+      assert.equal(await menu.getByText('عملیات لیست · شروع').count(),1);
       await menu.getByRole('button',{name:'کپی ستون خالی'}).click();
       assert.equal(await menu.count(),0);
       const copied=page.locator('.kanban-lane[aria-label="ستون شروع (کپی)"]');

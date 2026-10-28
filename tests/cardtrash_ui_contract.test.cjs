@@ -98,8 +98,8 @@ test('restore action applies pure transition, guarded by canEdit and grant-deriv
   assert.match(appText,/const canEdit=lanStatus\?\.mode==='client'/);
 });
 
-test('normal board, count, reporting, planner, suggestions and card editor exclude deleted cards',()=>{
-  const active=section('const filtered=useMemo(','const counts=useMemo(');
+test('normal board, reporting, planner, suggestions and card editor exclude deleted cards',()=>{
+  const active=section('const filtered=useMemo(','const selectedProject=');
   // M03 index excludes deleted cards before the shared filtered set is built.
   assert.match(appText,/createBoardPerformanceIndex\(data,/);
   assert.match(active,/boardIndex\.selectActiveCards\(/);

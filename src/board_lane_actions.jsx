@@ -1,6 +1,6 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Copy, Ellipsis, Palette, Plus, Settings2, X} from 'lucide-react';
+import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Copy, Ellipsis, ListFilter, Palette, Plus, Settings2, X, Zap} from 'lucide-react';
 
 const inset = 8;
 export function lanePopupPosition(anchor, popup, width, height) {
@@ -32,7 +32,8 @@ export function laneContextPopupPosition(point, popup, width, height) {
 export function LaneActionsMenu({
   stage, count, canManage, canEdit, index, total, onSave,
   onMove, onArchive, onCopyList, onAddCard, onAddCardTop, onToggleCollapse,
-  contextRequest, collapsed=false,
+  onSort, onMoveAll, moveTargets=[], onAutomation,
+  contextRequest, onContextConsumed, collapsed=false,
 }) {
   const [open,setOpen]=useState(false);
   const [name,setName]=useState(stage.label);
@@ -58,6 +59,9 @@ export function LaneActionsMenu({
     setContextPoint({x:contextRequest.x,y:contextRequest.y});
     setPosition(null);
     setOpen(true);
+    // A right-click request is one-shot. Without acknowledgment, collapsing
+    // swaps lane-menu components and replays the old request on remount.
+    onContextConsumed?.(contextRequest.id);
   },[contextRequest,stage.id]);
   useEffect(()=>{
     if(!open)return;
@@ -112,26 +116,48 @@ export function LaneActionsMenu({
   };
   return <>
     <button ref={trigger} type="button" className="lane-menu-trigger"
-      aria-label={'عملیات ستون '+stage.label} title={'تنظیمات '+stage.label}
+      aria-label={'عملیات لیست '+stage.label} title={'عملیات لیست '+stage.label}
       aria-haspopup="dialog" aria-expanded={open} aria-controls={open?id:undefined}
       onClick={openMenu}><Ellipsis size={19}/></button>
     {open&&typeof document!=='undefined'&&createPortal(
       <div ref={panel} id={id} role="dialog" aria-label={'تنظیمات ستون '+stage.label}
         className="lane-actions-popover" dir="rtl"
         style={position?{left:position.left,top:position.top,visibility:'visible'}:{left:inset,top:inset,visibility:'hidden'}}>
-        <div className="lane-actions-popover__head"><strong>عملیات ستون</strong>
+        <div className="lane-actions-popover__head"><strong>عملیات لیست · {stage.label}</strong>
           <button type="button" aria-label="بستن عملیات ستون" onClick={closeMenu}><X size={16}/></button>
         </div>
         <button type="button" className="lane-actions-popover__action" disabled={!canEdit||!onAddCard}
           onClick={()=>{if(!canEdit||!onAddCard)return;closeMenu();onAddCard();}}><Plus size={16}/> افزودن کارت</button>
         <button type="button" className="lane-actions-popover__action" disabled={!canEdit||!onAddCardTop}
           onClick={()=>{if(!canEdit||!onAddCardTop)return;closeMenu();onAddCardTop();}}><Plus size={16}/> افزودن کارت در ابتدای ستون</button>
+        {canManage&&<button type="button" className="lane-actions-popover__action" disabled={!onCopyList}
+          title="ساخت نسخه خالی از ستون؛ کارت‌ها و اطلاعات مالی کپی نمی‌شوند"
+          onClick={()=>{if(!onCopyList)return;closeMenu();onCopyList();}}><Copy size={16}/> کپی ستون خالی</button>}
         <button type="button" className="lane-actions-popover__action" disabled={!onToggleCollapse}
           onClick={()=>{if(!onToggleCollapse)return;closeMenu();onToggleCollapse();}}>
           {collapsed?<ChevronsUpDown size={16}/>:<ChevronsDownUp size={16}/>}
           {collapsed?'بازکردن ستون':'جمع‌کردن ستون'}
         </button>
+        <details className="lane-actions-popover__group">
+          <summary><ListFilter size={16}/> مرتب‌سازی کارت‌ها</summary>
+          <div className="lane-actions-popover__choices">
+            {[['newest','جدیدترین'],['oldest','قدیمی‌ترین'],['title','عنوان الفبایی'],['due','نزدیک‌ترین موعد']].map(([value,label])=><button key={value} type="button"
+              disabled={!canEdit||!onSort} onClick={()=>{if(!canEdit||!onSort)return;closeMenu();onSort(value);}}>{label}</button>)}
+          </div>
+        </details>
+        {canManage&&<details className="lane-actions-popover__group">
+          <summary><ArrowLeft size={16}/> انتقال تمام کارت‌های لیست</summary>
+          <div className="lane-actions-popover__choices">
+            {moveTargets.length?moveTargets.map(target=><button type="button" key={target.id}
+              disabled={!onMoveAll} onClick={()=>{if(!onMoveAll)return;closeMenu();onMoveAll(target.id);}}>
+              انتقال به {target.label}</button>):<small>لیست مقصد دیگری وجود ندارد.</small>}
+          </div>
+        </details>}
+        {canManage&&onAutomation&&<button type="button" className="lane-actions-popover__action"
+          onClick={()=>{closeMenu();onAutomation();}}><Zap size={16}/> اتوماسیون لیست</button>}
         {canManage&&<>
+          <details className="lane-actions-popover__group">
+            <summary><Palette size={16}/> نام، توضیح و رنگ لیست</summary>
           <form className="lane-actions-popover__editor" onSubmit={save}>
             <label>نام ستون
               <input maxLength={100} value={name} onChange={e=>setName(e.target.value)} required/>
@@ -145,13 +171,11 @@ export function LaneActionsMenu({
             <input type="color" aria-label={'رنگ ستون '+stage.label} disabled={!onSave} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'}
               onChange={e=>onSave?.({color:e.target.value})}/>
           </label>
+          </details>
           <div className="lane-actions-popover__moves" role="group" aria-label="جابجایی ستون">
             <button type="button" disabled={!onMove||index===0} onClick={()=>{onMove?.(-1);closeMenu();}}><ArrowRight size={15}/> یک ستون به راست</button>
             <button type="button" disabled={!onMove||index>=total-1} onClick={()=>{onMove?.(1);closeMenu();}}><ArrowLeft size={15}/> یک ستون به چپ</button>
           </div>
-          <button type="button" className="lane-actions-popover__action" disabled={!onCopyList}
-            title="ساخت نسخه خالی از ستون؛ کارت‌ها و اطلاعات مالی کپی نمی‌شوند"
-            onClick={()=>{if(!onCopyList)return;closeMenu();onCopyList();}}><Copy size={16}/> کپی ستون خالی</button>
           {onArchive&&<button type="button" className="lane-actions-popover__action lane-actions-popover__archive"
             disabled={total<=1} onClick={()=>{closeMenu();onArchive?.();}}>
             <Archive size={16}/> بایگانی ستون {count>0&&<small>({count.toLocaleString('fa-IR')} کارت حفظ می‌شود)</small>}

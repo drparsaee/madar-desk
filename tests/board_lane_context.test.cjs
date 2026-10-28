@@ -124,10 +124,11 @@ test('right-click uses the same list menu, supports keyboard dismissal and guard
         canEdit:true,canManage:true,hasTop:true,hasCollapse:true,hasSave:false
       }));
       await menu.waitFor({state:'visible'});
+      await menu.locator('summary').filter({hasText:'نام، توضیح و رنگ لیست'}).click();
       assert.equal(await menu.getByRole('button',{name:'ذخیره تغییرات'}).isDisabled(),true);
       assert.equal(await menu.locator('input[type=color]').isDisabled(),true);
       await menu.getByRole('button',{name:'بستن عملیات ستون'}).click();
-      await page.getByRole('button',{name:'عملیات ستون تست کانبان'}).click();
+      await page.getByRole('button',{name:'عملیات لیست تست کانبان'}).click();
       await menu.waitFor({state:'visible'});
       const byEllipsis=await menu.boundingBox();
       assert.ok(byEllipsis.x>=8&&byEllipsis.x+byEllipsis.width<=920);

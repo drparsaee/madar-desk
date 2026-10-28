@@ -37,6 +37,7 @@ import {removeUnpaidLegacyStep} from './checklistguard.js';
 import {plannerIdentity} from './planner_identity.js';
 import {importCalendarEvents} from './calendar_import_state.js';
 import {getOrderedLaneCards,moveCardInState} from './cardorder.js';
+import {sortLaneState,moveAllLaneCardsState} from './lane_operations.js';
 import {WorkspaceManager} from './workspaces_panel.jsx';
 import {archiveListState,restoreListState,activeBoardLists} from './listarchive.js';
 import {softDeleteCardState,restoreDeletedCardState} from './cardtrash.js';
@@ -597,6 +598,7 @@ export default function App(){
   const [accountingSource,setAccountingSource]=useState(null);
   const [profitVisible,setProfitVisible]=useState(false);
   const [rulesOpen,setRulesOpen]=useState(false);
+  const [automationListId,setAutomationListId]=useState(null);
   const [reportingOpen,setReportingOpen]=useState(false);
   const [trelloImportOpen,setTrelloImportOpen]=useState(false);
   const [portableExportOpen,setPortableExportOpen]=useState(false);
@@ -768,10 +770,6 @@ export default function App(){
     boardId:activeBoard?.id,
     matchIds:new Set(filtered.map(t=>t.id))
   }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
-  const counts=useMemo(()=>({
-    all:filtered.length,active:filtered.filter(t=>t.status==='active').length,
-    review:filtered.filter(t=>t.status==='review').length,done:filtered.filter(t=>t.status==='done').length
-  }),[filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
   const change=next=>{if(!canEdit)return;dirty.current=true;setData(current=>{
@@ -891,6 +889,28 @@ export default function App(){
       return {...board,stages:nextStages};
     })}));
     setToast('ساختار ستون کپی شد؛ کارت‌ها و اطلاعات مالی کپی نشده‌اند.');
+  };
+  const sortBoardList=(stageId,sortBy)=>{
+    if(!canEdit||!activeBoard)return;
+    try{
+      if(sortLaneState(data,activeBoard.id,stageId,sortBy)===data)return;
+      change(state=>{try{return sortLaneState(state,activeBoard.id,stageId,sortBy);}catch{return state;}});
+      setToast('کارت‌ها مرتب شدند؛ اطلاعات کارت‌ها و هزینه‌ها تغییر نکرد.');
+    }catch(error){setToast('مرتب‌سازی انجام نشد: '+error.message);}
+  };
+  const moveAllBoardList=(fromId,toId)=>{
+    if(!canManage||!activeBoard||fromId===toId)return;
+    const source=activeBoard.stages.find(stage=>stage.id===fromId&&!stage.archived);
+    const destination=activeBoard.stages.find(stage=>stage.id===toId&&!stage.archived);
+    if(!source||!destination)return;
+    const count=getOrderedLaneCards(tasks,activeBoard.id,fromId).filter(card=>card.deleted!==true).length;
+    if(!count)return;
+    if(!window.confirm(`${count.toLocaleString('fa-IR')} کارت از «${source.label}» به «${destination.label}» منتقل شوند؟ وضعیت گردش‌کار ممکن است تغییر کند؛ اطلاعات مالی کارت‌ها حفظ می‌شوند.`))return;
+    try{
+      if(moveAllLaneCardsState(data,activeBoard.id,fromId,toId)===data)return;
+      change(state=>{try{return moveAllLaneCardsState(state,activeBoard.id,fromId,toId);}catch{return state;}});
+      setToast('کارت‌ها به لیست مقصد منتقل شدند.');
+    }catch(error){setToast('انتقال انجام نشد: '+error.message);}
   };
   const taskUpdate=(id,fields)=>change(s=>{
     const original=s.tasks.find(t=>t.id===id);
@@ -1367,14 +1387,9 @@ export default function App(){
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
         {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
-        {selected==='all'&&mode==='board'?<VitreaOverview tasks={filtered}
+        {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
-          onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>:<div className="stats">
-          <div className="stat-card"><div className="stat-icon total"><LayoutDashboard size={19}/></div><span>کل کارها</span><strong>{counts.all.toLocaleString('fa-IR')}</strong><small>در این نما</small></div>
-          <div className="stat-card"><div className="stat-icon ongoing"><Activity size={19}/></div><span>در حال انجام</span><strong>{counts.active.toLocaleString('fa-IR')}</strong><small>تسک فعال</small></div>
-          <div className="stat-card"><div className="stat-icon waiting"><ClipboardCheck size={19}/></div><span>منتظر بررسی</span><strong>{counts.review.toLocaleString('fa-IR')}</strong><small>نیازمند توجه</small></div>
-          <div className="stat-card"><div className="stat-icon completed"><CheckCheck size={19}/></div><span>انجام‌شده</span><strong>{counts.done.toLocaleString('fa-IR')}</strong><small>موفق و تمام</small></div>
-        </div>}
+          onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
           <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
@@ -1389,14 +1404,25 @@ export default function App(){
               onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}}
               onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined}
               onCopyList={activeBoard?()=>copyBoardList(stage.id):undefined}
+              onSort={activeBoard?sortBy=>sortBoardList(stage.id,sortBy):undefined}
+              moveTargets={activeBoard?viewStages.filter(item=>item.id!==stage.id):[]}
+              onMoveAll={activeBoard?targetId=>moveAllBoardList(stage.id,targetId):undefined}
+              onAutomation={activeBoard&&canManage&&show('automationRules')?()=>{
+                setAutomationListId(stage.id);setRulesOpen(true);
+              }:undefined}
               onAddCard={()=>openAdd(stage.id)} onAddCardTop={()=>openAdd(stage.id,'start')}
               onToggleCollapse={toggleCollapse} collapsed={isCollapsed}
-              contextRequest={laneContextRequest?.stageId===stage.id?laneContextRequest:null}/>;
+              contextRequest={laneContextRequest?.stageId===stage.id?laneContextRequest:null}
+              onContextConsumed={id=>setLaneContextRequest(current=>current?.id===id?null:current)}/>;
             return <section className={'kanban-lane'+(isCollapsed?' kanban-lane--collapsed':'')} key={stage.id}
               style={{'--stage-accent':stage.color}} aria-label={'ستون '+stage.label}
-              onContextMenu={event=>{
-                if(event.target.closest('.task-card,button,input,textarea,select,[role="button"],.lane-quick-add'))return;
+              onContextMenuCapture={event=>{
+                // React capture catches right-clicks on the header, its buttons,
+                // the empty lane surface and the collapsed rail in WebView2.
+                // Card/editor context stays separate from list operations.
+                if(event.target.closest('.task-card,input,textarea,select,.lane-quick-add,[contenteditable="true"]'))return;
                 event.preventDefault();
+                event.stopPropagation();
                 setLaneContextRequest({stageId:stage.id,id:++laneContextSequence.current,x:event.clientX,y:event.clientY});
               }}
               onDragOver={e=>{if(!isCollapsed&&(canEdit||canManage)){e.preventDefault();e.dataTransfer.dropEffect='move';}}}
@@ -1490,7 +1516,8 @@ export default function App(){
     {show('planner')&&plannerOpen&&(plannerIdentity(lanStatus)
       ?<PlannerPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} calendar={calendar} onClose={()=>setPlannerOpen(false)} onOpenTask={id=>{setPlannerOpen(false);setEditorId(id);}} accountId={plannerIdentity(lanStatus)}/>
       :<Modal title="برنامه‌ریزی شخصی" onClose={()=>setPlannerOpen(false)}><p className="dialog-body">شناسه سرور یا حساب کاربری مشخص نیست. برای جلوگیری از تداخل برنامه‌های شخصی، ابتدا اتصال را تکمیل کنید.</p></Modal>)}
-    {show('automationRules')&&rulesOpen&&selectedProject&&<RulesPanel api={api} project={selectedProject} users={users} onClose={()=>setRulesOpen(false)}/>}
+    {show('automationRules')&&rulesOpen&&selectedProject&&<RulesPanel api={api} project={selectedProject} users={users}
+      initialListId={automationListId} onClose={()=>{setRulesOpen(false);setAutomationListId(null);}}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
     {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onDelete={()=>deleteTask(activeTask.id)}/>}
 
