@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340.16 340.16">
+  <defs>
+    <style>
+      .st0 {fill:#6094f0}
+      .st1 {fill:#f7fcff}
+      .st2 {fill:none}
+      .st3 {fill:#4f6793}
+      .st4 {filter:url(#drop-shadow-1)}
+      .st5 {fill:#67f0cb}
+      .st6 {fill:url(#linear-gradient)}
+      .st7 {clip-path:url(#clippath)}
+    </style>
+    <clipPath id="clippath"><rect class="st2" y="0" width="340.16" height="340.16" rx="76.4" ry="76.4"/></clipPath>
+    <linearGradient id="linear-gradient" x1="170.08" y1="340.16" x2="170.08" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0c1a31"/>
+      <stop offset="1" stop-color="#1d375d"/>
+    </linearGradient>
+    <filter id="drop-shadow-1" x="45.1" y="28.57" width="315" height="288" filterUnits="userSpaceOnUse">
+      <feOffset dx="2.83" dy="2.83"/>
+      <feGaussianBlur result="blur" stdDeviation="2.83"/>
+      <feFlood flood-color="#000" flood-opacity=".75"/>
+      <feComposite in2="blur" operator="in"/>
+      <feComposite in="SourceGraphic"/>
+    </filter>
+  </defs>
+  <g class="st7">
+    <rect class="st6" y="0" width="340.16" height="340.16" rx="76.4" ry="76.4"/>
+    <g class="st4">
+      <path class="st0" d="M51.28,233.37v-114.73s29.69,17.15,29.69,17.15v94.31c0,11.43-12.37,18.57-22.27,12.86l-2.83-1.64c-2.84-1.64-4.59-4.67-4.59-7.95Z"/>
+      <path class="st0" d="M288.88,233.37v-114.73s-29.69,17.15-29.69,17.15v94.31c0,11.43,12.37,18.57,22.27,12.86l2.83-1.64c2.84-1.64,4.59-4.67,4.59-7.95Z"/>
+      <polygon class="st3" points="259.19 135.78 259.19 159.7 288.88 142.56 288.88 118.64 259.19 135.78"/>
+      <path class="st5" d="M244.32,255.81h0c0,5.3-2.83,10.21-7.42,12.86l-59.4,34.3c-4.59,2.65-10.25,2.65-14.85,0l-59.39-34.29c-4.59-2.65-7.42-7.55-7.42-12.86h0c0-11.43,12.37-18.57,22.27-12.86l44.54,25.72c4.59,2.65,10.25,2.65,14.85,0l44.55-25.72c9.9-5.72,22.27,1.43,22.27,12.86Z"/>
+      <path class="st5" d="M162.65,37.19l-59.41,34.3c-9.9,5.71-9.9,20,0,25.72h0c4.59,2.66,10.26,2.66,14.85,0l44.54-25.72c4.59-2.65,10.25-2.65,14.85,0l44.55,25.72c4.59,2.65,10.25,2.65,14.84,0h0c9.9-5.71,9.9-20,0-25.72l-59.39-34.29c-4.59-2.65-10.25-2.65-14.85,0Z"/>
+      <path class="st1" d="M162.64,148.64l-89.09-51.43c-4.6-2.65-10.26-2.65-14.86,0h0c-4.59,2.65-7.42,7.56-7.42,12.86v8.57s111.36,64.3,111.36,64.3c4.6,2.65,10.26,2.65,14.85,0l163.34-94.3c4.6-2.65,7.43-7.56,7.43-12.86v-9.82c0-8.75-6.2-12.33-13.78-7.95l-156.99,90.64c-4.6,2.65-10.26,2.65-14.85,0Z"/>
+    </g>
+  </g>
+</svg>

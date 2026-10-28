@@ -13,9 +13,8 @@ button{border:0}
 .app-shell{height:100%;display:flex;direction:rtl;overflow:hidden}
 .sidebar{width:228px;flex:none;background:#172438;color:#e8efff;display:flex;flex-direction:column;padding:16px 12px 10px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3d4c62 transparent}
 .brand{display:flex;gap:10px;align-items:center;padding:0 8px}
-.brand-mark{width:38px;height:38px;position:relative;display:grid;place-items:center;background:#f4f7ff;border-radius:11px;box-shadow:0 5px 17px #0b172b55}
-.brand-mark span{height:22px;width:22px;border:6px solid #4876d6;display:block;border-radius:50%;transform:rotate(40deg)}
-.brand-mark i{display:block;position:absolute;width:10px;height:10px;background:#55c9b5;top:5px;left:4px;border:2px solid white;border-radius:50%}
+.brand-mark{width:38px;height:38px;flex:none;border-radius:11px;overflow:hidden;box-shadow:0 5px 17px #0b172b55}
+.brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
 .brand strong{font-size:22px;letter-spacing:-1px;line-height:1.1;display:block;color:white}
 .brand small{font-size:10px;color:#91a2bb;display:block;margin-top:6px}
 .side-divider{height:1px;background:#324054;margin:16px 8px 12px}
@@ -152,7 +151,8 @@ button{border:0}
 .empty-list{padding:24px;text-align:center;color:#98a4b2}
 .app-footer{display:flex;justify-content:space-between;padding:8px 2px;color:#aeb6c1;font-size:10px}
 .loading{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:13px;color:#5871a3}
-.logo-symbol{height:50px;width:50px;background:#3f68ce;color:white;font-size:26px;display:grid;place-items:center;border-radius:15px}
+.logo-symbol{height:50px;width:50px;display:grid;place-items:center;border-radius:15px}
+.logo-symbol img{height:100%;width:100%;object-fit:contain}
 .loading strong{font-size:26px}.loading small{color:#8c9aab}
 .toast,.error-toast{position:fixed;left:26px;bottom:24px;display:flex;align-items:center;gap:10px;z-index:1000;background:#243d35;color:#ebfff4;border-radius:12px;box-shadow:0 10px 35px #0002;padding:14px 18px;font-size:12px}
 .error-toast{background:#7e3637;bottom:80px}

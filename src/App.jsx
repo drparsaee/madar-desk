@@ -1281,7 +1281,7 @@ export default function App(){
       window.location.assign('./accounting.html');
     }catch(err){setToast('ارسال به حسابداری ناموفق: '+String(err?.message||err));}
   };
-  if(!data)return <div className="loading"><span className="logo-symbol">م</span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
+  if(!data)return <div className="loading"><span className="logo-symbol"><img src="./madar-icon.svg" alt="" /></span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
   if(accountingOpen&&canManage)return <AccountingWorkspace api={api} projects={projects} tasks={tasks}
     canManage={canManage} initialSource={accountingSource} onExit={()=>{setAccountingOpen(false);setAccountingSource(null);refresh(true).catch(e=>setSavingError(e.message));}}/>;
   // New RIAL V2 is deliberately read-only/fail-closed until host supplies
@@ -1360,7 +1360,7 @@ export default function App(){
       className={'sidebar'+(mobileNavOpen?' sidebar--mobile-open':'')+(desktopNavOpen?' sidebar--vitrea-open':'')}
       onClickCapture={event=>{if(event.target.closest('button')){setMobileNavOpen(false);setDesktopNavOpen(false);}}}>
       <button type="button" className="mobile-nav-close" aria-label="بستن فهرست" onClick={()=>{setMobileNavOpen(false);setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}><X size={20}/></button>
-      <div className="brand"><div className="brand-mark"><span></span><i></i></div><div><strong>مدار</strong><small>فضای شخصی کارها</small></div></div>
+      <div className="brand"><div className="brand-mark"><img src="./madar-icon.svg" alt="" /></div><div><strong>مدار</strong><small>فضای شخصی کارها</small></div></div>
       <div className="side-divider"/>
       <span className="sidebar-section">فضای کار</span>
       <div className="sidebar-nav" style={{padding:'0 12px 9px'}}>
@@ -1425,7 +1425,7 @@ export default function App(){
       <div className="vitrea-top-row">
       <button type="button" className="vitrea-brand-capsule" title="بازگشت به نمای کلی مدار"
         onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}>
-        <span aria-hidden="true">م</span><strong>مدار</strong><i aria-hidden="true">|</i>
+        <img src="./madar-icon.svg" alt="" aria-hidden="true" /><strong>مدار</strong><i aria-hidden="true">|</i>
         <small>در جریان کسب و کار</small>
       </button>
       <nav className="vitrea-primary-nav" aria-label="بخش‌های اصلی مدار">

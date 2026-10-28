@@ -67,7 +67,7 @@
   cursor:pointer;
 }
 .vitrea-brand-capsule {justify-self:start;padding:5px 12px 5px 5px;}
-.vitrea-brand-capsule > span {display:grid;place-items:center;width:34px;height:34px;background:linear-gradient(150deg,#c0dcff,#75aaf1);border-radius:50%;color:#12385f;font-size:19px;font-weight:850;}
+.vitrea-brand-capsule > img {display:block;width:34px;height:34px;flex:none;object-fit:contain;border-radius:9px;}
 .vitrea-brand-capsule strong {font-size:17px;font-weight:850;}
 .vitrea-account-capsule {justify-self:end;padding-inline:7px 12px;}
 .vitrea-account-capsule span {font-size:11px;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

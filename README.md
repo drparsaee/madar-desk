@@ -2,11 +2,11 @@
 
 **Development continuity:** Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) before choosing the next implementation task. It links owner decisions, incomplete obligations, ideas and evidence; [LOCALFORGE_SOURCE_OF_TRUTH.md](LOCALFORGE_SOURCE_OF_TRUTH.md) remains the Git policy.
 
-## Current development status (2026-10-27)
+## Current development status (2026-10-28)
 
 The active source branch is `main` of the private **LocalForge** repository
 `localadmin/madar-desk`. The package source version is currently
-`1.0.0-rc.13`; the much older `v0.3-preview` instructions below are retained
+`1.0.0-rc.15`; the much older `v0.3-preview` instructions below are retained
 as historical notes, **not** as current release instructions.
 
 Current source includes a Vitrea-inspired task-management shell and separate
@@ -24,11 +24,17 @@ as its canonical currency; the historical toman overview below does not
 define the authoritative ledger.
 
 Builds have immutable release names. `npm run dist` currently targets the
-historical `v1.0-rc13` candidate and deliberately refuses to overwrite an
+`v1.0-rc15-UserTest-20261028` candidate and deliberately refuses to overwrite an
 existing executable. For a new candidate, first select a distinct release
 filename and run `scripts/ensure_new_release.py`, then build it using
 PyInstaller with a matching distinct `--name` after `npm run build`.
 Do not rename or overwrite an existing installed EXE.
+
+The RC15 user-test bundle includes the approved final SVG/ICO branding.
+Testers should run `release/Run-Madar-UserTest.cmd` to isolate their test
+profile and read `release/Madar-UserTest-README.txt` before using the app.
+Neither a successful build nor an isolated smoke run verifies live accounting
+or multi-computer LAN acceptance.
 
 Authoritative decisions and active release limitations:
 [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md),
