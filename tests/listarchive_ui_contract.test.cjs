@@ -171,9 +171,11 @@ test('App filters archived-list cards across board/list/calendar views, not just
 });
 
 test('App create and drag paths restrict target stages to activeBoardLists', () => {
-  assert.match(appText, /const draftStages=draftSelectedBoard\?activeBoardLists\(draftSelectedBoard\):stages/);
-  assert.match(appText, /const availableStages=targetBoard\?activeBoardLists\(targetBoard\):stages/);
-  assert.match(appText, /const available=board\?activeBoardLists\(board\):stages/);
+  assert.match(appText, /const targetBoard=workspaceBoards\.find\(b=>b\.id===adding\.boardId&&b\.projectId===adding\.projectId\)/);
+  assert.match(appText, /const availableStages=activeBoardLists\(targetBoard\)/);
+  assert.match(appText, /if\(!board\|\|!activeBoardLists\(board\)\.some\(stage=>stage\.id===status\)\)/);
+  assert.match(appText, /if\(!board\|\|!board\.stages\.some\(item=>item\.id===stage&&!item\.archived\)\)return s/);
+  assert.match(appText, /className="lane-quick-add"/);
   assert.match(appText, /if\(!activeBoardLists\(activeBoard\)\.some\(s=>s\.id===toListId\)\)return/);
   assert.match(appText, /if\(requestedList&&board\?\.stages\.some\(stage=>stage\.id===requestedList&&stage\.archived===true\)&&requestedList!==original\?\.listId\)return s/);
   assert.match(appText, /disabled=\{s\.archived===true&&s\.id!==\(task\.listId\|\|task\.status\)\}/);

@@ -81,9 +81,9 @@ class SyntheticWindow:
             self.actions.append("open_task")
             self.dialog = True
             return True
-        if "form.task-create" in script:
+        if "form.lane-quick-add textarea" in script:
             return self.dialog
-        if "HTMLInputElement.prototype" in script:
+        if "HTMLTextAreaElement.prototype" in script:
             self.actions.append("fill_task")
             return True
         if "button[type=submit]" in script:
@@ -91,7 +91,7 @@ class SyntheticWindow:
             self.bridge.tasks.append({"title": gui_user_flow.TASK_TITLE})
             self.drawer = True
             return True
-        if "task-edit-title" in script:
+        if "kanban-lane .task-card" in script:
             return self.drawer
         raise AssertionError("Unrecognized GUI probe: " + script[:140])
 
@@ -169,7 +169,7 @@ class GuiUserFlowTest(unittest.TestCase):
         with patch.object(gui_user_flow.time, "monotonic", side_effect=count(start=0, step=1)), \
              patch.object(gui_user_flow.time, "sleep"):
             result = gui_user_flow.run_ui_flow(SyntheticWindow(self.bridge), self.bridge)
-        self.assertTrue(result["new_task_drawer"]["pass"])
+        self.assertTrue(result["new_card_visible"]["pass"])
         self.assertFalse(result["task_saved_to_host"]["pass"])
         self.assertEqual(result["task_saved_to_host"]["observed"], 0)
 

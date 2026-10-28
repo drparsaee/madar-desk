@@ -78,4 +78,41 @@
 .planner-item-actions{display:flex;gap:5px;margin-top:10px;justify-content:flex-end}
 .planner-item-actions button{background:#eff3f9;color:#4b6387;border-radius:7px;padding:6px 9px;font-size:10px}
 .planner-item-actions button:hover{background:#dee8f7}
+.planner-date-picker{display:grid;gap:6px;min-width:0;font-size:11px;color:#617188;font-weight:700}
+.planner-field-label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.planner-field-label small{font-size:10px;font-weight:400;color:#8296b0}
+.planner-date-controls{display:flex;gap:6px;min-width:0}
+.planner-date-trigger{display:flex;align-items:center;justify-content:flex-start;gap:9px;min-width:0;flex:1;border:1px solid #dbe3ee;border-radius:8px;background:#fff;color:#25364d;padding:9px 10px;text-align:right;font-size:12px}
+.planner-date-trigger span{flex:1;overflow-wrap:anywhere}
+.planner-date-clear{display:grid;place-items:center;flex:none;width:36px;border:1px solid #dbe3ee;border-radius:8px;background:#f4f7fb;color:#647894}
+.planner-date-trigger:hover,.planner-date-clear:hover{background:#edf4ff;border-color:#92addb}
+.planner-date-popup{padding:10px;border:1px solid #d9e4f4;background:#f9fbfe;border-radius:10px;box-shadow:0 4px 14px #20375819;min-width:0}
+.planner-date-nav{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:12px}
+.planner-date-nav strong{font-size:12px;flex:1;text-align:center;color:#2e4568}
+.planner-date-nav button{display:grid;place-items:center;border-radius:7px;padding:6px;background:#eaf0f9;color:#3e608f}
+.planner-date-nav .planner-date-today{font-size:10px;padding:8px}
+.planner-date-nav button:hover{background:#d7e7fc}
+.planner-date-weekdays,.planner-date-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.planner-date-weekdays span{text-align:center;font-size:10px;color:#7f90a9;padding:4px 0 7px}
+.planner-date-grid button{display:grid;place-items:center;min-width:0;min-height:32px;border:1px solid transparent;border-radius:7px;background:transparent;color:#2d4361;padding:0;font-size:11px;font-weight:600}
+.planner-date-grid button:hover{border-color:#92addb;background:#e3efff}
+.planner-date-grid button.outside{color:#a5b0bf}
+.planner-date-grid button.today{border-color:#4b76c3}
+.planner-date-grid button.chosen{background:#446fc0;color:#fff;border-color:#446fc0}
+.planner-date-grid button:focus-visible,.planner-date-trigger:focus-visible,.planner-date-clear:focus-visible,.planner-time-picker select:focus-visible{outline:2px solid #376cc4;outline-offset:2px}
+.planner-time-picker{padding:0;margin:0;border:0;min-width:0}
+.planner-time-picker legend{display:block;width:100%;padding:0;margin-bottom:6px;font-size:11px;color:#617188;font-weight:700}
+.planner-time-controls{display:flex;align-items:center;gap:7px}
+.planner-time-controls select{flex:1;min-width:0}
+.planner-time-controls select:first-child{flex:1.4}
+.planner-time-controls span{color:#70839d;font-weight:700}
+.planner-time-picker:disabled,.planner-time-controls select:disabled{opacity:.6;cursor:not-allowed}
+:root[data-theme="dark"] .planner-date-popup{background:#202f45;border-color:#39516e;box-shadow:0 8px 20px #050d2040}
+:root[data-theme="dark"] .planner-date-nav strong,:root[data-theme="dark"] .planner-date-grid button{color:#d8e7fc}
+:root[data-theme="dark"] .planner-date-grid button.outside{color:#8195ae}
+:root[data-theme="dark"] .planner-date-grid button.chosen{color:#fff}
+:root[data-theme="dark"] .planner-date-nav button{background:#304764;color:#d5e5fa}
+:root[data-theme="dark"] .planner-date-trigger,:root[data-theme="dark"] .planner-date-clear{background:#1b2b41;border-color:#39516e;color:#dce9fb}
+:root[data-theme="dark"] .planner-date-trigger:hover,:root[data-theme="dark"] .planner-date-clear:hover{background:#2c4362}
+:root[data-theme="dark"] .planner-time-controls select{background:#1b2b41;color:#dce9fb;border-color:#39516e}
 @media(max-width:800px){.planner-overlay{padding:0}.planner-panel{border-radius:0;max-height:100vh;height:100vh}.planner-columns{grid-template-columns:1fr;padding:12px}.planner-inbox{max-height:none}.planner-head{padding:15px}.planner-privacy{padding:8px 15px}.planner-days button{min-height:53px;padding:5px}.planner-days button.selected{padding:4px}.planner-main,.planner-inbox{padding:12px}}

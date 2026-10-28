@@ -49,8 +49,7 @@ test('settings show compact quick choices without retired clock personalization'
   assert.doesNotMatch(html,/شخصی‌سازی ساعت و تاریخ|محل قرارگیری ساعت/);
   assert.match(html,/<details class="settings-density__disclosure"><summary>/);
   assert.match(html,/تنظیم اولویت‌های کارت/);
-  assert.match(html,/مدیریت ستون‌ها و مراحل برد/);
-  assert.match(html,/افزودن ستون/);
+  assert.doesNotMatch(html,/مدیریت ستون‌ها و مراحل برد|مراحل عمومی|نام ستون جدید/);
   assert.match(html,/تعریف اولویت/);
 });
 
@@ -140,7 +139,7 @@ test('workspace modal receives standalone high-contrast light/dark tokens withou
   assert(!/(^|\n)\s*\.dialog\s*\{/.test(css),'do not style every dialog');
 });
 
-test('stage list stays full width with separate action placement on smaller viewports',()=>{
+test('legacy global stages remain stored but are not managed through a duplicate settings panel',()=>{
   const html=renderSettings();
   const stages=cssBody('.settings-density__disclosure .stage-manager');
   const row=cssBody('.settings-density__disclosure .stage-manage-row');
@@ -151,9 +150,6 @@ test('stage list stays full width with separate action placement on smaller view
   assert.match(buttons,/min-width:34px;min-height:34px/);
   assert.match(css,/@media\(max-width:780px\)[\s\S]*?\.settings-density__disclosure \.stage-manage-actions\{grid-column:1\/-1/);
   assert.match(css,/@media\(max-width:600px\)[\s\S]*?\.stage-edit-fields\{grid-template-columns:minmax\(0,1fr\)/);
-  assert.match(html,/aria-label="عملیات ستون صندوق ورودی"/);
-  assert.match(html,/aria-label="ویرایش ستون صندوق ورودی"/);
-  assert.match(html,/aria-label="نام ستون جدید"/);
-  assert.match(html,/aria-label="حذف ستون صندوق ورودی"/);
-  assert.match(html,/title="انتقال به مرحله بعد"/);
+  assert.doesNotMatch(html,/aria-label="عملیات ستون صندوق ورودی"|aria-label="ویرایش ستون صندوق ورودی"/);
+  assert.doesNotMatch(html,/aria-label="نام ستون جدید"|aria-label="حذف ستون صندوق ورودی"/);
 });

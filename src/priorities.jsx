@@ -35,7 +35,7 @@ export function PrioritySettings({settings,usedIds=[],onChange,canManage=true}){
         {!DEFAULT_PRIORITIES.some(item=>item.id===p.id)&&<button type="button" disabled={!canManage} aria-label={'حذف اولویت '+p.label} onClick={()=>remove(p.id)}><Trash2 size={16}/></button>}
       </div>)}
     </div>
-    {canManage&&<div className="priority-new"><input maxLength={60} value={name} placeholder="نام اولویت جدید، مثلاً بحرانی" aria-label="اولویت جدید" onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}/><button disabled={!name.trim()||definitions.length>=30} type="button" className="btn primary" onClick={add}><Plus size={16}/> تعریف اولویت</button></div>}
+    {canManage&&<div className="priority-new"><input maxLength={60} value={name} placeholder="نام اولویت جدید، مثلاً فوری" aria-label="اولویت جدید" onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}/><button disabled={!name.trim()||definitions.length>=30} type="button" className="btn primary" onClick={add}><Plus size={16}/> تعریف اولویت</button></div>}
     {warning&&<p role="alert" className="priority-warning">{warning}</p>}
   </div>;
 }

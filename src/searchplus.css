@@ -41,6 +41,9 @@
   line-height: 1.5;
 }
 .searchplus-input:focus { background: transparent; }
+/* The outer rounded control owns the focus ring. Override the global
+   input:focus-visible outline so it cannot paint a square inside it. */
+.searchplus-control .searchplus-input:focus-visible { outline: none; }
 .searchplus-input::-webkit-search-cancel-button { display: none; }
 .searchplus-input::placeholder { color: var(--muted, #8090a1); opacity: 1; }
 .searchplus-action {

@@ -1,9 +1,9 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {
   AlarmClock, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clock3,
   Inbox, ListTodo, Pause, Play, Plus, RotateCcw, Trash2, X
 } from 'lucide-react';
-import {CalendarField, displayDate} from './productivity.jsx';
+import {displayDate} from './productivity.jsx';
 import {
   addInboxItem, agendaForDate, calendarDays, completeInboxItem, dismissReminder, editInboxItem,
   dueReminders, isoToday, normalizePlanner, planEntry, readPlanner,
@@ -26,8 +26,112 @@ const WEEK_JALALI = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 const WEEK_GREGORIAN = ['د', 'س', 'چ', 'پ', 'ج', 'ش', 'ی'];
 const monthsFormatter = calendar => new Intl.DateTimeFormat(
   calendar === 'jalali' ? 'fa-IR-u-ca-persian' : 'fa-IR-u-ca-gregory',
-  {year: 'numeric', month: 'long'}
+  {year: 'numeric', month: 'long', timeZone: 'UTC'}
 );
+const pickerDate = iso => new Date(iso + 'T12:00:00Z');
+const pickerDaysFormatter = calendar => new Intl.DateTimeFormat(
+  calendar === 'jalali' ? 'fa-IR-u-ca-persian' : 'fa-IR-u-ca-gregory',
+  {day: 'numeric', timeZone: 'UTC'}
+);
+const TIME_HOURS = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
+const TIME_MINUTES = Array.from({length: 60}, (_, i) => String(i).padStart(2, '0'));
+
+// Personal inbox dates remain ISO in storage; only the displayed calendar changes.
+export function PlannerDatePicker({calendar = 'jalali', value = '', onChange, label = 'تاریخ انجام'}) {
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState(value || isoToday());
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const popupId = useId();
+  const labelId = useId();
+  const valueId = useId();
+  const monthFormat = useMemo(() => monthsFormatter(calendar), [calendar]);
+  const dayFormat = useMemo(() => pickerDaysFormatter(calendar), [calendar]);
+  const dates = useMemo(() => calendarDays(anchor, 'month', calendar), [anchor, calendar]);
+  const month = monthFormat.format(pickerDate(anchor));
+  const monthDates = dates.filter(date => monthFormat.format(pickerDate(date)) === month);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutsideClick = event => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onOutsideClick);
+    return () => document.removeEventListener('pointerdown', onOutsideClick);
+  }, [open]);
+
+  const changeMonth = direction => {
+    setAnchor(shiftISO(direction < 0 ? monthDates[0] : monthDates[monthDates.length - 1], direction));
+  };
+  const choose = date => {
+    onChange(date);
+    setAnchor(date);
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+  const keyboardDay = (event, date) => {
+    const offsets = {ArrowLeft: 1, ArrowRight: -1, ArrowDown: 7, ArrowUp: -7};
+    if (!(event.key in offsets)) return;
+    event.preventDefault();
+    const target = shiftISO(date, offsets[event.key]);
+    if (monthFormat.format(pickerDate(target)) !== month) setAnchor(target);
+    // Focus follows the selected navigation day after React updates its grid.
+    requestAnimationFrame(() => rootRef.current?.querySelector(`[data-date="${target}"]`)?.focus());
+  };
+  const openPicker = () => {
+    setAnchor(value || isoToday());
+    setOpen(current => !current);
+  };
+  return <div className="planner-date-picker" ref={rootRef}>
+    <span className="planner-field-label" id={labelId}>{label} <small>{calendar === 'jalali' ? 'شمسی' : 'میلادی'}</small></span>
+    <div className="planner-date-controls">
+      <button type="button" ref={triggerRef} className="planner-date-trigger"
+        aria-labelledby={`${labelId} ${valueId}`} aria-haspopup="dialog" aria-expanded={open}
+        aria-controls={open ? popupId : undefined}
+        onClick={openPicker}><CalendarDays size={16}/><span id={valueId}>{value ? displayDate(value, calendar, true) : 'انتخاب تاریخ از تقویم'}</span></button>
+      {value && <button type="button" className="planner-date-clear" aria-label={'پاک کردن ' + label}
+        title={'پاک کردن ' + label} onClick={() => {onChange(''); setOpen(false);}}><X size={16}/></button>}
+    </div>
+    {open && <div id={popupId} className="planner-date-popup" role="dialog" aria-modal="false" aria-label={'تقویم ' + label}
+      onKeyDown={event => {
+        if (event.key === 'Escape') {event.preventDefault(); setOpen(false); triggerRef.current?.focus();}
+      }}>
+      <div className="planner-date-nav">
+        <button type="button" aria-label="ماه قبل" onClick={() => changeMonth(-1)}><ChevronRight size={17}/></button>
+        <strong aria-live="polite">{month}</strong>
+        <button type="button" aria-label="ماه بعد" onClick={() => changeMonth(1)}><ChevronLeft size={17}/></button>
+        <button type="button" className="planner-date-today" onClick={() => choose(isoToday())}>امروز</button>
+      </div>
+      <div className="planner-date-weekdays">{(calendar === 'jalali' ? WEEK_JALALI : WEEK_GREGORIAN).map((text, i) => <span key={i}>{text}</span>)}</div>
+      <div className="planner-date-grid">{dates.map(date => <button type="button" key={date} data-date={date}
+        className={(date === value ? 'chosen ' : '') + (date === isoToday() ? 'today ' : '') +
+          (monthFormat.format(pickerDate(date)) !== month ? 'outside' : '')}
+        aria-label={displayDate(date, calendar, true)} aria-pressed={date === value}
+        onKeyDown={event => keyboardDay(event, date)} onClick={() => choose(date)}>
+        {dayFormat.format(pickerDate(date))}</button>)}</div>
+    </div>}
+  </div>;
+}
+
+export function PlannerTimePicker({value = '', onChange, disabled = false}) {
+  const hour = value ? value.slice(0, 2) : '';
+  const minute = value ? value.slice(3, 5) : '00';
+  return <fieldset className="planner-time-picker" disabled={disabled}>
+    <legend>ساعت یادآوری</legend>
+    <div className="planner-time-controls">
+      <select dir="ltr" aria-label="انتخاب ساعت یادآوری" value={hour}
+        onChange={event => onChange(event.target.value ? `${event.target.value}:${minute}` : '')}>
+        <option value="">بدون یادآوری</option>
+        {TIME_HOURS.map(value => <option key={value} value={value}>{value}</option>)}
+      </select>
+      <span aria-hidden="true">:</span>
+      <select dir="ltr" aria-label="انتخاب دقیقه یادآوری" value={minute} disabled={disabled || !hour}
+        onChange={event => onChange(`${hour}:${event.target.value}`)}>
+        {TIME_MINUTES.map(value => <option key={value} value={value}>{value}</option>)}
+      </select>
+    </div>
+  </fieldset>;
+}
 const createId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -305,10 +409,10 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
                 placeholder="یادداشت یا کار شخصی..."/></label>
               <label>توضیح اختیاری<textarea maxLength={3000} rows={2} value={notes}
                 onChange={event => setNotes(event.target.value)} placeholder="جزئیات خصوصی"/></label>
-              <CalendarField calendar={calendar} value={dueDate} onChange={setDueDate} label="تاریخ انجام"/>
-              <label>ساعت یادآوری در برنامه<input type="time" dir="ltr" value={remindTime}
-                onChange={event => setRemindTime(event.target.value)}
-                disabled={!dueDate}/></label>
+              <PlannerDatePicker calendar={calendar} value={dueDate} onChange={value => {
+                setDueDate(value); if (!value) setRemindTime('');
+              }} label="تاریخ انجام"/>
+              <PlannerTimePicker value={remindTime} onChange={setRemindTime} disabled={!dueDate}/>
               <label>تکرار<select value={frequency} onChange={event => setFrequency(event.target.value)}>
                 {REPEATS.map(repeat => <option key={repeat.id} value={repeat.id}>{repeat.name}</option>)}
               </select></label>
@@ -326,11 +430,11 @@ export function PlannerPanel({tasks = [], projects = [], calendar = 'jalali', on
                     onChange={event => setEditing({...editing, title: event.target.value})}/></label>
                   <label>توضیح<textarea rows={2} maxLength={3000} value={editing.notes}
                     onChange={event => setEditing({...editing, notes: event.target.value})}/></label>
-                  <CalendarField calendar={calendar} value={editing.dueDate}
-                    onChange={value => setEditing(current => ({...current, dueDate: value}))} label="تاریخ انجام"/>
-                  <label>ساعت یادآوری<input type="time" dir="ltr" value={editing.remindTime}
-                    disabled={!editing.dueDate}
-                    onChange={event => setEditing({...editing, remindTime: event.target.value})}/></label>
+                  <PlannerDatePicker calendar={calendar} value={editing.dueDate}
+                    onChange={value => setEditing(current => ({...current, dueDate: value,
+                      remindTime: value ? current.remindTime : ''}))} label="تاریخ انجام"/>
+                  <PlannerTimePicker value={editing.remindTime} disabled={!editing.dueDate}
+                    onChange={value => setEditing(current => ({...current, remindTime: value}))}/>
                   <label>تکرار<select value={editing.repeat.frequency}
                     onChange={event => setEditing({...editing,
                       repeat: {...editing.repeat, frequency: event.target.value, calendar}})}>

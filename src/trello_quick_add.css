@@ -1,0 +1,55 @@
+/* Card creation happens in the list, not a multi-field modal. */
+.kanban-lane .lane-quick-add {
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  margin:6px 9px 11px;
+  min-width:0;
+  flex:none;
+  border:0;
+  background:transparent;
+}
+.lane-quick-add textarea {
+  width:100%;
+  min-height:78px;
+  max-height:200px;
+  resize:vertical;
+  box-sizing:border-box;
+  padding:12px;
+  border:1px solid var(--vs-edge,#cbd4df);
+  border-radius:11px;
+  color:var(--vs-ink,#1e293b);
+  background:var(--vs-well,#fff);
+  font:inherit;
+  font-size:12px;
+  line-height:1.8;
+  box-shadow:0 2px 10px #00000012;
+}
+.lane-quick-add textarea:focus-visible {
+  outline:2px solid var(--vs-accent,#7995da);
+  outline-offset:1px;
+  border-radius:11px;
+}
+.lane-quick-add__actions {display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.lane-quick-add__save {
+  display:inline-flex;align-items:center;gap:6px;
+  border:0;border-radius:9px;padding:9px 12px;
+  font:inherit;font-size:11px;font-weight:750;cursor:pointer;
+  color:#fff;background:var(--vs-accent,#567bd1);
+}
+.lane-quick-add__save:disabled {opacity:.55;cursor:not-allowed;}
+.lane-quick-add__cancel {
+  display:grid;place-items:center;
+  min-width:34px;min-height:34px;
+  border:0;border-radius:8px;color:var(--vs-ink,#273448);
+  background:transparent;cursor:pointer;
+}
+.lane-quick-add__cancel:hover {background:var(--vs-hover,#eef2f8);}
+.lane-quick-add__actions small {
+  color:var(--vs-muted,#7b899a);
+  font-size:9px;
+  line-height:1.4;
+}
+@media(max-width:600px) {
+  .lane-quick-add__actions small {flex:1 1 100%;}
+}

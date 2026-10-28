@@ -149,12 +149,11 @@ test('board SettingsPanel offers archived restore, not duplicate list management
   assert.doesNotMatch(renderSettings(state, 'board-a', false), /aria-label="بازیابی ستون/);
 });
 
-test('global SettingsPanel disables delete when a board status references a stage', () => {
+test('global SettingsPanel removes redundant stage controls but keeps stage data untouched', () => {
   const state = makeState();
   const html = renderSettings(state, null);
-  assert.match(html, /مرحله در وضعیت کارت‌های بردهای دیگر استفاده شده است/);
-  assert.match(html, /aria-label="حذف ستون ورودی"/);
+  assert.doesNotMatch(html, /مراحل عمومی|مدیریت ستون‌ها و مراحل برد|aria-label="حذف ستون ورودی"/);
+  assert.deepEqual(state.stages.map(stage => stage.id), ['inbox', 'active', 'done']);
   const code = fs.readFileSync(path.join(root, 'src/features.jsx'), 'utf8');
-  assert.match(code, /key=\{stage\.id\}/);
-  assert.match(code, /if\(editing===id\)setEditing\(''\)/);
+  assert.match(code, /مدیریت بازیابی ستون‌های بایگانی‌شده/);
 });

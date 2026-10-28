@@ -8,6 +8,9 @@ export const PRIORITY_EFFECTS=[
   ['pulse','ضربان'],['glow','هاله نور'],['solid','پس‌زمینه رنگی']
 ];
 export const isHexColor=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
+// Legacy user data can still contain the old name. Rename its presentation,
+// keeping the priority ID (which cards and permissions reference) unchanged.
+const displayPriorityLabel=label=>label==='بحرانی'?'فوری':label;
 export const priorityDefs=settings=>{
   const stored=settings?.priorityDefinitions;
   if(!Array.isArray(stored))return DEFAULT_PRIORITIES.map(item=>({...item}));
@@ -18,7 +21,8 @@ export const priorityDefs=settings=>{
     if(!/^(low|medium|high|p-[a-z0-9]{3,32})$/.test(value.id))continue;
     if(normalized.length===30)break;
     seen.add(value.id);
-    normalized.push({id:value.id,label:typeof value.label==='string'&&value.label.trim()?value.label.trim().slice(0,60):value.id,
+    const label=typeof value.label==='string'&&value.label.trim()?value.label.trim().slice(0,60):value.id;
+    normalized.push({id:value.id,label:displayPriorityLabel(label),
       color:isHexColor(value.color)?value.color.toLowerCase():'#94a3b8',
       effect:PRIORITY_EFFECTS.some(([k])=>k===value.effect)?value.effect:'none'});
   }

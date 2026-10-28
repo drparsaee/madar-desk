@@ -74,22 +74,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
            {canManage&&<div className="stage-manage-actions"><button type="button" onClick={()=>onRestoreList?.(stage.id)} title="بازیابی ستون بدون تغییر کارت‌ها" aria-label={'بازیابی ستون '+stage.label}><RotateCcw size={16}/></button></div>}
          </div>)}</div>:<p>ستون بایگانی‌شده‌ای برای بازیابی وجود ندارد.</p>}
        </div>
-     </details>:<details className="settings-density__disclosure"><summary><span><Layers3 size={17}/> مدیریت ستون‌ها و مراحل برد</span><small>{stages.length.toLocaleString('fa-IR')} مرحله عمومی، ترتیب و رنگ</small></summary>
-     <div className="setting-block"><h3><Layers3 size={17}/> مراحل عمومی</h3><p>ترتیب مراحل عمومی با فلش‌ها تغییر می‌کند. مدیریت ستون‌های هر برد از منوی همان ستون انجام می‌شود.</p>
-       <div className="stage-manager">{stages.map((stage,i)=><div className="stage-manage-row" key={stage.id}>
-         <span className="stage-color" style={{background:stage.color}}/>
-         <input className="stage-color-picker" type="color" aria-label={'رنگ ستون '+stage.label} title={'رنگ ستون '+stage.label} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'} disabled={!canManage} onChange={e=>updateStage(stage.id,{color:e.target.value})}/>
-         {editing===stage.id?<div className="stage-edit-fields"><input aria-label="نام ستون" maxLength={100} value={label} onChange={e=>setLabel(e.target.value)}/><input aria-label="توضیح ستون" value={subtitle} onChange={e=>setSubtitle(e.target.value)}/></div>:<span className="stage-manage-label"><strong>{stage.label}</strong><small>{stage.archived===true?'بایگانی‌شده · ':''}{stage.subtitle}</small></span>}
-         {canManage&&<div className="stage-manage-actions" role="group" aria-label={'عملیات ستون '+stage.label}>
-           {editing===stage.id?<button onClick={()=>{if(label.trim())updateStage(stage.id,{label:label.trim(),subtitle:subtitle.trim()});setEditing('');}} title="ذخیره" aria-label={'ذخیره ستون '+stage.label}><Check size={16}/></button>:<button onClick={()=>{setEditing(stage.id);setLabel(stage.label);setSubtitle(stage.subtitle||'');}} title="ویرایش" aria-label={'ویرایش ستون '+stage.label}>ویرایش</button>}
-           <button onClick={()=>moveStage(stage.id,-1)} disabled={i===0} title="انتقال به مرحله قبل" aria-label={'انتقال ستون '+stage.label+' به مرحله قبل'}><ArrowUp size={15}/></button>
-           <button onClick={()=>moveStage(stage.id,1)} disabled={i===stages.length-1} title="انتقال به مرحله بعد" aria-label={'انتقال ستون '+stage.label+' به مرحله بعد'}><ArrowDown size={15}/></button>
-           <button onClick={()=>{if(window.confirm('این مرحله حذف شود و کارهای قدیمی آن منتقل شوند؟'))deleteStage(stage.id);}} disabled={stages.length===1||stage.archived===true||stages.filter(item=>item.archived!==true).length<=1||usedByBoard(stage.id)} title={usedByBoard(stage.id)?'مرحله در وضعیت کارت‌های بردهای دیگر استفاده شده است':'حذف'} aria-label={'حذف ستون '+stage.label}><Trash2 size={15}/></button>
-         </div>}
-       </div>)}</div>
-       {canManage&&<div className="stage-new"><input value={name} maxLength={100} aria-label="نام ستون جدید" onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addStage()} placeholder="نام ستون جدید..."/><button className="btn primary" disabled={!name.trim()} onClick={addStage}><Plus size={15}/> افزودن ستون</button></div>}
-     </div>
-     </details>}
+     </details>:null}
      <p className="setting-foot">فونت داخلی برنامه: وزیرمتن · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>
    </div>
  </section></div>;

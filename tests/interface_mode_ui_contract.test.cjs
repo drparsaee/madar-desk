@@ -170,7 +170,10 @@ test('integration: assigned LAN display role controls App instead of local user 
   assert.match(app,/const displayScope=resolvedDisplayScope\(lanStatus\)/);
   assert.match(app,/const show=feature=>isManagedFeatureVisible\(displayScope,feature,\{canManage,canEdit\}\)/);
   assert.equal(matching('InterfaceModeSelector').length,0,'end users must not choose their own display clearance');
-  assert.match(app,/displayScope\.label/);
+  assert.doesNotMatch(app,/className="interface-mode-selector interface-mode-selector--compact"/,
+    'retired role explainer must not take space in the task sidebar');
+  assert.match(app,/const interfaceMode=displayScope\.mode/,
+    'LAN display scope still governs capabilities without a redundant label');
 });
 
 test('integration: advanced screens and their mounted panels are tier-gated', {skip:pending},()=>{

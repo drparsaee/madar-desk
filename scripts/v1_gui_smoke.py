@@ -48,8 +48,8 @@ INTERACTIVE_REQUIRED = (
     "accounting_currency_rial_display",
     "close_accounting_workspace", "accounting_workspace_closed",
     "finance_unchanged", "standalone_unchanged",
-    "create_task_opens", "create_task_dialog", "fill_task_title",
-    "create_task_submit", "new_task_drawer", "task_saved_to_host",
+    "create_task_opens", "create_card_composer", "fill_task_title",
+    "create_task_submit", "new_card_visible", "task_saved_to_host",
     "finance_unchanged_after_task", "standalone_unchanged_after_task",
 )
 

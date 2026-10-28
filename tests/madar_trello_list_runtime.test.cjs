@@ -25,7 +25,7 @@ async function freePort(){return new Promise((resolve,reject)=>{
     const port=s.address().port;s.close(e=>e?reject(e):resolve(port));
   });
 });}
-test('Trello board opens and stage added in settings/board appears in live card dropdown, without changing old card',
+test('Trello board opens and stage added from the board appears in live card dropdown, without changing old card',
   {skip:!runnable,timeout:60000},async()=>{
     const {preview}=await import('vite');
     const {chromium}=require(playwrightHome);
@@ -40,25 +40,30 @@ test('Trello board opens and stage added in settings/board appears in live card 
       await page.goto(new URL('index.html',server.resolvedUrls.local[0]).href,{waitUntil:'domcontentloaded'});
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
 
-      // Legacy/global stage settings remain compatible with real boards.
+      // Global stage management is intentionally retired; lanes belong to
+      // their own board, exactly like Trello.
       await page.getByRole('button',{name:'تنظیمات مدار'}).click();
       const settings=page.getByRole('dialog',{name:'تنظیمات مدار'});
-      await settings.getByText('مدیریت ستون‌ها و مراحل برد').click();
-      await settings.getByRole('textbox',{name:'نام ستون جدید'}).fill('ستون عمومی تازه');
-      await settings.getByRole('button',{name:'افزودن ستون'}).click();
+      assert.equal(await settings.getByText('مدیریت ستون‌ها و مراحل برد').count(),0);
       await settings.getByRole('button',{name:'بستن'}).click();
 
       // Top Board button cannot silently leave us in aggregate Overview.
       await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'}).getByRole('button',{name:'برد کارها'}).click();
       await page.getByRole('heading',{name:'برد واقعی آزمون'}).waitFor();
+      await page.getByRole('button',{name:'افزودن یک لیست دیگر'}).click();
+      await page.getByRole('textbox',{name:'نام ستون جدید'}).fill('ستون عمومی تازه');
+      await page.getByRole('button',{name:'افزودن لیست',exact:true}).click();
       assert.equal(await page.locator('.kanban-lane').count(),2);
       const globalLane=page.locator('.kanban-lane').filter({hasText:'ستون عمومی تازه'});
       await globalLane.locator('.lane-add-card').click();
-      const create=page.getByRole('dialog',{name:'ایجاد کار جدید'});
-      const options=await create.locator('select').filter({has:page.locator('option',{hasText:'ستون عمومی تازه'})}).locator('option').allTextContents();
-      assert.ok(options.includes('ستون عمومی تازه'),JSON.stringify(options));
-      await create.getByRole('textbox',{name:'عنوان کار'}).fill('کارت ستون جدید');
-      await create.getByRole('button',{name:'ایجاد کار'}).click();
+      const compose=globalLane.getByRole('form',{name:'افزودن کارت به ستون عمومی تازه'});
+      await compose.getByRole('textbox',{name:'عنوان کارت جدید'}).fill('کارت ستون جدید');
+      assert.equal(await page.getByRole('dialog',{name:'ایجاد کار جدید'}).count(),0);
+      await compose.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      const newCard=globalLane.getByRole('button',{name:'جزئیات کارت ستون جدید'});
+      await newCard.waitFor({state:'visible'});
+      assert.equal(await page.getByRole('dialog',{name:'جزئیات کار'}).count(),0);
+      await newCard.click();
       await page.getByRole('dialog',{name:'جزئیات کار'}).waitFor();
       await page.getByRole('button',{name:'بستن'}).last().click();
       await page.waitForFunction(()=>{
@@ -78,9 +83,20 @@ test('Trello board opens and stage added in settings/board appears in live card 
       await page.getByRole('button',{name:'افزودن لیست',exact:true}).click();
       const directLane=page.locator('.kanban-lane').filter({hasText:'ستون مستقل'});
       await directLane.locator('.lane-add-card').click();
-      const updatedOptions=await page.getByRole('dialog',{name:'ایجاد کار جدید'}).locator('select')
-        .filter({has:page.locator('option',{hasText:'ستون مستقل'})}).locator('option').allTextContents();
-      assert.ok(updatedOptions.includes('ستون مستقل'));
+      assert.equal(await directLane.getByRole('form',{name:'افزودن کارت به ستون مستقل'}).count(),1);
+      await directLane.getByRole('button',{name:'بستن افزودن کارت'}).click();
+      assert.equal(await directLane.locator('form.lane-quick-add').count(),0);
+      // Keyboard-only Trello flow: Enter creates, but never launches the
+      // full editor; details are available only when the card is opened.
+      await directLane.locator('.lane-add-card').click();
+      const title=directLane.getByRole('textbox',{name:'عنوان کارت جدید'});
+      await title.fill('کارت با صفحه‌کلید');
+      await title.press('Enter');
+      const keyboardCard=directLane.getByRole('button',{name:'جزئیات کارت با صفحه‌کلید'});
+      await keyboardCard.waitFor({state:'visible'});
+      assert.equal(await page.locator('.drawer[role=dialog]').count(),0);
+      await keyboardCard.click();
+      await page.getByRole('dialog',{name:'جزئیات کار'}).waitFor();
       assert.deepEqual(errors,[]);
     }finally{await browser?.close();await server.httpServer.close();}
   });

@@ -107,7 +107,8 @@ test('normal board, count, reporting, planner, suggestions and card editor exclu
   assert.match(appText,/activeTask\.deleted!==true&&<TaskEditor/);
   assert.match(appText,/ReportingPanel tasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
   assert.match(appText,/PlannerPanel tasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
-  assert.match(appText,/similarTasks\(draftTitle,tasks\.filter\(t=>t\.deleted!==true\)\)/);
+  assert.match(appText,/className="lane-quick-add"/);
+  assert.match(appText,/allTasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
   assert.match(appText,/allTasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
 });
 

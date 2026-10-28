@@ -59,6 +59,8 @@ import './kanban_compact.css';
 import './vitrea_shell.css';
 import './vitrea_navigation.css';
 import './vitrea_design_tokens.css';
+import './workspace_empty.css';
+import './trello_quick_add.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -571,6 +573,7 @@ export default function App(){
   const [editorId,setEditorId]=useState(null);
   const [adding,setAdding]=useState(null);
   const [projectModal,setProjectModal]=useState(false);
+  const [workspaceProjectToAttach,setWorkspaceProjectToAttach]=useState('');
   const [projectSettings,setProjectSettings]=useState(null);
   const [projectName,setProjectName]=useState('');
   const [cloudOpen,setCloudOpen]=useState(false);
@@ -614,7 +617,6 @@ export default function App(){
   const [draftPriority,setDraftPriority]=useState('medium');
   const [draftProject,setDraftProject]=useState('p-personal');
   const [draftStatus,setDraftStatus]=useState('inbox');
-  const [draftTemplate,setDraftTemplate]=useState(null);
   const ready=useRef(false);
   const dirty=useRef(false);
   const blocked=useRef(false);
@@ -692,7 +694,9 @@ export default function App(){
   const activeWorkspaceId=activeWorkspace?.id||null;
   const workspaceBoards=boards.filter(b=>!b.archived&&b.workspaceId===activeWorkspaceId);
   const workspaceProjectIds=new Set(workspaceBoards.map(b=>b.projectId));
-  const visibleProjects=boards.length?projects.filter(p=>workspaceProjectIds.has(p.id)):projects;
+  // Projects are global identities; a workspace only exposes projects linked
+  // through its own boards. Do not pretend an empty workspace owns old boards.
+  const visibleProjects=projects.filter(p=>workspaceProjectIds.has(p.id));
   const activeBoard=(workspaceBoards.find(b=>b.id===boardId&&b.projectId===selected)
                      ||(selected==='all'?null:workspaceBoards.find(b=>b.projectId===selected)))||null;
   const viewStages=activeBoard?activeBoardLists(activeBoard):stages;
@@ -767,9 +771,6 @@ export default function App(){
   }),[filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
-  const draftBoards=workspaceBoards.filter(b=>b.projectId===draftProject);
-  const draftSelectedBoard=draftBoards.find(b=>b.id===draftBoardId)||draftBoards[0];
-  const draftStages=draftSelectedBoard?activeBoardLists(draftSelectedBoard):stages;
   const change=next=>{if(!canEdit)return;dirty.current=true;setData(current=>{
     const newState=typeof next==='function'?next(current):next;
     if(blocked.current){try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}}
@@ -786,7 +787,13 @@ export default function App(){
       setToast(restore?'ستون و کارت‌های آن بازیابی شدند.':'ستون بایگانی شد؛ کارت‌ها و هزینه‌ها حفظ شدند.');
     }catch(e){setToast('عملیات ستون انجام نشد: '+e.message);}
   };
-  const selectWorkspace=id=>{setWorkspaceId(id);setSelected('all');setBoardId(null);setFilter('all');setAdvanced(a=>({...a,status:'all'}));};
+  const selectWorkspace=id=>{
+    setWorkspaceId(id);setSelected('all');setBoardId(null);setFilter('all');
+    setAdvanced(a=>({...a,status:'all'}));
+    // The workspace selector is a <select>, not a button: sidebar click
+    // delegation otherwise leaves its full-screen backdrop over the board.
+    setDesktopNavOpen(false);setMobileNavOpen(false);
+  };
   const openBoardView=()=>{
     // An explicit Board action must open a real board, not merely reselect an
     // already active "board" mode while the aggregate overview is shown.
@@ -917,17 +924,34 @@ export default function App(){
     projects.some(p=>p.id===t.projectId) &&
     (!t.boardId||boards.some(b=>b.id===t.boardId&&b.workspaceId===activeWorkspaceId)));
   const createTask=()=>{
-    if(!draftTitle.trim())return;
-    const template=draftTemplate;
-    const targetBoard=workspaceBoards.find(b=>b.id===draftBoardId&&b.projectId===draftProject)
-      ||(activeBoard?.projectId===draftProject?activeBoard:null)
-      ||workspaceBoards.find(b=>b.projectId===draftProject);
-    const availableStages=targetBoard?activeBoardLists(targetBoard):stages;
-    const stage=availableStages.some(s=>s.id===draftStatus)?draftStatus:availableStages[0]?.id;
-    if(!stage)return;
-    const t={id:uid(),projectId:draftProject,boardId:targetBoard?.id,listId:stage,title:draftTitle.trim(),description:template?.description||'',status:legacyStatusForStage(stage,stages)||stage,priority:draftPriority,dueDate:'',labels:template?[...template.labels]:[],checklist:template?template.checklist.map(s=>({...s,id:uid(),done:false,cost:0})):[],reports:[],assignees:[],costEnabled:null,fileLinks:[],estimatedMinutes:template?.estimatedMinutes||0,actualMinutes:0,cost:0,createdAt:now(),updatedAt:now()};
-    change(s=>{const next={...s,tasks:[t,...s.tasks]};return targetBoard?.id?moveCardInState(next,{cardId:t.id,toListId:stage,placement:'start'}):next;});
-    setAdding(null);setDraftTitle('');setDraftTemplate(null);setEditorId(t.id);setToast('کار جدید اضافه شد.');
+    const title=draftTitle.trim().replace(/\s+/g,' ');
+    if(!title||!adding)return;
+    const targetBoard=workspaceBoards.find(b=>b.id===adding.boardId&&b.projectId===adding.projectId);
+    if(!targetBoard||!visibleProjects.some(p=>p.id===adding.projectId)){
+      setToast('برای این فضای کاری ابتدا یک پروژه و برد انتخاب یا ایجاد کنید.');
+      setAdding(null);
+      return;
+    }
+    const availableStages=activeBoardLists(targetBoard);
+    const stage=availableStages.find(s=>s.id===adding.listId)?.id;
+    if(!stage){
+      setAdding(null);setToast('ستون مقصد دیگر فعال نیست؛ دوباره افزودن کارت را انتخاب کنید.');
+      return;
+    }
+    const t={id:uid(),projectId:adding.projectId,boardId:targetBoard.id,
+      listId:stage,title,description:'',status:legacyStatusForStage(stage,stages)||stage,
+      priority:'medium',dueDate:'',labels:[],checklist:[],reports:[],assignees:[],
+      costEnabled:null,fileLinks:[],estimatedMinutes:0,actualMinutes:0,cost:0,
+      createdAt:now(),updatedAt:now()};
+    change(s=>{
+      // The currently selected workspace and board must still own the list.
+      const board=s.boards.find(b=>b.id===targetBoard.id&&b.workspaceId===activeWorkspaceId&&!b.archived);
+      if(!board||!board.stages.some(item=>item.id===stage&&!item.archived))return s;
+      const next={...s,tasks:[t,...s.tasks]};
+      try{return moveCardInState(next,{cardId:t.id,toListId:stage,placement:'end'});}
+      catch{return s;}
+    });
+    setAdding(null);setDraftTitle('');setToast('کارت اضافه شد؛ برای تکمیل جزئیات روی آن کلیک کنید.');
   };
   const duplicateTask=template=>{
     const board=boards.find(b=>b.id===template.boardId);
@@ -952,13 +976,37 @@ export default function App(){
     setEditorId(t.id);setToast('تسک مشابه ساخته شد؛ هزینه‌ها و مراحل تکمیل‌شده منتقل نشدند.');
   };
   const openAdd=status=>{
+    if(!workspaceBoards.length){
+      setAdding(null);
+      setToast('این فضای کاری هنوز برد ندارد؛ ابتدا پروژه و برد بسازید.');
+      return;
+    }
     const projectId=selected==='all'?
       (workspaceBoards.find(b=>activeBoardLists(b).some(s=>s.id===status))?.projectId||visibleProjects[0]?.id||''):
       selected;
     const board=boardForColumn(workspaceBoards,projectId,status,activeBoard?.id);
-    const available=board?activeBoardLists(board):stages;
-    setDraftBoardId(board?.id||'');setDraftStatus(status&&available.some(s=>s.id===status)?status:available[0]?.id||stages[0]?.id);
-    setDraftPriority('medium');setDraftProject(projectId);setDraftTitle('');setDraftTemplate(null);setAdding(true);
+    if(!board||!activeBoardLists(board).some(stage=>stage.id===status)){
+      setToast('برای افزودن کارت، یکی از ستون‌های برد فعال را انتخاب کنید.');
+      return;
+    }
+    // The aggregate overview is never a card destination. Show the actual
+    // board first, then reveal the quick composer directly in its list.
+    setSelected(projectId);setBoardId(board.id);setMode('board');
+    setDraftBoardId(board.id);setDraftStatus(status);setDraftProject(projectId);
+    setDraftPriority('medium');setDraftTitle('');
+    setAdding({boardId:board.id,projectId,listId:status});
+  };
+  const attachExistingProject=projectId=>{
+    if(!canManage||!activeWorkspaceId)return;
+    const project=projects.find(p=>p.id===projectId);
+    if(!project)return;
+    // A new board in this workspace may reuse a project identity, but must
+    // never move existing boards or cards (and their financial references).
+    const board=makeBoard(project,activeWorkspaceId,stages);
+    changeAdmin(s=>({...s,boards:[...(s.boards||[]),board]}));
+    setSelected(project.id);setBoardId(board.id);setMode('board');
+    setWorkspaceProjectToAttach('');
+    setToast('برد این پروژه در فضای کاری فعلی ساخته شد؛ کارت‌ها و هزینه‌های قبلی جابه‌جا نشدند.');
   };
   const createProject=()=>{
     if(!projectName.trim())return;
@@ -1206,11 +1254,6 @@ export default function App(){
         </details>}
       </div>}
       <div className="sidebar-bottom">
-        <div className="interface-mode-selector interface-mode-selector--compact" dir="rtl" role="status">
-          <strong className="interface-mode-selector__label">نقش و نمای اختصاص‌یافته</strong>
-          <span className="interface-mode-selector__description">{displayScope.label}</span>
-          <small className="interface-mode-selector__description">تنظیم نقش و امکانات هر حساب فقط توسط مدیرکل از بخش «شبکه محلی و کاربران» انجام می‌شود.</small>
-        </div>
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری و Drive <ArrowUpLeft size={15}/></button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات و مراحل برد</button>
         <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
@@ -1273,7 +1316,7 @@ export default function App(){
           <div className="stat-card"><div className="stat-icon waiting"><ClipboardCheck size={19}/></div><span>منتظر بررسی</span><strong>{counts.review.toLocaleString('fa-IR')}</strong><small>نیازمند توجه</small></div>
           <div className="stat-card"><div className="stat-icon completed"><CheckCheck size={19}/></div><span>انجام‌شده</span><strong>{counts.done.toLocaleString('fa-IR')}</strong><small>موفق و تمام</small></div>
         </div>}
-        <section className="board-section">
+        {workspaceBoards.length ? <section className="board-section">
           <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
@@ -1281,7 +1324,32 @@ export default function App(){
               <div className="lane-head"><div className="lane-heading">{show('boardAdministration')&&<button className="stage-drag-handle" type="button" draggable title={'کشیدن و جابه‌جایی ستون '+stage.label} aria-label={'جابجایی ستون '+stage.label} onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-madar-stage',stage.id);e.dataTransfer.setData('text/plain','madar-stage:'+stage.id);}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[i+(e.key==='ArrowLeft'?1:-1)];if(target)reorderStage(stage.id,target.id);}}}><GripVertical size={16}/></button>}<span className="stage-dot" style={{background:stage.color}}/><strong>{stage.label}</strong><span className="lane-count">{items.length.toLocaleString('fa-IR')}</span></div><div className="lane-stage-actions"><LaneActionsMenu stage={stage} count={tasks.filter(task=>task.boardId===activeBoard?.id&&task.listId===stage.id&&task.deleted!==true).length} canManage={canManage&&show('boardAdministration')} canEdit={canEdit} index={viewStages.indexOf(stage)} total={viewStages.length} onSave={fields=>updateStagePresentation(stage.id,fields)} onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}} onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined} onAddCard={()=>openAdd(stage.id)}/></div></div>
               <div className="lane-subtitle">{stage.subtitle}</div>
               <ProgressiveLane items={items} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local'].join('|')} regionId={'madar-lane-'+viewStages.indexOf(stage)} label={stage.label} renderCard={(t,i)=><TaskCard key={t.id} task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleStep={toggleChecklistStep}/>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
-              {canEdit&&<button type="button" className="lane-add-card" onClick={()=>openAdd(stage.id)}><Plus size={16}/> افزودن کارت</button>}
+              {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id?
+                <form className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
+                  onSubmit={event=>{event.preventDefault();createTask();}}>
+                  <textarea autoFocus rows={3} maxLength={300} required
+                    aria-label="عنوان کارت جدید"
+                    placeholder="عنوان کارت را بنویسید…"
+                    value={draftTitle} onChange={event=>setDraftTitle(event.target.value)}
+                    onKeyDown={event=>{
+                      if(event.key==='Escape'){
+                        event.preventDefault();setAdding(null);setDraftTitle('');
+                      }else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){
+                        event.preventDefault();if(draftTitle.trim())createTask();
+                      }
+                    }}/>
+                  <div className="lane-quick-add__actions">
+                    <button type="submit" className="lane-quick-add__save"
+                      disabled={!draftTitle.trim()}><Plus size={15}/> افزودن کارت</button>
+                    <button type="button" className="lane-quick-add__cancel"
+                      title="انصراف" aria-label="بستن افزودن کارت"
+                      onClick={()=>{setAdding(null);setDraftTitle('');}}><X size={19}/></button>
+                    <small>Enter: افزودن · Shift+Enter: خط جدید</small>
+                  </div>
+                </form>:
+                <button type="button" className="lane-add-card" onClick={()=>openAdd(stage.id)}>
+                  <Plus size={16}/> افزودن کارت
+                </button>)}
             </section>;
           })}
           {canManage&&show('boardAdministration')&&
@@ -1300,7 +1368,26 @@ export default function App(){
                 <button type="button" className="kanban-add-list__trigger" onClick={()=>setAddingLane(true)}><Plus size={20}/> افزودن یک لیست دیگر</button>}
             </div>}
         </div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
-        </section>
+        </section> : <section className="workspace-empty-board" aria-label="راه‌اندازی برد فضای کاری">
+          <LayoutGrid size={26} aria-hidden="true"/>
+          <h2>این فضای کاری هنوز بردی ندارد</h2>
+          <p>کارت‌ها داخل ستون‌های یک برد ساخته می‌شوند. ابتدا برای این فضا یک پروژه و برد بسازید یا پروژه موجود را به این فضا اضافه کنید.</p>
+          {canManage&&<div className="workspace-empty-board__actions">
+            <button className="btn primary" type="button" onClick={()=>{setProjectName('');setProjectModal(true);}}>
+              <Plus size={17}/> ساخت پروژه و برد
+            </button>
+            {projects.length>0&&<div className="workspace-empty-board__attach">
+              <label htmlFor="madar-workspace-project">پروژه موجود</label>
+              <select id="madar-workspace-project" value={workspaceProjectToAttach||projects[0]?.id||''}
+                onChange={event=>setWorkspaceProjectToAttach(event.target.value)}>
+                {projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}
+              </select>
+              <button type="button" className="btn secondary"
+                onClick={()=>attachExistingProject(workspaceProjectToAttach||projects[0]?.id)}>
+                <Plus size={16}/> ساخت برد در این فضا</button>
+            </div>}
+          </div>}
+        </section>}
         <footer className="app-footer"><span>مدار · نسخه آزمایشی {packageInfo.version}</span><span>برای تست کاربر؛ اطلاعات واقعی وارد نکنید</span></footer>
       </div>
     </main>
@@ -1330,7 +1417,7 @@ export default function App(){
     {show('automationRules')&&rulesOpen&&selectedProject&&<RulesPanel api={api} project={selectedProject} users={users} onClose={()=>setRulesOpen(false)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
     {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onDelete={()=>deleteTask(activeTask.id)}/>}
-    {adding&&<Modal title="ایجاد کار جدید" onClose={()=>setAdding(null)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createTask();}}><label>عنوان کار<input autoFocus value={draftTitle} onChange={e=>{setDraftTitle(e.target.value);setDraftTemplate(null);}} maxLength={300} placeholder="مثلاً: آماده‌کردن گزارش پروژه" required/></label>{similarTasks(draftTitle,tasks.filter(t=>t.deleted!==true)).length>0&&<div className="similar-suggestions"><strong><Copy size={15}/> کار مشابه پیدا شد</strong>{similarTasks(draftTitle,tasks.filter(t=>t.deleted!==true)).map(({task:t,score})=><button type="button" key={t.id} onClick={()=>{setDraftTemplate(t);setDraftTitle(t.title);}}>{t.title} <small>{Math.round(score*100)}٪ مشابه</small></button>)}{draftTemplate&&<small>از چک‌لیست و توضیحات این کار به عنوان الگو استفاده خواهد شد؛ هزینه‌ها صفر می‌شوند.</small>}</div>}<div className="form-grid"><label>پروژه<select value={draftProject} onChange={e=>{const project=e.target.value;const board=workspaceBoards.find(b=>b.projectId===project);const first=board?activeBoardLists(board)[0]:null;setDraftProject(project);setDraftBoardId(board?.id||'');setDraftStatus(first?.id||stages[0]?.id);}}>{visibleProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{draftBoards.length>1&&<label>برد<select value={draftSelectedBoard?.id||''} onChange={e=>{const board=draftBoards.find(b=>b.id===e.target.value);setDraftBoardId(e.target.value);setDraftStatus(board?activeBoardLists(board)[0]?.id||'':'');}}>{draftBoards.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}<label>مرحله<select value={draftStages.some(s=>s.id===draftStatus)?draftStatus:draftStages[0]?.id||''} onChange={e=>setDraftStatus(e.target.value)}>{draftStages.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></label></div><label>اولویت<select value={draftPriority} onChange={e=>setDraftPriority(e.target.value)}>{priorities.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setAdding(null)}>انصراف</button><button className="btn primary" type="submit" disabled={!draftTitle.trim()||(isDesktop&&!draftSelectedBoard)}><Plus size={17}/> ایجاد کار</button></div></form></Modal>}
+
     {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}

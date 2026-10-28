@@ -213,32 +213,33 @@ def run_ui_flow(window, bridge):
       const btn=document.querySelector('.kanban-lane .lane-add-card');
       if(!btn||btn.disabled)return false;btn.click();return true;
     """, timeout=4)
-    check('create_task_dialog', """
-      return !!document.querySelector('.dialog[role=dialog] form.task-create');
+    check('create_card_composer', """
+      return !!document.querySelector('.kanban-lane form.lane-quick-add textarea')
+        && !document.querySelector('.dialog[role=dialog] form.task-create');
     """, timeout=4)
-    if not passed('create_task_opens', 'create_task_dialog'):
+    if not passed('create_task_opens', 'create_card_composer'):
         return results
     check('fill_task_title', """
-      const i=document.querySelector('.task-create input[required]');
+      const i=document.querySelector('.lane-quick-add textarea[required]');
       if(!i)return false;
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')
         .set.call(i,'آزمون رابط تست کاربر مدار QA');
       i.dispatchEvent(new Event('input',{bubbles:true}));return true;
     """)
     time.sleep(0.2)
     check('create_task_submit', """
-      const btn=document.querySelector('.task-create button[type=submit]');
+      const btn=document.querySelector('.lane-quick-add button[type=submit]');
       if(!btn||btn.disabled)return false;btn.click();return true;
     """)
     if not passed('fill_task_title', 'create_task_submit'):
         return results
-    check('new_task_drawer', """
-      const d=document.querySelector('.drawer[role=dialog]');
-      return !!d && d.querySelector('.task-edit-title')?.value===
-        'آزمون رابط تست کاربر مدار QA';
+    check('new_card_visible', """
+      const card=[...document.querySelectorAll('.kanban-lane .task-card')]
+        .find(c=>c.getAttribute('aria-label')==='جزئیات آزمون رابط تست کاربر مدار QA');
+      return !!card && !document.querySelector('.drawer[role=dialog]');
     """, timeout=8)
     try:
-        # The React editor opens optimistically; persistence is debounced by
+        # The React card appears optimistically; persistence is debounced by
         # 320 ms and the asynchronous host write can finish still later.
         # Poll only authoritative host state. An unsaved UI card never passes.
         deadline = time.monotonic() + 8.0
