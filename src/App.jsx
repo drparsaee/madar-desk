@@ -218,6 +218,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
+  const [customFieldsOpen,setCustomFieldsOpen]=useState(()=>Boolean(boards.find(board=>board.id===task.boardId)?.customFields?.length));
   const [automationButtonsOpen,setAutomationButtonsOpen]=useState(false);
   const drawerRef=useRef(null);
   const onCloseRef=useRef(onClose);
@@ -317,14 +318,33 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <summary><span>کاور کارت</span>{task.cover&&<small>فعال</small>}</summary>
         <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
       </details>
-      {showOperations&&taskBoard&&<details className="task-optional-block" defaultOpen={Boolean(taskBoard.customFields?.length)}>
-        <summary><span>فیلدهای سفارشی و تنظیمات برد</span>{!!taskBoard.customFields?.length&&<small>{taskBoard.customFields.length} فیلد</small>}</summary>
-        <div className="edit-section"><CardCustomFields task={task} board={taskBoard} calendar={calendar} disabled={!canEdit} onChange={update}/>{canManage&&<BoardFieldEditor board={taskBoard} tasks={allTasks} templates={allTemplates} disabled={!canManage} onChange={onBoardChange}/>}</div>
+      {showOperations&&taskBoard&&<details className="task-optional-block task-card-custom-fields" open={customFieldsOpen} onToggle={event=>setCustomFieldsOpen(event.currentTarget.open)}>
+        <summary><span>فیلدهای سفارشی</span>{!!taskBoard.customFields?.length&&<small>{taskBoard.customFields.length} فیلد</small>}</summary>
+        <div className="edit-section"><CardCustomFields task={task} board={taskBoard} calendar={calendar} disabled={!canEdit} onChange={update}/>
+          {canManage&&<details className="task-board-field-settings">
+            <summary>مدیریت فیلدهای این برد</summary>
+            <BoardFieldEditor board={taskBoard} tasks={allTasks} templates={allTemplates} disabled={!canManage} onChange={onBoardChange}/>
+          </details>}
+        </div>
       </details>}
-      {priceEnabled&&<div className="edit-section"><h3>هزینه مستقیم کار</h3><MoneyField disabled={!canEdit} value={task.cost||0} label="هزینه مستقیم این کار" onChange={cost=>update({cost,costDate:task.costDate||(cost?todayISO():'')})}/><label className="expense-category-field">دسته هزینه<input maxLength={80} value={task.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک، چاپ، حمل‌ونقل" onChange={e=>update({costCategory:e.target.value})}/></label><CalendarField label="تاریخ هزینه مستقیم" calendar={calendar} value={task.costDate||''} disabled={!canEdit} onChange={costDate=>update({costDate})}/><p className="money-help">تاریخ واردشده برای گزارش هزینه در بازه زمانی استفاده می‌شود. هزینه‌های قدیمی بدون تاریخ اختصاصی با تاریخ آخرین ویرایش کارت گزارش می‌شوند.</p></div>}
+      {priceEnabled&&<div className="edit-section task-direct-cost-fields"><h3>هزینه مستقیم کار</h3><MoneyField disabled={!canEdit} value={task.cost||0} label="هزینه مستقیم این کار" onChange={cost=>update({cost,costDate:task.costDate||(cost?todayISO():'')})}/><label className="expense-category-field">دسته هزینه<input maxLength={80} value={task.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک، چاپ، حمل‌ونقل" onChange={e=>update({costCategory:e.target.value})}/></label><CalendarField label="تاریخ هزینه مستقیم" calendar={calendar} value={task.costDate||''} disabled={!canEdit} onChange={costDate=>update({costDate})}/><p className="money-help">تاریخ واردشده برای گزارش هزینه در بازه زمانی استفاده می‌شود. هزینه‌های قدیمی بدون تاریخ اختصاصی با تاریخ آخرین ویرایش کارت گزارش می‌شوند.</p></div>}
       <div className="edit-section" id="task-section-tags" tabIndex={-1}><h3><Tag size={17}/> برچسب</h3><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>
       <div className="edit-section" id="task-section-checklist" tabIndex={-1}><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
-        <div className="step-list">{task.checklist.map(c=><div className="step-row" key={c.id}><button disabled={!canEdit} className={'step-check '+(c.done?'checked':'')} aria-label={'تغییر وضعیت '+c.text} onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>{c.done&&<Check size={14}/>}</button><span className={c.done?'completed':''}>{c.text}</span>{priceEnabled&&<div className="step-cost-fields"><MoneyField disabled={!canEdit} value={c.cost||0} label={'هزینه مرحله '+c.text} onChange={cost=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,cost,costDate:i.costDate||(cost?todayISO():'')}:i)})}/><input aria-label={'دسته هزینه مرحله '+c.text} maxLength={80} value={c.costCategory||''} disabled={!canEdit} placeholder="دسته هزینه؛ مثلاً پیک" onChange={e=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costCategory:e.target.value}:i)})}/><CalendarField label={'تاریخ هزینه مرحله '+c.text} calendar={calendar} value={c.costDate||''} disabled={!canEdit} onChange={costDate=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costDate}:i)})}/></div>}<button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button></div>)}</div>
+        <div className="step-list">{task.checklist.map(c=><div className="task-compact-step" key={c.id}>
+          <div className="step-row">
+            <button disabled={!canEdit} className={'step-check '+(c.done?'checked':'')} aria-label={'تغییر وضعیت '+c.text} onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>{c.done&&<Check size={14}/>}</button>
+            <span className={c.done?'completed':''}>{c.text}</span>
+            <button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button>
+          </div>
+          {priceEnabled&&<details className="task-step-cost-disclosure">
+            <summary>هزینه مرحله{Number(c.cost||0)>0?' · '+money(c.cost)+' تومان':''}{!c.cost&&(c.costCategory||c.costDate)?' · دارای جزئیات':''}</summary>
+            <div className="step-cost-fields">
+              <label className="task-step-money-label">مبلغ<MoneyField disabled={!canEdit} value={c.cost||0} label={'هزینه مرحله '+c.text} onChange={cost=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,cost,costDate:i.costDate||(cost?todayISO():'')}:i)})}/></label>
+              <label>دسته هزینه<input aria-label={'دسته هزینه مرحله '+c.text} maxLength={80} value={c.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک" onChange={e=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costCategory:e.target.value}:i)})}/></label>
+              <CalendarField label={'تاریخ هزینه مرحله '+c.text} calendar={calendar} value={c.costDate||''} disabled={!canEdit} onChange={costDate=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costDate}:i)})}/>
+            </div>
+          </details>}
+        </div>)}</div>
         {canManage&&task.checklist.map(step=><details key={step.id} className="task-optional-block task-step-expenses" defaultOpen={!!step.expenseItems?.length}>
           <summary>هزینه‌های مستقل مرحله: {step.text}{!!step.expenseItems?.length&&<small>{step.expenseItems.length} مورد</small>}</summary>
           <StageExpenseFields task={task} step={step}

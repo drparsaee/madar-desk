@@ -176,6 +176,61 @@
 .drawer .assignee-picker{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}
 .drawer .assignee-picker label{padding:7px 9px;min-height:38px}
 .drawer :is(.step-cost-fields,.time-inputs){gap:8px}
+/* Card values are frequent edits; board-wide definitions are a separate action. */
+.drawer .task-card-custom-fields > .edit-section{display:grid;gap:10px}
+.drawer .task-card-custom-fields .cardextras{gap:7px}
+.drawer .task-card-custom-fields .cardextras > h3{font-size:12px;margin:0 0 2px}
+.drawer .task-card-custom-fields .cardextras-field{gap:3px}
+.drawer .task-card-custom-fields .cardextras-field label,
+.drawer .task-card-custom-fields .cardextras-field .calendar-field{
+  display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr);
+  align-items:center;gap:8px;color:var(--text,#344b69);
+  font-size:12px;font-weight:650;
+}
+.drawer .task-card-custom-fields .cardextras-field :is(input:not([type="checkbox"]),select){
+  width:100%;min-height:34px;padding:6px 9px;
+}
+.drawer .task-card-custom-fields .cardextras-field label:has(input[type="checkbox"]){display:flex;gap:8px}
+.drawer .task-card-custom-fields .cardextras-field .calendar-field > label{display:block}
+.drawer .task-board-field-settings{border-top:1px solid var(--border,#e4eaf2);padding-top:7px}
+.drawer .task-board-field-settings > summary{cursor:pointer;color:var(--text,#425b7b);font-size:12px;font-weight:700;padding:7px 0}
+.drawer .task-board-field-settings > summary:focus-visible,
+.drawer .task-step-cost-disclosure > summary:focus-visible{outline:2px solid #467fd3;outline-offset:2px;border-radius:4px}
+.drawer .task-board-field-settings > .cardextras{margin-top:8px}
+.drawer .task-direct-cost-fields{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px 9px;align-items:end;
+}
+.drawer .task-direct-cost-fields > h3,
+.drawer .task-direct-cost-fields > .money-help{grid-column:1/-1;margin:0}
+.drawer .task-direct-cost-fields > .money-input{min-height:35px;margin:0}
+.drawer .task-direct-cost-fields > .expense-category-field{max-width:none;margin:0;min-width:0;gap:4px}
+.drawer .task-direct-cost-fields > .calendar-field{min-width:0}
+.drawer .task-direct-cost-fields > .calendar-field label{font-size:11px}
+.drawer .task-direct-cost-fields :is(input,.money-input){width:100%;min-width:0;min-height:35px}
+.drawer .task-direct-cost-fields input{padding:6px 8px;font-size:11px}
+.drawer .task-direct-cost-fields .money-input input{min-height:20px;padding:2px 0}
+.drawer .task-direct-cost-fields .money-help{line-height:1.5;font-size:10px}
+.drawer .task-compact-step{padding:3px 9px 5px;border:1px solid var(--border,#e4eaf2);border-radius:9px;min-width:0}
+.drawer .task-compact-step .step-row{gap:8px;padding:3px 0;min-height:30px}
+.drawer .task-compact-step .step-row > span{min-width:0;overflow-wrap:anywhere}
+.drawer .task-step-cost-disclosure{margin:0 0 0 30px;font-size:11px}
+.drawer .task-step-cost-disclosure > summary{cursor:pointer;color:var(--text,#59708d);padding:3px 0;min-height:24px;font-weight:600}
+.drawer .task-compact-step .step-cost-fields{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;min-width:0;max-width:none;padding:8px 0 5px;
+}
+.drawer .task-compact-step .step-cost-fields > label,
+.drawer .task-compact-step .step-cost-fields > .calendar-field{
+  display:flex;flex-direction:column;min-width:0;gap:4px;
+  color:var(--text,#536781);font-size:11px;font-weight:650;
+}
+.drawer .task-compact-step .step-cost-fields :is(input,.money-input){width:100%;min-width:0;min-height:33px}
+.drawer .task-compact-step .step-cost-fields input{padding:6px 8px;font-size:11px}
+.drawer .task-compact-step .step-cost-fields .money-input input{min-height:20px;padding:2px 0}
+.drawer .task-compact-step .step-cost-fields .calendar-field > label{font-size:11px;color:inherit}
+.drawer .task-compact-step .step-cost-fields .calendar-field > label small{font-size:10px}
+.drawer .task-compact-step .step-cost-fields .field-error{font-size:10px}
 .drawer [id^="task-section-"]{
   scroll-margin-top:80px;
   outline-offset:3px;
@@ -209,6 +264,15 @@
 :root[data-theme="dark"] .drawer .task-optional-block[open] > summary{
   border-color:#39506b;
 }
+:root[data-theme="dark"] .drawer .task-card-custom-fields .cardextras-field :is(label,.calendar-field),
+:root[data-theme="dark"] .drawer .task-card-custom-fields .cardextras > h3,
+:root[data-theme="dark"] .drawer .task-board-field-settings > summary,
+:root[data-theme="dark"] .drawer .task-step-cost-disclosure > summary,
+:root[data-theme="dark"] .drawer .task-compact-step .step-cost-fields > label,
+:root[data-theme="dark"] .drawer .task-compact-step .step-cost-fields > .calendar-field{color:#dce9f9}
+:root[data-theme="dark"] .drawer .task-card-custom-fields .cardextras-field :is(input:not([type="checkbox"]),select),
+:root[data-theme="dark"] .drawer .task-compact-step .step-cost-fields :is(input,.money-input),
+:root[data-theme="dark"] .drawer .task-direct-cost-fields :is(input,.money-input){background:#152236;color:#e0ecfb;border-color:#39506b}
 @media(max-width:720px){
   .drawer{width:min(100%,620px)}
   .drawer .edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -223,6 +287,12 @@
   .drawer .edit-grid{gap:7px}
   .drawer .edit-grid :is(input,select){font-size:12px}
   .drawer .assignee-picker{grid-template-columns:1fr}
+  .drawer .task-direct-cost-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .drawer .task-direct-cost-fields > .calendar-field{grid-column:1/-1}
+  .drawer .task-card-custom-fields .cardextras-field label,
+  .drawer .task-card-custom-fields .cardextras-field .calendar-field{grid-template-columns:minmax(0,1fr)}
+  .drawer .task-compact-step .step-cost-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .drawer .task-compact-step .step-cost-fields .calendar-field{grid-column:1/-1}
 }
 @media(max-width:359px){
   .drawer .edit-grid{grid-template-columns:minmax(0,1fr)}
