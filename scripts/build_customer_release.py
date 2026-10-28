@@ -16,9 +16,9 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE = ROOT / "release"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 STAMP = "20261028"
-NAME = "Madar-Desk-v1.0.0-Customer-20261028"
+NAME = "Madar-Desk-v1.0.1-Customer-20261028"
 SOURCE_EXE = RELEASE / (NAME + ".exe")
 PACKAGE = RELEASE / NAME
 ARCHIVE = RELEASE / (NAME + ".zip")
@@ -68,7 +68,7 @@ def main():
              "pause\r\n").encode("ascii")
         )
         (PACKAGE / "START-HERE.txt").write_text(
-            "مدار | نسخه 1.0.0 برای استفادهٔ کاربر\n"
+            "مدار | نسخه 1.0.1 برای استفادهٔ کاربر\n"
             "\n"
             "۱) فایل ZIP را کاملاً از حالت فشرده خارج کنید.\n"
             "۲) همه پنجره‌های مدار و سرویس MadarHost را ببندید.\n"
@@ -76,8 +76,9 @@ def main():
             "۴) برنامه را از منوی Start ویندوز با نام «مدار» اجرا کنید.\n"
             "۵) داده‌های اصلی به طور پیش‌فرض در %APPDATA%\\MadarDesk باقی می‌مانند.\n"
             "۶) هنگام نصب روی دادهٔ موجود، قبل از سوییچ نسخه بکاپ جداگانه ساخته می‌شود.\n"
-            "۷) داده‌های پوشه آزمایشی قدیمی Madar-UserTest-Data خودکار منتقل نمی‌شوند.\n"
-            "۸) برای گزارش مشکل، راهنمای Madar-Customer-Guide.md را بخوانید.\n"
+            "۷) در نصب تازه، یک فضای کاری خالی بدون پروژه، برد و کارت ایجاد می‌شود.\n"
+            "۸) داده‌های پوشه آزمایشی قدیمی Madar-UserTest-Data خودکار منتقل نمی‌شوند.\n"
+            "۹) برای گزارش مشکل، راهنمای Madar-Customer-Guide.md را بخوانید.\n"
             "\n"
             "پیش‌نیاز اجرا: Microsoft Edge WebView2 Runtime. فایل اجرایی امضای دیجیتال ندارد.\n"
             "ارتقای خودکار و ارسال خودکار گزارش خطا در این بسته فعال نیست.\n",

@@ -9,8 +9,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$version = '1.0.0'
-$exeName = 'Madar-Desk-v1.0.0-Customer-20261028.exe'
+$version = '1.0.1'
+$exeName = 'Madar-Desk-v1.0.1-Customer-20261028.exe'
 $manifestPath = Join-Path $PackageRoot 'Madar-Release-Manifest.json'
 $source = Join-Path $PackageRoot $exeName
 

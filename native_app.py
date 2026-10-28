@@ -303,6 +303,11 @@ def validate_links(links):
 
 
 def initial_state():
+    """Historical sample fixture; retained for explicit legacy QA/import tests.
+
+    Real first-run profiles use empty_initial_state(). Never seed examples into
+    customer profiles, including after changing executable versions.
+    """
     now = datetime.now(timezone.utc).isoformat()
     def task(n, title, status, priority, steps, summary=""):
         return {
@@ -329,6 +334,21 @@ def initial_state():
             task(4, "تعریف شیوه گزارش ایجنت", "planned", "low", []),
         ],
         "stages": [dict(s) for s in DEFAULT_STAGES],
+        "settings": {"theme": "light", "googleClientId": "", "costDefault": False},
+    }
+
+
+def empty_initial_state():
+    """Only a default workspace and the built-in column definitions."""
+    return {
+        "version": 1,
+        "workspaces": [
+            {"id": "workspace-legacy", "name": "فضای کاری من", "archived": False},
+        ],
+        "boards": [],
+        "projects": [],
+        "tasks": [],
+        "stages": [dict(stage) for stage in DEFAULT_STAGES],
         "settings": {"theme": "light", "googleClientId": "", "costDefault": False},
     }
 
@@ -440,7 +460,7 @@ class Bridge:
                 raise RuntimeError("اعتبار پایگاه داده فعال مدار تایید نشد؛ نوشتن متوقف شد.")
             self._unified_store = store
         if self._unified_store is None and not self.path.exists():
-            atomic_save(self.path, initial_state())
+            atomic_save(self.path, empty_initial_state())
         self.state = self._load()
         # Older Python callers use getState()/saveState() directly. Keep a
         # revision baseline for those callers; modern UI writes require an
@@ -2781,7 +2801,7 @@ def main():
                 # while writing the same report. Ordinary view-specific QA
                 # runs retain their original loaded-event behavior.
                 singleflight = (
-                    os.environ.get("MADAR_QA_VIEW") == "bridge-readiness" or
+                    os.environ.get("MADAR_QA_VIEW") in ("bridge-readiness", "fresh-profile") or
                     (os.environ.get("MADAR_RELEASE_QA") == "1" and
                      os.environ.get("MADAR_QA_INTERACTION") == "1")
                 )
@@ -2791,6 +2811,39 @@ def main():
                             return
                         bridge_qa_started.set()
                 time.sleep(2)
+                if os.environ.get("MADAR_QA_VIEW") == "fresh-profile":
+                    # Isolated release QA: record only counts and the empty
+                    # workspace CTA; never include user titles or financial data.
+                    snapshot = api.getState()
+                    result = {
+                        "projectCount": len(snapshot.get("projects", [])),
+                        "boardCount": len(snapshot.get("boards", [])),
+                        "cardCount": len(snapshot.get("tasks", [])),
+                        "workspaceCount": len(snapshot.get("workspaces", [])),
+                        "workspaceNameIsDefault": (
+                            len(snapshot.get("workspaces", [])) == 1 and
+                            snapshot["workspaces"][0].get("name") == "فضای کاری من"
+                        ),
+                        "mounted": False,
+                        "emptyOnboardingVisible": False,
+                    }
+                    for _ in range(40):
+                        try:
+                            ui = window.evaluate_js(
+                                "(()=>({mounted:!!document.querySelector('.app-shell'),"
+                                "emptyOnboardingVisible:!!document.querySelector('.workspace-empty-board'),"
+                                "createButton:!!Array.from(document.querySelectorAll("
+                                "'.workspace-empty-board button')).find("
+                                "x=>x.textContent.includes('ساخت اولین پروژه'))}))()")
+                            result.update(ui)
+                            if ui.get("mounted") and ui.get("emptyOnboardingVisible"):
+                                break
+                        except Exception:
+                            pass
+                        time.sleep(0.25)
+                    Path(os.environ["MADAR_QA_REPORT"]).write_text(
+                        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf8")
+                    return
                 if os.environ.get("MADAR_QA_VIEW") == "read-only-runtime-health":
                     # Real-profile smoke is opt-in and must never disclose task
                     # titles, account details, or mutate any financial record.

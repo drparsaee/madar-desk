@@ -16,7 +16,7 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALLER = ROOT / "scripts" / "Install-Madar-Customer.ps1"
-EXE = "Madar-Desk-v1.0.0-Customer-20261028.exe"
+EXE = "Madar-Desk-v1.0.1-Customer-20261028.exe"
 
 
 class CustomerInstallTest(unittest.TestCase):
@@ -41,7 +41,7 @@ class CustomerInstallTest(unittest.TestCase):
 
     def write_manifest(self):
         (self.package / "Madar-Release-Manifest.json").write_text(json.dumps({
-            "version": "1.0.0", "executable": EXE,
+            "version": "1.0.1", "executable": EXE,
             "sha256": hashlib.sha256(self.exe.read_bytes()).hexdigest(),
         }), encoding="utf8")
 
@@ -62,11 +62,11 @@ class CustomerInstallTest(unittest.TestCase):
     def test_versioned_install_snapshots_complete_profile_and_preserves_data(self):
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual((self.install / "current-version.txt").read_text().strip(), "1.0.0")
-        target = self.install / "versions" / "1.0.0" / "Madar-Desk.exe"
+        self.assertEqual((self.install / "current-version.txt").read_text().strip(), "1.0.1")
+        target = self.install / "versions" / "1.0.1" / "Madar-Desk.exe"
         self.assertEqual(target.read_bytes(), self.exe.read_bytes())
         self.assertTrue((self.install / "Run-Madar.cmd").exists())
-        archive, = list(self.backups.glob("Madar-Profile-Before-1.0.0-*.zip"))
+        archive, = list(self.backups.glob("Madar-Profile-Before-1.0.1-*.zip"))
         with ZipFile(archive) as zipped:
             self.assertEqual({p: zipped.read(p) for p in self.original}, self.original)
         self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
@@ -81,7 +81,7 @@ class CustomerInstallTest(unittest.TestCase):
         self.assertEqual((self.data / "tasks.json").read_bytes(), self.original["tasks.json"])
 
     def test_immutable_version_rejects_different_executable(self):
-        target = self.install / "versions" / "1.0.0" / "Madar-Desk.exe"
+        target = self.install / "versions" / "1.0.1" / "Madar-Desk.exe"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"older-but-different-executable")
         result = self.invoke()

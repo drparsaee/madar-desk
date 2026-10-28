@@ -537,6 +537,19 @@ def run_smoke(executable: Path, *, timeout: float = 75.0, screenshot: bool = Fal
     with _disposable_root() as scratch:
         env = isolated_environment(base_env if base_env is not None else os.environ,
                                    scratch, screenshot=screenshot, interactive=interactive)
+        if interactive:
+            # This scenario exercises board editing against explicit synthetic
+            # data. Production first-run is intentionally EMPTY as of 1.0.1.
+            sys.path.insert(0, str(PROJECT))
+            try:
+                from native_app import initial_state
+                fixture = initial_state()
+            finally:
+                sys.path.pop(0)
+            fixture_root = Path(env["APPDATA"]) / "MadarDesk"
+            fixture_root.mkdir(parents=True, exist_ok=True)
+            (fixture_root / "tasks.json").write_text(
+                json.dumps(fixture, ensure_ascii=False), encoding="utf8")
         diagnostics = scratch / "diagnostics.json"
         screenshot_path = scratch / "screenshot.png"
         job = None

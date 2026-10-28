@@ -76,13 +76,8 @@ const makeBoard=(project,workspace,stages)=>({
 });
 const seed=()=>({
   version:1,
-  projects:[{id:'p-personal',name:'کارهای من',color:'#5672ca',costEnabled:false,price:0},{id:'p-sample',name:'پروژه نمونه',color:'#3d977e',costEnabled:false,price:0}],
-  tasks:[
-    {id:'demo-1',projectId:'p-sample',title:'طراحی برد و چیدمان کارها',description:'یک تسک نمونه برای آشنایی با کارت‌ها و ستون‌ها',status:'done',priority:'high',dueDate:'',labels:['طراحی'],checklist:[{id:'d1',text:'تعریف ساختار',done:true},{id:'d2',text:'مرور رابط',done:true}],reports:[{id:'r1',agent:'نمونه',summary:'طرح اولیه بررسی و تکمیل شد.',createdAt:now()}],createdAt:now(),updatedAt:now()},
-    {id:'demo-2',projectId:'p-sample',title:'جمع‌آوری نیازمندی‌های نسخه اول',description:'',status:'active',priority:'medium',dueDate:'',labels:['برنامه‌ریزی'],checklist:[{id:'d3',text:'فهرست قابلیت‌ها',done:true},{id:'d4',text:'انتخاب ویژگی‌های ضروری',done:false}],reports:[{id:'r2',agent:'نمونه',summary:'فهرست اولیه آماده است؛ در حال اولویت‌بندی.',createdAt:now()}],createdAt:now(),updatedAt:now()},
-    {id:'demo-3',projectId:'p-sample',title:'بازبینی تجربه کاربری',description:'',status:'review',priority:'high',dueDate:'',labels:['بازبینی'],checklist:[],reports:[],createdAt:now(),updatedAt:now()},
-    {id:'demo-4',projectId:'p-sample',title:'تعریف شیوه گزارش ایجنت',description:'',status:'planned',priority:'low',dueDate:'',labels:['ایجنت'],checklist:[],reports:[],createdAt:now(),updatedAt:now()}
-  ],
+  workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],
+  boards:[],projects:[],tasks:[],
   stages:DEFAULT_STAGES,settings:{theme:'dark',googleClientId:'',costDefault:false}
 });
 const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'dark',costDefault:false,...s.settings}});
@@ -684,7 +679,7 @@ export default function App(){
   const [pendingRecovery,setPendingRecovery]=useState(false);
   const [draftTitle,setDraftTitle]=useState('');
   const [draftPriority,setDraftPriority]=useState('medium');
-  const [draftProject,setDraftProject]=useState('p-personal');
+  const [draftProject,setDraftProject]=useState('');
   const [draftStatus,setDraftStatus]=useState('inbox');
   const ready=useRef(false);
   const dirty=useRef(false);
@@ -1556,7 +1551,7 @@ export default function App(){
           <p>کارت‌ها داخل ستون‌های یک برد ساخته می‌شوند. ابتدا برای این فضا یک پروژه و برد بسازید یا پروژه موجود را به این فضا اضافه کنید.</p>
           {canManage&&<div className="workspace-empty-board__actions">
             <button className="btn primary" type="button" onClick={()=>{setProjectName('');setProjectModal(true);}}>
-              <Plus size={17}/> ساخت پروژه و برد
+              <Plus size={17}/> ساخت اولین پروژه
             </button>
             {projects.length>0&&<div className="workspace-empty-board__attach">
               <label htmlFor="madar-workspace-project">پروژه موجود</label>
