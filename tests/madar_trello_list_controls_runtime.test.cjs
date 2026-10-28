@@ -197,8 +197,15 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       const menu=page.getByRole('dialog',{name:'تنظیمات ستون شروع'});
       await menu.waitFor({state:'visible'});
       assert.equal(await menu.getByText('عملیات ستون').count(),1);
-      await menu.getByRole('button',{name:'بستن عملیات ستون'}).click();
+      await menu.getByRole('button',{name:'کپی ستون خالی'}).click();
       assert.equal(await menu.count(),0);
+      const copied=page.locator('.kanban-lane[aria-label="ستون شروع (کپی)"]');
+      await copied.waitFor({state:'visible'});
+      assert.equal(await copied.locator('.task-card').count(),0);
+      assert.deepEqual(await titlesIn(lane),expected);
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')||'{}')
+        .boards?.find(b=>b.id==='board')?.stages?.some(s=>s.label==='شروع (کپی)'));
+      assert.deepEqual(financeSnapshot(await storedState(page)),before);
       assert.deepEqual(errors,[]);
     }finally{
       await browser?.close();

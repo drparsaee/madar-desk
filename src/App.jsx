@@ -874,6 +874,24 @@ export default function App(){
     setNewLaneName('');
     setToast(activeBoard?'ستون جدید به این برد اضافه شد.':'ستون جدید به بردهای فعال این فضای کاری اضافه شد.');
   };
+  const copyBoardList=stageId=>{
+    if(!canManage||!activeBoard)return;
+    const original=activeBoard.stages.find(stage=>stage.id===stageId&&stage.archived!==true);
+    if(!original)return;
+    if(activeBoard.stages.length>=40){setToast('ظرفیت ۴۰ ستون این برد تکمیل است.');return;}
+    // Copy the lane's presentation only, never duplicate financial/card IDs.
+    // A full card-copy action would require independent invoice/attachment refs.
+    const copy={...original,id:'stage_'+uid(),label:original.label.slice(0,93)+' (کپی)',archived:false};
+    changeAdmin(s=>({...s,boards:s.boards.map(board=>{
+      if(board.id!==activeBoard.id||board.archived||board.stages.length>=40||
+         !board.stages.some(stage=>stage.id===stageId&&stage.archived!==true)||
+         board.stages.some(stage=>stage.id===copy.id))return board;
+      const index=board.stages.findIndex(stage=>stage.id===stageId);
+      const nextStages=board.stages.slice();nextStages.splice(index+1,0,copy);
+      return {...board,stages:nextStages};
+    })}));
+    setToast('ساختار ستون کپی شد؛ کارت‌ها و اطلاعات مالی کپی نشده‌اند.');
+  };
   const taskUpdate=(id,fields)=>change(s=>{
     const original=s.tasks.find(t=>t.id===id);
     const board=s.boards?.find(b=>b.id===original?.boardId);
@@ -1370,6 +1388,7 @@ export default function App(){
               onSave={fields=>updateStagePresentation(stage.id,fields)}
               onMove={direction=>{const index=viewStages.findIndex(item=>item.id===stage.id);const target=viewStages[index+direction];if(target)reorderStage(stage.id,target.id);}}
               onArchive={activeBoard?()=>{if(tasks.some(task=>task.boardId===activeBoard.id&&task.listId===stage.id&&task.deleted!==true)&&!window.confirm('این ستون بایگانی شود؟ کارت‌ها و اطلاعات مالی حذف نمی‌شوند و با بازیابی ستون دوباره در دسترس خواهند بود.'))return;updateBoardListArchive(stage.id);}:undefined}
+              onCopyList={activeBoard?()=>copyBoardList(stage.id):undefined}
               onAddCard={()=>openAdd(stage.id)} onAddCardTop={()=>openAdd(stage.id,'start')}
               onToggleCollapse={toggleCollapse} collapsed={isCollapsed}
               contextRequest={laneContextRequest?.stageId===stage.id?laneContextRequest:null}/>;

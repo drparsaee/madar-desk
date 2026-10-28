@@ -1,6 +1,6 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Ellipsis, Palette, Plus, Settings2, X} from 'lucide-react';
+import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Copy, Ellipsis, Palette, Plus, Settings2, X} from 'lucide-react';
 
 const inset = 8;
 export function lanePopupPosition(anchor, popup, width, height) {
@@ -31,7 +31,7 @@ export function laneContextPopupPosition(point, popup, width, height) {
  */
 export function LaneActionsMenu({
   stage, count, canManage, canEdit, index, total, onSave,
-  onMove, onArchive, onAddCard, onAddCardTop, onToggleCollapse,
+  onMove, onArchive, onCopyList, onAddCard, onAddCardTop, onToggleCollapse,
   contextRequest, collapsed=false,
 }) {
   const [open,setOpen]=useState(false);
@@ -149,6 +149,9 @@ export function LaneActionsMenu({
             <button type="button" disabled={!onMove||index===0} onClick={()=>{onMove?.(-1);closeMenu();}}><ArrowRight size={15}/> یک ستون به راست</button>
             <button type="button" disabled={!onMove||index>=total-1} onClick={()=>{onMove?.(1);closeMenu();}}><ArrowLeft size={15}/> یک ستون به چپ</button>
           </div>
+          <button type="button" className="lane-actions-popover__action" disabled={!onCopyList}
+            title="ساخت نسخه خالی از ستون؛ کارت‌ها و اطلاعات مالی کپی نمی‌شوند"
+            onClick={()=>{if(!onCopyList)return;closeMenu();onCopyList();}}><Copy size={16}/> کپی ستون خالی</button>
           {onArchive&&<button type="button" className="lane-actions-popover__action lane-actions-popover__archive"
             disabled={total<=1} onClick={()=>{closeMenu();onArchive?.();}}>
             <Archive size={16}/> بایگانی ستون {count>0&&<small>({count.toLocaleString('fa-IR')} کارت حفظ می‌شود)</small>}
