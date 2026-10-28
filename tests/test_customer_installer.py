@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -88,6 +89,24 @@ class CustomerInstallTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(target.read_bytes(), b"older-but-different-executable")
         self.assertFalse(self.backups.exists())
+
+    def test_unset_path_arguments_use_windows_profile_defaults(self):
+        env = dict(os.environ)
+        fake_roaming = self.root / "fake-windows" / "Roaming"
+        fake_local = self.root / "fake-windows" / "Local"
+        fake_roaming.mkdir(parents=True)
+        fake_local.mkdir(parents=True)
+        env.update({"APPDATA": str(fake_roaming), "LOCALAPPDATA": str(fake_local)})
+        command = ("function Get-Process { @() }; & '" + str(INSTALLER) +
+                   "' -PackageRoot '" + str(self.package) + "'")
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            capture_output=True, text=True, timeout=35, env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        installed = fake_local / "Programs" / "MadarDesk"
+        self.assertTrue((installed / "versions" / "1.0.1" / "Madar-Desk.exe").is_file())
+        self.assertTrue((installed / "Run-Madar.cmd").is_file())
+        self.assertFalse((self.root / "install").exists())
 
 
 if __name__ == "__main__":

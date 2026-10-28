@@ -2,13 +2,32 @@
 # Does not run automatically. All defaults are per-user (no elevation).
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'Programs\MadarDesk'),
-    [string]$DataRoot = (Join-Path $env:APPDATA 'MadarDesk'),
-    [string]$BackupRoot = (Join-Path $env:LOCALAPPDATA 'MadarDesk-ReleaseBackups'),
-    [string]$PackageRoot = $PSScriptRoot
+    [string]$InstallRoot,
+    [string]$DataRoot,
+    [string]$BackupRoot,
+    [string]$PackageRoot
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($env:APPDATA) -or
+    [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    throw 'Windows user profile paths APPDATA/LOCALAPPDATA are missing. Run as the intended Windows user.'
+}
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
+    $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\MadarDesk'
+}
+if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+    $DataRoot = Join-Path $env:APPDATA 'MadarDesk'
+}
+if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
+    $BackupRoot = Join-Path $env:LOCALAPPDATA 'MadarDesk-ReleaseBackups'
+}
+if ([string]::IsNullOrWhiteSpace($PackageRoot)) {
+    $PackageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+if ([string]::IsNullOrWhiteSpace($PackageRoot)) {
+    throw 'Cannot determine the folder containing Madar installer.'
+}
 $version = '1.0.1'
 $exeName = 'Madar-Desk-v1.0.1-Customer-20261028.exe'
 $manifestPath = Join-Path $PackageRoot 'Madar-Release-Manifest.json'
