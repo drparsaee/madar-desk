@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RELEASE = ROOT / "release"
 BASE = "Madar-Desk-v1.0.1-Customer-20261028-InstallerFix1"
 SOURCE = RELEASE / BASE
-SETUP = RELEASE / "Madar-Setup-v1.0.1-Offline-20261028.exe"
+SETUP = RELEASE / "Madar-Setup-v1.0.1-Customer-20261028.exe"
 PRE_REQ = RELEASE / "Madar-Suite-Setup-20261024.zip"
 CSC = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
 RUNTIME_NAME = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
@@ -25,12 +25,14 @@ def main():
     if not CSC.is_file() or not PRE_REQ.is_file():
         raise RuntimeError("Windows compiler or archived offline prerequisite missing")
     command = [
-        str(CSC), "/nologo", "/target:winexe", "/optimize+",
+        str(CSC), "/nologo", "/target:winexe", "/optimize+", "/codepage:65001",
         "/out:" + str(SETUP),
+        "/win32icon:" + str(ROOT / "assets" / "madar.ico"),
         "/reference:System.Windows.Forms.dll",
         "/reference:System.Drawing.dll",
         "/reference:System.IO.Compression.dll",
         "/reference:System.IO.Compression.FileSystem.dll",
+        "/reference:System.Core.dll",
         str(ROOT / "scripts" / "MadarOneClickSetup.cs"),
     ]
     subprocess.run(command, check=True, cwd=ROOT)
