@@ -202,10 +202,14 @@ class AutomaticStandaloneBackups:
                     for obsolete in [p for p in candidates if p != created][
                             :max(0, len(candidates) - self.max_backups)]:
                         # Only companion names derived from our own strict
-                        # managed filename are eligible for rotation.
+                        # managed filename are eligible for rotation. Retire
+                        # SQLite first: if it is locked or unlink fails, its
+                        # identity/template companions must remain intact.
+                        # Orphan companions after a later failure are safer
+                        # than stripping a still-restorable SQLite snapshot.
+                        obsolete.unlink()
                         obsolete.with_suffix('.templates.json').unlink(missing_ok=True)
                         obsolete.with_suffix('.users.json').unlink(missing_ok=True)
-                        obsolete.unlink()
                 self.last_success = created
                 self.last_error = None
                 return created

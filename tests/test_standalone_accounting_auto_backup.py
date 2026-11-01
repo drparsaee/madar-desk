@@ -11,6 +11,8 @@ import unittest
 from unittest.mock import patch
 
 from standalone_accounting import StandaloneAccountingStore
+from standalone_accounting_identity import LocalCompanyIdentity
+from standalone_accounting_template_store import StandaloneAccountingTemplateStore
 import standalone_accounting_auto_backup as auto
 from standalone_accounting_restore import restore_standalone_accounting
 
@@ -161,6 +163,40 @@ class AutomaticBackupTests(unittest.TestCase):
         self.assertEqual(len(self.files()), 2)
         self.assertTrue(original.exists())
         self.assertEqual(max(auto._check_input(p)[0] for p in self.files()), 1)
+
+    def test_failed_retirement_preserves_old_sqlite_and_both_companions(self):
+        """A failed unlink cannot strip identities/templates from a valid old copy."""
+        LocalCompanyIdentity(self.root).add_user(
+            "synthetic-owner", "SyntheticPasswordForBackupTest", "admin")
+        StandaloneAccountingTemplateStore(self.root).save(
+            "issuer", "Synthetic issuer",
+            {"format": "madar-issuer-profile-v1",
+             "profile": {"legalName": "Synthetic Company"}})
+        manager = auto.AutomaticStandaloneBackups(
+            self.root, plaintext_acknowledged=True, max_backups=1)
+        original = manager.backup_now()
+        companions = [original.with_suffix(".templates.json"),
+                      original.with_suffix(".users.json")]
+        self.assertTrue(all(path.is_file() for path in companions))
+        original_bytes = [path.read_bytes() for path in [original, *companions]]
+        self.event(1)
+
+        unlink = Path.unlink
+
+        def deny_retired_sqlite(path, *args, **kwargs):
+            if path == original:
+                raise PermissionError("synthetic locked retired SQLite file")
+            return unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", autospec=True,
+                          side_effect=deny_retired_sqlite):
+            with self.assertRaisesRegex(PermissionError, "synthetic locked"):
+                manager.backup_now()
+
+        self.assertEqual([path.read_bytes() for path in [original, *companions]],
+                         original_bytes)
+        self.assertEqual(len(self.files()), 2)
+        self.assertEqual(auto._check_input(original)[0], 0)
 
     def test_simultaneous_backups_are_serialized_and_restorable(self):
         with ThreadPoolExecutor(max_workers=5) as pool:
