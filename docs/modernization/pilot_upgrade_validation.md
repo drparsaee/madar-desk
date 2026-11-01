@@ -9,6 +9,7 @@ Baseline: `fbe86e6c9c74c0988a8652e734888221ed6c43e5`. Pilot implementation branc
 3. **Side-by-side comparison:** `tests/test_codex_upgrade_parity.py` executed the original preflight from Git and the changed script on separate synthetic profiles with the same content. **3/3 passed:** matching archive files and unchanged sources, fresh-profile behavior, and rejection of overlapping paths.
 4. **Adjacent tests:** `python -m unittest tests.test_release_persistence tests.test_release_restore_guard tests.test_madar_update_contract tests.test_codex_upgrade_parity -q` ran in a fresh isolated `APPDATA` and `LOCALAPPDATA`. **15/15 passed, 0 errors**, and `git diff --check` succeeded (last run after the normalized-drive-root subcase was added).
 5. **External agent audit:** read-only `codex exec` review was attempted but did **not** return a report. This does not constitute independent sign-off.
+6. **Complete Python suite:** invoked `python -m unittest discover -s tests -p test_*.py -q` in disposable `APPDATA` / `LOCALAPPDATA`. The attempt was stopped after approximately 386 seconds without unittest's final test-count/result summary; exit reflected termination. The log records resource warnings and synthetic failure messages, but cannot establish the actual final number of passed/failed cases. This is **not** a completed full-regression check.
 
 ## Test matrix
 

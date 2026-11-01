@@ -30,7 +30,7 @@ Worktree: `D:\CoS-Test\madar-modernization-20261101`. Baseline source commit `fb
 | Baseline-versus-modified synthetic parity | 3 passed (normal, missing, overlapping profiles) |
 | Combined relevant regression | 15 passed; 0 failed, 0 skipped (fresh isolated APPDATA and LOCALAPPDATA) |
 | External Codex CLI review | Attempted read-only, no completed review report; not counted as verified |
-| Full Python regression | Not rerun in this pilot; previously red, remains a release blocker |
+| Full Python regression | Attempted in disposable profile; stopped after 386 seconds without a runner summary. No pass/fail total available; prior run was red, release remains blocked. |
 | New customer installer | Not built; installed version unchanged |
 | Git commit / push | To be recorded separately |
 
