@@ -76,6 +76,24 @@ class BridgeOfflineTests(unittest.TestCase):
                 self.bridge.getState()
         self.assertTrue(self.bridge.offline.has_pending())
 
+    def test_duplicate_pending_task_never_reaches_host_or_disappears(self):
+        edited = json.loads(json.dumps(self.sample))
+        edited["tasks"].append({**edited["tasks"][0], "title": "duplicate local task id"})
+        self.bridge.offline.queue(edited, "member")
+        self.bridge.remote_token = "synthetic-authorized-session"
+        self.bridge._network_available = True
+
+        def authorized_host(endpoint, payload=None):
+            self.assertIsNone(payload, "Corrupt offline data must never be sent as a host write")
+            return {"state": self.sample, "revision": revision(self.sample),
+                    "user": self.bridge.remote_user}
+
+        with patch.object(self.bridge, "_remote_request", side_effect=authorized_host):
+            with self.assertRaisesRegex(RuntimeError, "CONFLICT.*duplicate"):
+                self.bridge.getState()
+        self.assertTrue(self.bridge.offline.has_pending())
+        self.assertEqual(self.bridge.offline.get_cached(), edited)
+
     def test_offline_viewer_must_not_write(self):
         self.bridge.remote_user["role"] = "viewer"
         with self.assertRaises(PermissionError):

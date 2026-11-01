@@ -90,6 +90,45 @@ class OfflineExchangeTests(unittest.TestCase):
         self.assertEqual(three_way_merge(base, local, local, allow_structure=True)["settings"],
                          local["settings"])
 
+    def test_duplicate_task_ids_in_any_merge_input_fail_closed(self):
+        original = state()
+        for source in ("base", "edited", "latest"):
+            with self.subTest(source=source):
+                b = json.loads(json.dumps(original))
+                e = json.loads(json.dumps(original))
+                l = json.loads(json.dumps(original))
+                target = {"base": b, "edited": e, "latest": l}[source]
+                duplicate = dict(target["tasks"][0])
+                duplicate["title"] = "another card with the same id"
+                target["tasks"].append(duplicate)
+                with self.assertRaisesRegex(RuntimeError, "CONFLICT.*duplicate"):
+                    three_way_merge(b, e, l)
+
+    def test_duplicate_project_ids_in_admin_merge_fail_closed(self):
+        original = state()
+        duplicate = dict(original["projects"][0], name="same id, different project")
+        original["projects"].append(duplicate)
+        with self.assertRaisesRegex(RuntimeError, "CONFLICT.*duplicate"):
+            three_way_merge(original, original, original, allow_structure=True)
+
+    def test_duplicate_offline_pending_is_not_acknowledged_or_lost(self):
+        original = state()
+        self.store.remember(original, "rev-1", "member")
+        edited = json.loads(json.dumps(original))
+        edited["tasks"].append(dict(edited["tasks"][0], title="second card, duplicate id"))
+        self.store.queue(edited, "member")
+        with self.assertRaisesRegex(RuntimeError, "CONFLICT.*duplicate"):
+            self.store.reconcile(original, "rev-2", "member")
+        self.assertTrue(self.store.has_pending())
+        self.assertEqual(self.store.get_cached(), edited)
+
+    def test_malformed_task_id_fails_closed_without_type_errors(self):
+        original = state()
+        edited = json.loads(json.dumps(original))
+        edited["tasks"][0]["id"] = ["not-hashable"]
+        with self.assertRaisesRegex(RuntimeError, "CONFLICT.*invalid"):
+            three_way_merge(original, edited, original)
+
     def test_cloud_folder_publishes_immutable_sanitized_snapshots(self):
         cloud = self.root / "Google Drive"
         cloud.mkdir()

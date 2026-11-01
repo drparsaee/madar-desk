@@ -35,7 +35,20 @@ def clean_data(state):
 
 
 def _index(items):
-    return {item["id"]: item for item in items}
+    # A dictionary comprehension silently keeps only the last duplicate ID.
+    # Offline drafts may be corrupted or stale, so never discard records while
+    # reconciling them with the host's authoritative state.
+    if not isinstance(items, list):
+        raise RuntimeError("CONFLICT: invalid offline merge record list")
+    indexed = {}
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            raise RuntimeError("CONFLICT: invalid offline merge record id")
+        identifier = item["id"]
+        if identifier in indexed:
+            raise RuntimeError("CONFLICT: duplicate record id in offline merge")
+        indexed[identifier] = item
+    return indexed
 
 
 def _three_way_items(base, edited, latest):
