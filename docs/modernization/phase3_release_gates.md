@@ -23,7 +23,7 @@ Date of work: 2026-11-01. Baseline: `60beedd589903949269464176416ae6bebf78fb7` o
 
 ## Explicitly NOT verified / release blocked
 
-1. Packaged `MadarHost.exe` acceptance: `test_packaged_madar_host_exe.py` requires an actual built executable, which was absent and intentionally excluded from the 168-module runner. A separate old RC installer EXE fixture was also missing (one optional skip).
+1. **Packaged host tested separately after source sweep:** `MadarHost.exe` was built with PyInstaller 6.22.3 as a disposable local QA artifact, 13,995,289 bytes, SHA-256 `e993b868fe53df4f2112ee41098864288a42d24289c0b6956cd2fadaf6bce97e`. The opt-in `tests.test_packaged_madar_host_exe` originally failed because it still expected auto-created sample tasks. After asserting the correct empty first-run and adding explicit synthetic tasks via authenticated HTTPS, its **1/1 test passed** including a forced executable stop and successful restart with persisted task data. This test ran separately and was **not** counted inside the prior 1,601-test source suite; actual Windows Service/SCM install and a signed customer release remain unverified.
 2. Real user profile backup/restore with meaningful customer attachments and accounting identities **not executed**; the installed version remains **1.0.2** and user data is untouched.
 3. Import/migration of an actual Parsian database, rial/toman migration, full trial-balance reconciliation and finance-owner approval remain outstanding.
 4. Real two-machine TLS/LAN pairing, certificate handling, firewall and live permissions not accepted on actual hardware. Synthetics do not prove absence of all security defects.

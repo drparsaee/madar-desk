@@ -22,6 +22,7 @@ except ImportError:
 
 from lan import pinned_https_json, certificate_fingerprint
 from madar_host_service import provision_authority
+from native_app import initial_state, normalize_state
 from test_lan_tls import _CERT, _KEY  # Public disposable test fixture ONLY.
 
 
@@ -108,6 +109,16 @@ class PackagedHostExecutableTest(unittest.TestCase):
 
             token, result, process = run_and_read()
             try:
+                # The actual packaged host must start EMPTY on first run.
+                # For this synthetic edit-and-restart contract, explicitly
+                # create sample cards via the authorized HTTPS API, rather
+                # than changing production first-run or the packaged binary.
+                self.assertEqual(result["state"]["tasks"], [])
+                result = pinned_https_json(
+                    base + "/api/state", pin, method="POST",
+                    data={"state": normalize_state(initial_state()),
+                          "revision": result["revision"]},
+                    headers={"Authorization": "Bearer " + token})
                 self.assertTrue(result["state"]["tasks"])
                 edited = result["state"]
                 edited["tasks"][0]["title"] = "Packaged Host persistent QA task"
