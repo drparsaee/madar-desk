@@ -39,6 +39,7 @@ test('empty workspace explicitly offers projects, never opens card dialog withou
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.addInitScript(data=>localStorage.setItem('madar-preview',JSON.stringify(data)),seed);
       await page.goto(new URL('index.html',server.resolvedUrls.local[0]).href,{waitUntil:'domcontentloaded'});
+      await page.locator('.vitrea-primary-nav button').first().click();
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
       await page.getByRole('button',{name:'نمایش منوی کامل مدار'}).click();
       const select=page.getByRole('combobox',{name:'انتخاب فضای کاری'});

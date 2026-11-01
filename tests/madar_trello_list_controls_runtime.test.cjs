@@ -105,6 +105,7 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       const errors=[];
       page.on('pageerror',error=>errors.push(error.message));
       await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.locator('.vitrea-primary-nav button').first().click();
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
       await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
         .getByRole('button',{name:'برد کارها'}).click();

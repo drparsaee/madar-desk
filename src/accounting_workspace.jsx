@@ -5,6 +5,7 @@ import {inspectBackupFileLocally} from './parsian_local_backup_preflight.js';
 import AccountingJalaliField from './accounting_jalali_field.jsx';
 import {displayAccountingDate} from './accounting_jalali_dates.js';
 import './accounting_workspace.css';
+import './accounting_unslop.css';
 
 const TABS=[
   ['overview','داشبورد'],['sales','فروش و فاکتورها'],['purchases','خرید و خدمات دریافتی'],

@@ -236,6 +236,7 @@ test('Full App compact sidebar, LAN user routing and one-click backup at 1440/48
         const errors=[];page.on('pageerror',e=>errors.push(e.message));
         try{
           await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+          await page.locator('.vitrea-primary-nav button').first().click();
           await page.locator('.vitrea-overview').waitFor({state:'visible'});
           await checkSidebar(page,width);
           await checkUserShortcut(page,mode);

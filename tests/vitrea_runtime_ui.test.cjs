@@ -104,6 +104,7 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
         localStorage.setItem('madar-preferences',JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
       },previewState);
       await page.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
+      await page.locator('.vitrea-primary-nav button').first().click();
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
       const overviewPolish=await page.evaluate(()=>{
         const font=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
@@ -265,6 +266,8 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       const mobileErrors=captureErrors(small);
       await small.addInitScript(data=>localStorage.setItem('madar-preview',JSON.stringify(data)),previewState);
       await small.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
+      await small.getByRole('button',{name:'نمای کلی',exact:true}).click();
+      await small.locator('.vitrea-overview').waitFor({state:'visible'});
       const mobileOverview=await small.evaluate(()=>{
         const root=document.querySelector('.vitrea-overview');
         return {viewport:innerWidth,bodyScrollWidth:document.body.scrollWidth,

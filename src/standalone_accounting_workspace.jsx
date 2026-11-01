@@ -5,6 +5,7 @@ import './standalone_accounting_workspace.css';
 import './standalone_accounting_ux20.css';
 import './accounting_density.css';
 import './accounting_vitrea.css';
+import './accounting_unslop.css';
 import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone_invoice_export.js';
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';

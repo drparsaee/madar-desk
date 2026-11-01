@@ -460,3 +460,94 @@
   .vitrea-header-clock .clock-widget--fixed,
   .vitrea-header-clock .clock-widget__display {width:146px;}
 }
+
+/* Unslop: navigation labels expand only when their item is active, hovered or
+   keyboard-focused. Labels stay in the DOM for accessible button names. */
+.vitrea-header-main .vitrea-primary-nav button {
+  max-width:43px;
+  padding-inline:11px;
+  gap:0;
+  overflow:hidden;
+  transition:max-width .18s ease,background-color .15s ease,color .15s ease;
+}
+.vitrea-primary-nav button svg {flex:none;}
+.vitrea-primary-nav__label {
+  display:inline-block;
+  max-width:0;
+  opacity:0;
+  overflow:hidden;
+  white-space:nowrap;
+  visibility:hidden;
+  transition:max-width .18s ease,opacity .15s ease,margin .18s ease;
+}
+.vitrea-header-main .vitrea-primary-nav button:is(:hover,:focus-visible,[aria-current="page"],[aria-expanded="true"]) {
+  max-width:175px;
+}
+.vitrea-primary-nav button:is(:hover,:focus-visible,[aria-current="page"],[aria-expanded="true"]) .vitrea-primary-nav__label {
+  max-width:140px;
+  opacity:1;
+  visibility:visible;
+  margin-inline-start:7px;
+}
+.vitrea-primary-nav button:focus-visible,
+.vitrea-quickdock button:focus-visible {
+  outline:2px solid var(--vs-accent,#7aaef0);
+  outline-offset:2px;
+}
+@media (min-width:861px) {
+  .vitrea-quickdock {
+    width:61px;
+    align-items:stretch;
+    transition:width .2s ease,border-radius .2s ease;
+  }
+  .vitrea-quickdock:is(:hover,:focus-within) {width:174px;border-radius:24px;}
+  .vitrea-quickdock button {
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:0;
+    padding-inline:12px;
+    border-radius:14px;
+    white-space:nowrap;
+  }
+  .vitrea-quickdock button svg {flex:none;}
+  .vitrea-quickdock__label {
+    display:inline-block;
+    max-width:0;
+    opacity:0;
+    overflow:hidden;
+    visibility:hidden;
+    white-space:nowrap;
+    font-size:12px;
+    font-weight:600;
+    transition:max-width .2s ease,opacity .18s ease,margin .2s ease;
+  }
+  .vitrea-quickdock:is(:hover,:focus-within) .vitrea-quickdock__label {
+    max-width:120px;
+    opacity:1;
+    visibility:visible;
+    margin-inline-start:10px;
+  }
+  .vitrea-quickdock:is(:hover,:focus-within) .vitrea-quickdock__divider {width:100%;}
+}
+@media (max-width:860px) {
+  .vitrea-quickdock__label {display:none;}
+  .vitrea-header-main .vitrea-primary-nav button {max-width:175px;}
+  .vitrea-header-main .vitrea-primary-nav button .vitrea-primary-nav__label {
+    max-width:130px;opacity:1;visibility:visible;margin-inline-start:6px;
+  }
+}
+@media (max-width:410px) {
+  .vitrea-header-main .vitrea-primary-nav button svg {display:block;}
+  .vitrea-header-main .vitrea-primary-nav button:not([aria-current="page"]):not(:focus-visible):not(:hover) {
+    max-width:38px;
+  }
+  .vitrea-header-main .vitrea-primary-nav button:not([aria-current="page"]):not(:focus-visible):not(:hover) .vitrea-primary-nav__label {
+    max-width:0;opacity:0;visibility:hidden;margin-inline-start:0;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .vitrea-header-main .vitrea-primary-nav button,.vitrea-primary-nav__label,
+  .vitrea-quickdock,.vitrea-quickdock__label {transition:none;}
+}

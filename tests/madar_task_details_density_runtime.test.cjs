@@ -59,6 +59,8 @@ test('full App card details keep checklist costs folded and board definitions se
         page.setDefaultTimeout(12000);
         try{
           await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+          await page.getByRole('button',{name:'نمای کلی',exact:true}).click();
+          await page.locator('.vitrea-overview').waitFor({state:'visible'});
           await page.locator('.vitrea-overview-task').filter({hasText:'کارت بررسی فشردگی'}).first().click();
           const drawer=page.getByRole('dialog',{name:'جزئیات کار'});
           await drawer.waitFor({state:'visible'});

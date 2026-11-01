@@ -38,6 +38,7 @@ test('Trello board opens and stage added from the board appears in live card dro
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.addInitScript(data=>localStorage.setItem('madar-preview',JSON.stringify(data)),fixture);
       await page.goto(new URL('index.html',server.resolvedUrls.local[0]).href,{waitUntil:'domcontentloaded'});
+      await page.locator('.vitrea-primary-nav button').first().click();
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
 
       // Global stage management is intentionally retired; lanes belong to

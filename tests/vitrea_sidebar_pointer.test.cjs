@@ -64,6 +64,7 @@ test('opened desktop Vitrea sidebar project is pointer-hit-testable and clickabl
       const page=await browser.newPage({viewport:{width:1440,height:900},locale:'fa-IR'});
       await page.addInitScript(value=>localStorage.setItem('madar-preview',JSON.stringify(value)),state);
       await page.goto(new URL('index.html',server.resolvedUrls.local[0]).href,{waitUntil:'domcontentloaded'});
+      await page.locator('.vitrea-primary-nav button').first().click();
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
       await page.getByRole('button',{name:'نمایش منوی کامل مدار'}).click();
       const sidebar=page.locator('#madar-sidebar');

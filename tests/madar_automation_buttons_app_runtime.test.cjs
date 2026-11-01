@@ -94,6 +94,7 @@ async function withApp({mockHost=false},run){
     page.on('pageerror',error=>pageErrors.push(error.message));
     page.setDefaultTimeout(10000);
     await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+    await page.locator('.vitrea-primary-nav button').first().click();
     await page.locator('.vitrea-overview').waitFor({state:'visible'});
     await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
       .getByRole('button',{name:'برد کارها'}).click();

@@ -682,6 +682,9 @@ export default function App(){
   const [draftProject,setDraftProject]=useState('');
   const [draftStatus,setDraftStatus]=useState('inbox');
   const ready=useRef(false);
+  // Choose an existing real board for the first view, without writing a
+  // preference or touching stored tasks. Empty workspaces retain their setup.
+  const initialBoardChosen=useRef(false);
   const dirty=useRef(false);
   const blocked=useRef(false);
   const saving=useRef(false);
@@ -753,6 +756,18 @@ export default function App(){
   const priorities=priorityDefs(data?.settings);
   const boards=data?.boards||[];
   const workspaces=data?.workspaces||[];
+  useEffect(()=>{
+    if(!data||initialBoardChosen.current)return;
+    initialBoardChosen.current=true;
+    const firstWorkspace=workspaces.find(w=>!w.archived);
+    const firstBoard=boards.find(b=>!b.archived&&b.workspaceId===firstWorkspace?.id&&
+      projects.some(p=>p.id===b.projectId));
+    if(firstBoard){
+      setSelected(firstBoard.projectId);
+      setBoardId(firstBoard.id);
+      setMode('board');
+    }
+  },[data,boards,projects,workspaces]);
   const activeWorkspace=workspaces.find(w=>w.id===workspaceId&&!w.archived)
     ||workspaces.find(w=>!w.archived)||null;
   const activeWorkspaceId=activeWorkspace?.id||null;
@@ -1324,29 +1339,29 @@ export default function App(){
         saving={dirty.current||saving.current} lastSync={lastSync} showDetails={openNetwork}/>
       <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
         disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
-        <RefreshCw size={19} className={syncing?'spin':''}/></button>
+        <RefreshCw size={19} className={syncing?'spin':''}/><span className="vitrea-quickdock__label" aria-hidden="true">تازه‌سازی</span></button>
       <span className="vitrea-quickdock__divider" aria-hidden="true"/>
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
-        onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(value=>!value)}><Menu size={20}/></button>
+        onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(value=>!value)}><Menu size={20}/><span className="vitrea-quickdock__label" aria-hidden="true">فهرست مدار</span></button>
       {show('planner')&&<button type="button" title="برنامه‌ریزی" aria-label="برنامه‌ریزی"
-        onClick={()=>setPlannerOpen(true)}><CalendarDays size={19}/></button>}
+        onClick={()=>setPlannerOpen(true)}><CalendarDays size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">برنامه‌ریزی</span></button>}
       {show('reporting')&&<button type="button" title="گزارش و تحلیل" aria-label="گزارش و تحلیل"
-        onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/></button>}
+        onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">گزارش‌ها</span></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
-        title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/></button>
+        title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">اعلان‌ها</span></button>
       {canManage&&<button type="button" onClick={openUserManagement}
         title={lanStatus.mode==='solo'?'تعریف کاربر: ابتدا میزبان شبکه را فعال کنید':'تعریف کاربران'}
-        aria-label="تعریف کاربران"><Users size={19}/></button>}
+        aria-label="تعریف کاربران"><Users size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">کاربران</span></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
-        title="Google Drive" aria-label="Google Drive"><Cloud size={19}/></button>
+        title="Google Drive" aria-label="Google Drive"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
       {canManage&&<button type="button" title={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         aria-label={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         onClick={()=>changeAdmin(state=>({...state,settings:{...state.settings,
           theme:state.settings?.theme==='dark'?'light':'dark'}}))}>
-        {data.settings?.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>}
+        {data.settings?.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}<span className="vitrea-quickdock__label" aria-hidden="true">تغییر تم</span></button>}
       <button type="button" title="تنظیمات" aria-label="تنظیمات مدار"
-        onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/></button>
+        onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">تنظیمات</span></button>
     </nav>
     <aside id="madar-sidebar" dir="rtl" role={mobileNavOpen||desktopNavOpen?'dialog':undefined}
       aria-modal={mobileNavOpen||desktopNavOpen?'true':undefined}
@@ -1418,22 +1433,22 @@ export default function App(){
       <div className="vitrea-header-layout">
       <div className="vitrea-header-main">
       <div className="vitrea-top-row">
-      <button type="button" className="vitrea-brand-capsule" title="بازگشت به نمای کلی مدار"
-        onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}>
+      <button type="button" className="vitrea-brand-capsule" title="بازگشت به برد کارها"
+        onClick={openBoardView}>
         <img src="./madar-icon.svg" alt="" aria-hidden="true" /><strong>مدار</strong><i aria-hidden="true">|</i>
         <small>در جریان کسب و کار</small>
       </button>
       <nav className="vitrea-primary-nav" aria-label="بخش‌های اصلی مدار">
-        <button type="button" aria-current={selected==='all'&&mode==='board'?'page':undefined}
-          onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}><LayoutDashboard size={15}/> نمای کلی</button>
-        <button type="button" aria-current={selected!=='all'&&mode==='board'?'page':undefined}
-          onClick={openBoardView}><LayoutGrid size={15}/> برد کارها</button>
-        <button type="button" aria-current={mode==='list'?'page':undefined}
-          onClick={()=>setMode('list')}><ListChecks size={15}/> فهرست</button>
-        <button type="button" aria-expanded={desktopNavOpen||mobileNavOpen} aria-controls="madar-sidebar"
-          onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(true)}><FolderOpen size={15}/> پروژه‌ها</button>
-        {show('planner')&&<button type="button" onClick={()=>setPlannerOpen(true)}><CalendarDays size={15}/> برنامه‌ریزی</button>}
-        {canViewStandalone&&show('accountingDashboard')&&<button type="button" onClick={openStandaloneDashboard}><Wallet size={15}/> حسابداری</button>}
+        <button type="button" aria-label="نمای کلی" aria-current={selected==='all'&&mode==='board'?'page':undefined}
+          onClick={()=>{setSelected('all');setBoardId(null);setMode('board');setFilter('all');}}><LayoutDashboard size={16}/><span className="vitrea-primary-nav__label">نمای کلی</span></button>
+        <button type="button" aria-label="برد کارها" aria-current={selected!=='all'&&mode==='board'?'page':undefined}
+          onClick={openBoardView}><LayoutGrid size={16}/><span className="vitrea-primary-nav__label">برد کارها</span></button>
+        <button type="button" aria-label="فهرست" aria-current={mode==='list'?'page':undefined}
+          onClick={()=>setMode('list')}><ListChecks size={16}/><span className="vitrea-primary-nav__label">فهرست</span></button>
+        <button type="button" aria-label="پروژه‌ها" aria-expanded={desktopNavOpen||mobileNavOpen} aria-controls="madar-sidebar"
+          onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(true)}><FolderOpen size={16}/><span className="vitrea-primary-nav__label">پروژه‌ها</span></button>
+        {show('planner')&&<button type="button" aria-label="برنامه‌ریزی" onClick={()=>setPlannerOpen(true)}><CalendarDays size={16}/><span className="vitrea-primary-nav__label">برنامه‌ریزی</span></button>}
+        {canViewStandalone&&show('accountingDashboard')&&<button type="button" aria-label="حسابداری" onClick={openStandaloneDashboard}><Wallet size={16}/><span className="vitrea-primary-nav__label">حسابداری</span></button>}
       </nav>
       <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
         aria-label="نمایش پروفایل من" title="پروفایل من">
