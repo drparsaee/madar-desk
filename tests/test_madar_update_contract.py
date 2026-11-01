@@ -99,6 +99,26 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse((self.install / "previous-version.txt").exists())
         self.assertEqual(self.new.read_bytes(), b"signed-or-unsigned-v102-test-binary")
 
+    def test_activation_rejects_unmounted_drive_root_and_normalized_root(self):
+        # A missing drive is deliberate: never exercise this dangerous old
+        # root behavior on a mounted customer volume.
+        unused = next((f"{letter}:\\"
+                       for letter in "ZYXWVUTSRQPONMLKJIHGFED"
+                       if not Path(f"{letter}:\\").exists()), None)
+        if unused is None:
+            self.skipTest("No unmounted drive letter")
+        for install_root in (unused, unused + r"synthetic\.."):
+            with self.subTest(root=install_root):
+                result = ps_file(ACTIVATE, "-InstallRoot", install_root,
+                                 "-Version", "1.0.2",
+                                 "-ExpectedSHA256", digest(self.new.read_bytes()))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Drive root", result.stderr)
+                self.assertEqual((self.install / "current-version.txt").read_text().strip(), "1.0.1")
+                self.assertFalse((self.install / "previous-version.txt").exists())
+                self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
+                                  for p in self.data.rglob("*") if p.is_file()}, self.before)
+
     def test_running_madar_refuses_snapshot_before_any_changes(self):
         backups = self.base / "MustNotExist"
         # Fake a writer without launching Madar or touching real user data.
@@ -113,6 +133,122 @@ class UpgradeTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Close all Madar", result.stderr)
         self.assertFalse(backups.exists())
+        self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
+                          for p in self.data.rglob("*") if p.is_file()}, self.before)
+
+    def test_volume_root_paths_fail_closed_even_after_normalization(self):
+        # Never pass a mounted drive's root to the old implementation: use an
+        # unused volume letter that has no data to read or delete.
+        unused = next((f"{letter}:\\"
+                       for letter in "ZYXWVUTSRQPONMLKJIHGFED"
+                       if not Path(f"{letter}:\\").exists()), None)
+        if unused is None:
+            self.skipTest("No unmounted drive letter")
+        marker = self.base / "MustNotBeCreated"
+        samples = (
+            (unused, str(marker)),
+            (unused + r"synthetic\..", str(marker)),
+            (str(self.data), unused),
+            (str(self.data), unused + r"synthetic\.."),
+        )
+        for data_root, backup_root in samples:
+            with self.subTest(data=data_root, backup=backup_root):
+                command = (
+                    "function Get-Process { @() }; "
+                    f"& '{PREFLIGHT}' -DataRoot '{data_root}' "
+                    f"-BackupRoot '{backup_root}' -TargetVersion '1.0.2'"
+                )
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command", command],
+                    capture_output=True, text=True, timeout=20,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Drive root", result.stderr)
+                self.assertFalse(marker.exists())
+                self.assertEqual(
+                    {p.relative_to(self.data).as_posix(): p.read_bytes()
+                     for p in self.data.rglob("*") if p.is_file()}, self.before)
+
+    def test_locked_input_never_publishes_unverified_or_partial_backup(self):
+        # Fail the ZIP producer safely, without a real app, customer database,
+        # or manipulating the Windows user profile. No completed ZIP should
+        # ever appear on the disk when an input file is unreadable.
+        locked = self.data / "attachments" / "locked.bin"
+        locked.write_bytes(b"synthetic-financial-attachment")
+        original = {p.relative_to(self.data).as_posix(): p.read_bytes()
+                    for p in self.data.rglob("*") if p.is_file()}
+        backup = self.base / "NoInvalidBackups"
+        command = (
+            "function Get-Process { @() }; "
+            f"$handle=[IO.File]::Open('{locked}',[IO.FileMode]::Open,"
+            "[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); "
+            "try { "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backup}' -TargetVersion '1.0.2'"
+            " } finally { $handle.Dispose() }"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=35,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("BACKUP_VERIFIED", result.stdout)
+        self.assertEqual(list(backup.glob("*.zip")), [])
+        self.assertEqual(list(backup.glob("*.partial")), [])
+        self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
+                          for p in self.data.rglob("*") if p.is_file()}, original)
+
+    def test_many_small_files_verified_once_and_archived_without_leftovers(self):
+        # Characterization of the source-to-ZIP contract at a more realistic
+        # attachment count; the newer index must not alter filenames/bytes.
+        folder = self.data / "attachments"
+        for i in range(180):
+            (folder / f"synthetic-{i:04d}.txt").write_text(
+                f"{i}: یک سند آزمایشی", encoding="utf-8")
+        before = {p.relative_to(self.data).as_posix(): p.read_bytes()
+                  for p in self.data.rglob("*") if p.is_file()}
+        backup = self.base / "BulkSnapshot"
+        command = (
+            "function Get-Process { @() }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backup}' -TargetVersion '1.0.2'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BACKUP_VERIFIED:", result.stdout)
+        archives = list(backup.glob("Madar-Before-1.0.2-*.zip"))
+        self.assertEqual(len(archives), 1)
+        self.assertEqual(list(backup.glob("*.partial")), [])
+        with ZipFile(archives[0]) as zipped:
+            self.assertEqual({name: zipped.read(name) for name in before}, before)
+        self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
+                          for p in self.data.rglob("*") if p.is_file()}, before)
+
+    def test_two_successful_snapshots_keep_both_verified_archives(self):
+        # A second run must never replace the last verified customer backup,
+        # even when both snapshots happen in the same clock interval.
+        backup = self.base / "RepeatedSnapshots"
+        command = (
+            "function Get-Process { @() }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backup}' -TargetVersion '1.0.2'"
+        )
+        for _ in range(2):
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", command],
+                capture_output=True, text=True, timeout=35,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("BACKUP_VERIFIED:", result.stdout)
+        archives = list(backup.glob("Madar-Before-1.0.2-*.zip"))
+        self.assertEqual(len(archives), 2)
+        self.assertEqual(list(backup.glob("*.partial")), [])
+        for archive in archives:
+            with ZipFile(archive) as zipped:
+                self.assertEqual({name: zipped.read(name) for name in self.before}, self.before)
         self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
                           for p in self.data.rglob("*") if p.is_file()}, self.before)
 

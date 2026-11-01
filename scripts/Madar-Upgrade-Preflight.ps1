@@ -14,7 +14,13 @@ function Resolve-PathSafely([string]$Value) {
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch '^[A-Za-z]:[\\/]') {
         throw 'Expected explicit absolute Windows path.'
     }
-    return [IO.Path]::GetFullPath($Value).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Value)
+    # An input such as X:\ or X:\folder\.. must not become X: (a
+    # drive-relative path), or turn a customer profile into an entire volume.
+    if ($full.Equals([IO.Path]::GetPathRoot($full),[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Drive root is not an allowed Madar data or backup directory.'
+    }
+    return $full.TrimEnd('\')
 }
 function IsInside([string]$Path, [string]$Root) {
     return $Path.Equals($Root,[StringComparison]::OrdinalIgnoreCase) -or
@@ -67,31 +73,53 @@ foreach($entry in $items) {
 }
 New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
 $stamp=[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fffffff')
-$archive=Join-Path $BackupRoot ('Madar-Before-'+$TargetVersion+'-'+$stamp+'.zip')
-[IO.Compression.ZipFile]::CreateFromDirectory($DataRoot,$archive,[IO.Compression.CompressionLevel]::Optimal,$false)
+$identity=[guid]::NewGuid().ToString('N')
+$archive=Join-Path $BackupRoot ('Madar-Before-'+$TargetVersion+'-'+$stamp+'-'+$identity+'.zip')
+# Never expose a damaged or unverified archive as a completed backup. The
+# temporary file is on the same volume as its final destination.
+$partial=Join-Path $BackupRoot ('.Madar-InProgress-'+$identity+'.partial')
+try {
+    [IO.Compression.ZipFile]::CreateFromDirectory($DataRoot,$partial,[IO.Compression.CompressionLevel]::Optimal,$false)
 
 # Verify file count, byte sizes and contents. This is a stable offline
 # snapshot, not merely an archive that opens successfully.
-$zip=[IO.Compression.ZipFile]::OpenRead($archive)
+$zip=[IO.Compression.ZipFile]::OpenRead($partial)
 try {
     $zipFiles=@($zip.Entries | Where-Object {$_.Name -ne ''})
     if ($zipFiles.Count -ne $files.Count) {throw 'Snapshot file count differs from data.'}
+    # A dictionary makes matching O(n) for large user profiles while keeping
+    # the previous case-sensitive Windows archive contract.
+    $entryMap=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+    foreach ($entry in $zipFiles) {
+        $key=$entry.FullName.Replace('\','/')
+        if ($entryMap.ContainsKey($key)) {throw ('Duplicate snapshot entry: '+$key)}
+        $entryMap.Add($key,$entry)
+    }
     $sha=[Security.Cryptography.SHA256]::Create()
     try {
         foreach($file in $files) {
             $relative=$file.FullName.Substring($DataRoot.Length+1).Replace('\','/')
-            $match=@($zipFiles | Where-Object {$_.FullName.Replace('\','/') -ceq $relative})
-            if ($match.Count -ne 1 -or $match[0].Length -ne $file.Length) {
+            if (-not $entryMap.ContainsKey($relative)) {
+                throw ('Snapshot mismatch: '+$relative)
+            }
+            $match=$entryMap[$relative]
+            if ($match.Length -ne $file.Length) {
                 throw ('Snapshot mismatch: '+$relative)
             }
             $source=[IO.File]::OpenRead($file.FullName)
             try {$sourceHash=[BitConverter]::ToString($sha.ComputeHash($source))}
             finally {$source.Dispose()}
-            $stream=$match[0].Open()
+            $stream=$match.Open()
             try {$archiveHash=[BitConverter]::ToString($sha.ComputeHash($stream))}
             finally {$stream.Dispose()}
             if ($sourceHash -cne $archiveHash) {throw ('Snapshot checksum mismatch: '+$relative)}
         }
     } finally {$sha.Dispose()}
 } finally {$zip.Dispose()}
+    # This rename is atomic on the backup volume and is only reached after
+    # every source file was checked against the archive.
+    [IO.File]::Move($partial,$archive)
+} finally {
+    if (Test-Path -LiteralPath $partial) {Remove-Item -LiteralPath $partial -Force}
+}
 Write-Output ('BACKUP_VERIFIED: '+$archive)

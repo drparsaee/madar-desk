@@ -1077,18 +1077,19 @@ class LanService:
                         return self.reply(403, {"error": "فقط اتصال شبکه خصوصی مجاز است."})
                 except ValueError:
                     return self.reply(403, {"error": "نشانی کاربر نامعتبر است."})
+                # Apply the same unambiguous HTTP framing to *every* route,
+                # including login and account mutations (not just integrations).
+                names = [name.lower() for name in self.headers.keys()]
+                if len(names) != len(set(names)):
+                    return self.reply(400, {"error": "هدر تکراری مجاز نیست."})
+                if self.headers.get("Transfer-Encoding") is not None:
+                    return self.reply(400, {"error": "Transfer-Encoding پشتیبانی نمی‌شود."})
                 if endpoint.startswith("/integrations/v1/"):
                     # Never expose integration credentials over the plaintext
                     # LAN handler. The router rechecks TLS and current ACL.
                     if service.integration_router is None:
                         return self.reply(404, {"error": "مسیر پیدا نشد."})
-                    # Reject alternate body-framing. Silently treating chunked
-                    # requests as empty creates request-smuggling ambiguity.
-                    if self.headers.get("Transfer-Encoding") is not None:
-                        return self.reply(400, {"error": "Transfer-Encoding پشتیبانی نمی‌شود."})
-                    names = [name.lower() for name in self.headers.keys()]
-                    if len(names) != len(set(names)):
-                        return self.reply(400, {"error": "هدر تکراری مجاز نیست."})
+                    # Header framing was validated globally before dispatch.
                     try:
                         length = int(self.headers.get("Content-Length", "0"))
                     except (ValueError, TypeError):

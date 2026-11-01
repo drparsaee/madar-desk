@@ -1,4 +1,5 @@
 import json
+from http.client import HTTPConnection
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,34 @@ from lan import LanService
 
 
 class LanTests(unittest.TestCase):
+    def test_http_rejects_ambiguous_framing_and_duplicate_auth_headers(self):
+        # Exercise real HTTP parsing, not a simulated service method. Ambiguous
+        # headers must be refused *before* any login or state operation.
+        body = json.dumps({"username": "admin", "password": "admin-test-password"}).encode()
+
+        def raw_request(method, endpoint, headers, payload=b""):
+            conn = HTTPConnection("127.0.0.1", self.port, timeout=8)
+            try:
+                conn.putrequest(method, endpoint)
+                for name, value in headers:
+                    conn.putheader(name, value)
+                conn.endheaders(payload)
+                response = conn.getresponse()
+                response.read()
+                return response.status
+            finally:
+                conn.close()
+
+        login_headers = [("Content-Type", "application/json"),
+                         ("Content-Length", str(len(body)))]
+        self.assertEqual(raw_request("POST", "/api/login", login_headers + [
+            ("Content-Length", str(len(body)))], body), 400)
+        self.assertEqual(raw_request("POST", "/api/login", login_headers + [
+            ("Transfer-Encoding", "chunked")], body), 400)
+        self.assertEqual(raw_request("GET", "/api/me", [
+            ("Authorization", "Bearer " + self.token),
+            ("Authorization", "Bearer " + self.token)]), 400)
+
     def test_standalone_prepare_http_route_is_reachable_and_admin_guarded(self):
         # Deliberately unknown synthetic task: admin reaches the validated
         # handler (400), rather than a dead endpoint (404). Unauthenticated

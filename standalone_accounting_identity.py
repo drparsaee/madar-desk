@@ -124,7 +124,11 @@ class LocalCompanyIdentity:
             self._save(data)
 
     def login(self,username,password):
-        if not isinstance(username,str) or not isinstance(password,str):
+        # Login cannot accept credentials that account creation cannot store.
+        # Reject before PBKDF2 or mutating persistent lockout counters.
+        if (not isinstance(username,str) or not _USER.fullmatch(username) or
+                not isinstance(password,str) or not 4<=len(password)<=256 or
+                '\x00' in password):
             raise IdentityError('Authentication failed')
         with _LOCK:
             now=time.monotonic()

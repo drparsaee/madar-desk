@@ -52,6 +52,20 @@ class IdentityTests(unittest.TestCase):
         content=(self.root/'local-users.json').read_text(encoding='utf-8')
         self.assertNotIn('VeryLongAdminPassword2026',content)
 
+    def test_login_rejects_credentials_outside_creation_limits(self):
+        # Legitimate existing accounts cannot have these input lengths.
+        before=(self.root/'local-users.json').read_bytes()
+        for username,password in (
+            ('rootadmin','x'*257),
+            ('rootadmin','contains\x00nul'),
+            ('x'*41,'VeryLongAdminPassword2026'),
+        ):
+            with self.subTest(username_length=len(username),password_length=len(password)):
+                with self.assertRaises(IdentityError):
+                    self.auth.login(username,password)
+        self.assertEqual((self.root/'local-users.json').read_bytes(),before)
+        self.assertEqual(self.auth.require_session(self.admin,'admin')['username'],'rootadmin')
+
     def test_admin_user_lifecycle_and_guards(self):
         self.auth.add_user('bookviewer','LongViewerPassword2026','viewer',administrator=self.admin)
         listed=self.auth.list_users(self.admin)

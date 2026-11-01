@@ -11,7 +11,13 @@ if ($InstallRoot -notmatch '^[A-Za-z]:[\\/]' -or $Version -cnotmatch '^\d+\.\d+\
     $ExpectedSHA256 -cnotmatch '^[0-9A-Fa-f]{64}$') {
     throw 'Invalid activation arguments.'
 }
-$InstallRoot=[IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
+$resolvedRoot=[IO.Path]::GetFullPath($InstallRoot)
+# A drive root (including paths normalizing to it) is never an installation
+# directory. TrimEnd alone would turn X:\ into the drive-relative X:.
+if ($resolvedRoot.Equals([IO.Path]::GetPathRoot($resolvedRoot),[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Drive root is not an allowed Madar installation directory.'
+}
+$InstallRoot=$resolvedRoot.TrimEnd('\')
 $exe=Join-Path $InstallRoot ('versions\'+$Version+'\Madar-Desk.exe')
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {throw 'Target program is missing.'}
 $actual=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash

@@ -1,0 +1,29 @@
+name: madar-versioned-upgrade-preflight
+interface: powershell-cli
+script: scripts/Madar-Upgrade-Preflight.ps1
+inputs:
+  DataRoot: {type: string, required: true, format: absolute-windows-path-below-volume-root}
+  BackupRoot: {type: string, required: true, format: absolute-windows-path-below-volume-root}
+  TargetVersion: {type: string, required: true, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+success:
+  fresh_profile: 'FRESH_PROFILE:'
+  existing_profile: 'BACKUP_VERIFIED:'
+  exit_code: 0
+failure:
+  exit_code: nonzero
+  must_not_activate_new_version: true
+side_effects:
+  existing_profile: read-only
+  backup_root: may_create_verified_zip
+  staging: temporary_partial_on_same_backup_volume_deleted_on_failure
+  final_archive: unique_guid_zip_published_only_after_file_count_length_sha256_check
+  version_pointer: unchanged
+activation:
+  script: scripts/Madar-Activate-Version.ps1
+  InstallRoot: {type: string, required: true, format: absolute-windows-path-below-volume-root}
+  Version: {type: string, required: true, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  ExpectedSHA256: {type: string, required: true, format: sha256-hex}
+  verify_executable_before_pointer_switch: true
+privacy:
+  tests_must_use_disposable_profiles: true
+  real_parsian_data_allowed: false
