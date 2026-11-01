@@ -133,6 +133,33 @@ class FullRecoveryTests(unittest.TestCase):
             create_full_backup(self.root, self.archive, offline=True)
         self.assertFalse(self.archive.exists())
 
+    def test_corrupted_zip_member_after_inventory_does_not_publish(self):
+        """A validated source is insufficient if the final archive differs."""
+        import full_recovery
+
+        source_before = (self.root / "tasks.json").read_bytes()
+        original_inventory = full_recovery._inventory
+
+        def corrupt_staged_snapshot_after_hash(folder):
+            entries, size = original_inventory(folder)
+            staged_task = folder / "tasks.json"
+            changed = json.loads(staged_task.read_text(encoding="utf8"))
+            # The new title contains the identical UTF-8 byte count so the
+            # integrity gate must compare SHA, not just member size.
+            changed["tasks"][0]["title"] = changed["tasks"][0]["title"][::-1]
+            staged_task.write_text(json.dumps(changed, ensure_ascii=False),
+                                   encoding="utf8")
+            return entries, size
+
+        with patch.object(full_recovery, "_inventory",
+                          side_effect=corrupt_staged_snapshot_after_hash):
+            with self.assertRaisesRegex(RecoveryError, "SHA-256 mismatch"):
+                create_full_backup(self.root, self.archive, offline=True)
+        self.assertFalse(self.archive.exists(), "An unrestorable ZIP must never be published")
+        self.assertEqual((self.root / "tasks.json").read_bytes(), source_before)
+        self.assertFalse(list(self.parent.glob(".madar-backup-*")))
+        self.assertFalse(list(self.parent.glob(".*.tmp")))
+
     def test_missing_payload_corruption_traversal_symlink_and_duplicate_rejected(self):
         create_full_backup(self.root, self.archive, offline=True)
         with zipfile.ZipFile(self.archive) as original:

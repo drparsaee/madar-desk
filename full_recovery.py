@@ -310,6 +310,17 @@ def create_full_backup(data_root, archive_path, *, offline=False):
                                   compress_type=zipfile.ZIP_STORED)
         with temporary.open("rb+") as stream:
             os.fsync(stream.fileno())
+        # A valid source snapshot does not prove that bytes written into the
+        # ZIP still match its manifest. Read back the completed archive through
+        # the same bounded verifier used by restore before exposing its name.
+        verified_folder = stage / "verified"
+        verified_folder.mkdir()
+        checked = _extract_verified(temporary, verified_folder)
+        with zipfile.ZipFile(temporary, "r") as finished:
+            if finished.read("manifest.json") != manifest_raw:
+                raise RecoveryError("Published archive manifest differs from the snapshot")
+        if checked != {"files": len(files), "bytes": total}:
+            raise RecoveryError("Archive readback inventory differs from the snapshot")
         # Exclusive creation; a concurrent archiver cannot overwrite output.
         os.link(temporary, archive)
         return {"path": str(archive), "files": len(files), "bytes": total,
