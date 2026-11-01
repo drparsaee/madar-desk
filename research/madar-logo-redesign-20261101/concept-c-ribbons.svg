@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">Madar Desk - three connected ribbons</title>
+  <path fill="#6094F0" d="M37 189 V83 Q37 68 52 68 Q57 68 62 71 L82 84 V189 Q82 206 65 206 H54 Q37 206 37 189 Z"/>
+  <path fill="#6094F0" d="M219 189 V83 Q219 68 204 68 Q199 68 194 71 L174 84 V189 Q174 206 191 206 H202 Q219 206 219 189 Z"/>
+  <path fill="#F7FCFF" d="M51 73 Q61 61 73 70 L128 112 L183 70 Q195 61 205 73 Q215 86 204 96 L140 146 Q128 156 116 146 L52 96 Q41 86 51 73 Z"/>
+  <path fill="#67F0CB" d="M88 171 Q97 163 107 170 L128 185 L149 170 Q159 163 168 171 Q180 181 168 192 L139 214 Q128 222 117 214 L88 192 Q76 181 88 171 Z"/>
+</svg>

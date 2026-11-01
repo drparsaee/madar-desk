@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">Madar Desk - orbit and monogram</title>
+  <path fill="#6094F0" d="M184.2 47.7 A98 98 0 1 1 102.6 33.3 L111 64.2 A66 66 0 1 0 165.9 73.9 Z"/>
+  <circle cx="193" cy="38" r="16" fill="#67F0CB"/>
+  <path fill="#67F0CB" d="M76 169 V99 Q76 90 85 90 H92 Q97 90 102 96 L128 127 L154 96 Q159 90 164 90 H171 Q180 90 180 99 V169 H154 V132 L139 150 Q128 163 117 150 L102 132 V169 Z"/>
+</svg>

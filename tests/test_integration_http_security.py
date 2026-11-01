@@ -39,6 +39,7 @@ class MountedIntegrationSecurityTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.bridge = self._bridge("tls-host")
+        self.bridge.saveState(native_app.initial_state())
         self.cert = self.root / "server-test.crt"
         self.key = self.root / "server-test.key"
         self.cert.write_text(_CERT, encoding="ascii")

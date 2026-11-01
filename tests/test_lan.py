@@ -44,6 +44,9 @@ class LanTests(unittest.TestCase):
         self.mock = patch.object(native_app, "datadir", return_value=self.root)
         self.mock.start()
         self.bridge = native_app.Bridge()
+        # LAN contract tests require explicit synthetic projects/cards.
+        # Customer first-run remains empty; do not seed production defaults.
+        self.bridge.saveState(native_app.initial_state())
         self.server = LanService(self.bridge, self.root / "users.json", "127.0.0.1", 0)
         self.server.setup_owner("admin", "admin-test-password")
         self.port = self.server.start()

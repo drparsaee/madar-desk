@@ -18,6 +18,7 @@ class TaskAccountingLanSecurity(unittest.TestCase):
         mocked.start()
         self.addCleanup(mocked.stop)
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         self.lan = LanService(self.bridge, self.root / "lan-users.json",
                               bind="127.0.0.1", port=0)
         self.lan.setup_owner("owner", "owner-password-123")
