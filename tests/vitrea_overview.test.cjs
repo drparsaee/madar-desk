@@ -59,4 +59,10 @@ test('overview renders accessible real-data project and task entry points',()=>{
   assert.match(html,/روند فعالیت/);
   assert.match(html,/تعداد کارهای ثبت‌شده/);
   assert.doesNotMatch(html,/\$[0-9]/);
+  assert.equal((html.match(/class="vitrea-overview-kpi"/g)||[]).length,3,
+    'the three real metrics should remain visible');
+  assert.equal((html.match(/class="vitrea-overview-project"/g)||[]).length,2,
+    'every project must retain its clickable navigation entry');
+  assert.doesNotMatch(html,/tone-[0-9]/,
+    'project tiles should not receive decorative index-based rainbow colors');
 });

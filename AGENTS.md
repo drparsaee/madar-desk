@@ -15,3 +15,6 @@ Read PROJECT_CONTEXT.md, LOCALFORGE_SOURCE_OF_TRUTH.md, docs/decision-inventory/
 - Report separately what is implemented, tested, committed, pushed and released. A built executable does not prove real accounting migration or production acceptance.
 
 See [coding principles](agent-standards/core/coding-principles.md), [change scope](agent-standards/core/change-scope.md) and [verification](agent-standards/core/verification-rules.md).
+
+## Visual UI refinement with Codex
+The project-local, attributed [Unslop skill](.agents/skills/unslop/SKILL.md) is installed for UI polish. Apply it to actual Madar screens with the owner's existing Vitrea design as the source of truth; never replace the theme, RTL/Estedad, navigation, user permissions, real task data, or independent accounting behavior simply to match a generic example. Scope any design pass, capture synthetic before/after screenshots, validate desktop/mobile and light/dark themes, and run existing React and browser tests. The third-party skill's optional snapshot/video scripts must not be run on private customer pages or profiles without explicit permission. Attribution: Damir Sokolovsky, [heydamir/unslop](https://github.com/heydamir/unslop), CC BY 4.0.

@@ -105,6 +105,31 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       },previewState);
       await page.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
       await page.locator('.vitrea-overview').waitFor({state:'visible'});
+      const overviewPolish=await page.evaluate(()=>{
+        const font=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
+        const project=document.querySelector('.vitrea-overview-project');
+        const root=document.querySelector('.vitrea-overview');
+        return {dir:root.getAttribute('dir'),kpis:root.querySelectorAll('.vitrea-overview-kpi').length,
+          projectTiles:root.querySelectorAll('.vitrea-overview-project').length,
+          labelPx:font('.vitrea-overview-panel__heading small'),
+          taskPx:font('.vitrea-overview-task__content small'),
+          monthPx:font('.vitrea-overview-month-chart__month small'),
+          projectBackgroundImage:getComputedStyle(project).backgroundImage,
+          bodyScrollWidth:document.body.scrollWidth,viewport:innerWidth};
+      });
+      assert.equal(overviewPolish.dir,'rtl');
+      assert.equal(overviewPolish.kpis,3);
+      assert.equal(overviewPolish.projectTiles,1);
+      assert.ok(overviewPolish.labelPx>=12&&overviewPolish.taskPx>=12&&
+        overviewPolish.monthPx>=11,JSON.stringify(overviewPolish));
+      assert.equal(overviewPolish.projectBackgroundImage,'none',
+        'project cards should use calm surfaces rather than decorative gradients');
+      assert.ok(overviewPolish.bodyScrollWidth<=overviewPolish.viewport+1,
+        'overview must not cause horizontal page overflow');
+      await screenshot(page,'madar-unslop-overview-dark');
+      await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
+      await screenshot(page,'madar-unslop-overview-light');
+      await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});
       // Task manager uses ordinary native field labels; no fixed caption
       // portal may obscure search or the editable fields in its settings.
       assert.equal(await page.locator('.madar-fl-caption').count(),0);
@@ -240,6 +265,17 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
       const mobileErrors=captureErrors(small);
       await small.addInitScript(data=>localStorage.setItem('madar-preview',JSON.stringify(data)),previewState);
       await small.goto(new URL('index.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
+      const mobileOverview=await small.evaluate(()=>{
+        const root=document.querySelector('.vitrea-overview');
+        return {viewport:innerWidth,bodyScrollWidth:document.body.scrollWidth,
+          kpis:root?.querySelectorAll('.vitrea-overview-kpi').length,
+          monthPx:parseFloat(getComputedStyle(root.querySelector('.vitrea-overview-month-chart__month small')).fontSize)};
+      });
+      assert.equal(mobileOverview.kpis,3);
+      assert.ok(mobileOverview.monthPx>=11,JSON.stringify(mobileOverview));
+      assert.ok(mobileOverview.bodyScrollWidth<=mobileOverview.viewport+1,
+        'mobile overview must not cause horizontal overflow');
+      await screenshot(small,'madar-unslop-overview-mobile');
       const mobileDock=await small.getByRole('button',{name:'نمایش منوی کامل مدار'})
         .evaluate(button=>{
           const r=button.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);

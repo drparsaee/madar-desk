@@ -1,6 +1,6 @@
 import React,{useMemo} from 'react';
-import {Activity,ArrowUpLeft,CalendarDays,CheckCheck,ClipboardCheck,
-  FolderKanban,LayoutDashboard,Layers3,TrendingUp} from 'lucide-react';
+import {Activity,ArrowUpLeft,CalendarDays,ClipboardCheck,
+  FolderKanban,Layers3,TrendingUp} from 'lucide-react';
 import './vitrea_overview.css';
 
 const MONTHS=8;
@@ -72,12 +72,12 @@ export function VitreaOverview({tasks=[],projects=[],stages=[],onOpenTask,onSele
   const stageMax=Math.max(1,...summary.lanes.map(row=>row.count));
   return <section className="vitrea-overview" dir="rtl" aria-label="نمای کلی فضای کار">
     <div className="vitrea-overview-kpis">
-      <div className="vitrea-overview-kpi"><span className="vitrea-overview-kpi__icon"><LayoutDashboard size={19}/></span>
-        <span><strong>{faNumber(summary.total)}</strong><small>کل کارهای این نما</small></span></div>
-      <div className="vitrea-overview-kpi"><span className="vitrea-overview-kpi__icon"><Activity size={19}/></span>
-        <span><strong>{faNumber(summary.active)}</strong><small>کارهای تکمیل‌نشده</small></span></div>
-      <div className="vitrea-overview-kpi"><span className="vitrea-overview-kpi__icon"><CheckCheck size={19}/></span>
-        <span><strong>{faNumber(summary.completed)}</strong><small>کارهای انجام‌شده</small></span></div>
+      <div className="vitrea-overview-kpi">
+        <span><small>کل کارهای این نما</small><strong>{faNumber(summary.total)}</strong></span></div>
+      <div className="vitrea-overview-kpi">
+        <span><small>کارهای تکمیل‌نشده</small><strong>{faNumber(summary.active)}</strong></span></div>
+      <div className="vitrea-overview-kpi">
+        <span><small>کارهای انجام‌شده</small><strong>{faNumber(summary.completed)}</strong></span></div>
     </div>
 
     <div className="vitrea-overview-grid">
@@ -113,8 +113,8 @@ export function VitreaOverview({tasks=[],projects=[],stages=[],onOpenTask,onSele
       <div className="vitrea-overview-panel__heading"><div><span>پروژه‌های من</span><small>وضعیت زندهٔ کارت‌ها در پروژه‌های این فضای کاری</small></div>
         <FolderKanban size={18}/></div>
       <div className="vitrea-overview-project-grid">
-        {summary.projects.slice(0,8).map(({project,count,done},index)=><button
-          type="button" key={project.id} className={'vitrea-overview-project tone-'+index%6}
+        {summary.projects.slice(0,8).map(({project,count,done})=><button
+          type="button" key={project.id} className="vitrea-overview-project"
           onClick={()=>onSelectProject?.(project.id)}>
             <span className="vitrea-overview-project__top"><span className="vitrea-overview-project__symbol"><FolderKanban size={17}/></span>
               <ArrowUpLeft size={17}/></span>
