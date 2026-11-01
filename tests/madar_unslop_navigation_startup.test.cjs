@@ -62,16 +62,29 @@ test('Madar opens board by default, expands navigation labels and keeps accounti
       assert.equal(await page.locator('.vitrea-primary-nav button[aria-label="برد کارها"]')
         .getAttribute('aria-current'),'page');
       const overview=page.locator('.vitrea-primary-nav button[aria-label="نمای کلی"]');
+      // Browser pointer position is not a reliable collapsed-state fixture:
+      // a prior screenshot or page load can leave the item already hovered.
+      await page.mouse.move(1,899);
+      await page.waitForFunction(()=>{
+        const button=document.querySelector('.vitrea-primary-nav button[aria-label="نمای کلی"]');
+        return button&&!button.matches(':hover')&&button.getBoundingClientRect().width<=45;
+      });
       const before=await overview.evaluate(el=>el.getBoundingClientRect().width);
       await overview.hover();
-      await page.waitForTimeout(300);
+      await page.waitForFunction(width=>document.querySelector(
+        '.vitrea-primary-nav button[aria-label="نمای کلی"]').getBoundingClientRect().width>width+25,
+      before,{timeout:5000});
       const expanded=await overview.evaluate(el=>el.getBoundingClientRect().width);
       assert.ok(expanded>before+25,JSON.stringify({before,expanded}));
       assert.ok(await overview.getByText('نمای کلی').isVisible());
       const rail=page.locator('.vitrea-quickdock');
+      await page.mouse.move(1,899);
+      await page.waitForFunction(()=>document.querySelector('.vitrea-quickdock')
+        .getBoundingClientRect().width<=65);
       const collapsed=await rail.evaluate(el=>el.getBoundingClientRect().width);
       await page.locator('.vitrea-quickdock__refresh').hover();
-      await page.waitForTimeout(300);
+      await page.waitForFunction(()=>document.querySelector('.vitrea-quickdock')
+        .getBoundingClientRect().width>=150,null,{timeout:5000});
       const wide=await rail.evaluate(el=>el.getBoundingClientRect().width);
       assert.ok(wide>=150&&wide>collapsed,JSON.stringify({collapsed,wide}));
       assert.ok(await page.locator('.vitrea-quickdock__refresh .vitrea-quickdock__label').isVisible());
