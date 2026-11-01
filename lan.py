@@ -1084,6 +1084,14 @@ class LanService:
                     return self.reply(400, {"error": "هدر تکراری مجاز نیست."})
                 if self.headers.get("Transfer-Encoding") is not None:
                     return self.reply(400, {"error": "Transfer-Encoding پشتیبانی نمی‌شود."})
+                if self.command == "GET":
+                    declared = self.headers.get("Content-Length")
+                    if declared is not None and (
+                            len(declared) > 20 or
+                            not re.fullmatch(r"[0-9]+", declared) or int(declared) != 0):
+                        # Do not leave a body unread on an authenticated GET.
+                        # Integration routes already enforced this contract.
+                        return self.reply(400, {"error": "GET نباید داده داشته باشد."})
                 if endpoint.startswith("/integrations/v1/"):
                     # Never expose integration credentials over the plaintext
                     # LAN handler. The router rechecks TLS and current ACL.
@@ -1132,7 +1140,7 @@ class LanService:
                     if length <= 0 or length > 16_000_000:
                         return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
                     content_type = self.headers.get("Content-Type", "")
-                    if not content_type.startswith("application/json"):
+                    if content_type.split(";", 1)[0].strip().lower() != "application/json":
                         # Read only an already bounded declared body so HTTP
                         # error responses are observable instead of racing a
                         # TCP reset triggered by unread request data.

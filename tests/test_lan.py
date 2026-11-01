@@ -12,6 +12,53 @@ from lan import LanService
 
 
 class LanTests(unittest.TestCase):
+    def test_http_rejects_get_bodies_and_masquerading_json_media_types(self):
+        """Framing and media-type invariants are enforced before auth routes."""
+        def raw_request(method, endpoint, headers, payload=b""):
+            conn = HTTPConnection("127.0.0.1", self.port, timeout=8)
+            try:
+                conn.putrequest(method, endpoint)
+                for name, value in headers:
+                    conn.putheader(name, value)
+                conn.endheaders(payload)
+                response = conn.getresponse()
+                response.read()
+                return response.status
+            finally:
+                conn.close()
+
+        self.assertEqual(raw_request(
+            "GET", "/api/me", [
+                ("Authorization", "Bearer " + self.token),
+                ("Content-Length", "2"),
+            ], b"{}"), 400)
+        for invalid in ("-1", "+0", "0x0", "1" * 6000):
+            with self.subTest(length=invalid[:15]):
+                self.assertEqual(raw_request(
+                    "GET", "/api/me", [
+                        ("Authorization", "Bearer " + self.token),
+                        ("Content-Length", invalid),
+                    ]), 400)
+        self.assertEqual(raw_request(
+            "GET", "/api/me", [
+                ("Authorization", "Bearer " + self.token),
+                ("Content-Length", "0"),
+            ]), 200)
+
+        body = json.dumps({"username": "admin",
+                           "password": "admin-test-password"}).encode()
+        self.assertEqual(raw_request(
+            "POST", "/api/login", [
+                ("Content-Type", "application/jsonp"),
+                ("Content-Length", str(len(body))),
+            ], body), 415)
+        # A legitimate JSON media-type parameter must retain existing behavior.
+        self.assertEqual(raw_request(
+            "POST", "/api/login", [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ], body), 200)
+
     def test_http_rejects_ambiguous_framing_and_duplicate_auth_headers(self):
         # Exercise real HTTP parsing, not a simulated service method. Ambiguous
         # headers must be refused *before* any login or state operation.

@@ -19,6 +19,10 @@ class LanUserCreationFlowTest(unittest.TestCase):
         datadir_patch.start()
         self.addCleanup(datadir_patch.stop)
         self.host = native_app.Bridge()
+        # This test explicitly grants a user access to p-sample. Real
+        # customer first-run is intentionally empty; supply the historical
+        # example project as a disposable fixture, not a production default.
+        self.host.saveState(native_app.initial_state())
         self.service = LanService(
             self.host, self.root / "lan-users.json", bind="127.0.0.1", port=0
         )
