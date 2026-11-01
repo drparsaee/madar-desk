@@ -265,6 +265,30 @@ class TwoHostLanV1Acceptance(unittest.TestCase):
         self.assertEqual(by_id[changed_id], "host second card")
         self.assertFalse(client.offline.has_pending())
 
+    def test_admin_offline_template_survives_https_host_task_change(self):
+        """Actual desktop Bridge + TLS host must commit an offline template."""
+        client = self.make_bridge("client-admin-template")
+        client.lanJoin(self.b_base, "owner-b", PASSWORD, self.pin)
+        initial = client.getState()
+        self.assertTrue(initial["boards"])
+        edited = deepcopy(initial)
+        edited["templates"].append({
+            "id": "lab-offline-template", "boardId": initial["boards"][0]["id"],
+            "name": "Saved while offline"})
+        self.b.stop()
+        self.assertTrue(client.saveState(edited)["offline"])
+        self.assertTrue(client.offline.has_pending())
+        host_update = self.host_b.getState()
+        host_update["tasks"][0]["title"] = "Edited on host"
+        self.host_b.saveState(host_update)
+        self.b.start()
+        synced = client.getState()
+        self.assertTrue(any(t["id"] == "lab-offline-template" for t in synced["templates"]))
+        self.assertEqual(synced["tasks"][0]["title"], "Edited on host")
+        self.assertFalse(client.offline.has_pending())
+        self.assertTrue(any(t["id"] == "lab-offline-template"
+                            for t in self.host_b.getState()["templates"]))
+
     def test_https_fingerprint_prevents_login_transmission_on_mismatch(self):
         before = set(self.b.sessions)
         correct = pinned_https_json(self.b_base + "/api/state", self.pin,

@@ -64,15 +64,15 @@ def three_way_merge(base, local, latest, allow_structure=False):
     Editors are never allowed to rebase workspace/project changes.
     """
     b, e, l = (clean_data(x) for x in (base, local, latest))
-    if not allow_structure and any(b.get(k) != e.get(k) for k in ("projects", "stages", "settings", "workspaces", "boards")):
+    if not allow_structure and any(b.get(k) != e.get(k) for k in ("projects", "stages", "settings", "workspaces", "boards", "templates")):
         raise PermissionError("کلاینت فقط مجاز به ویرایش کارت‌های دارای دسترسی است.")
     merged = deepcopy(l)
     merged["tasks"] = _three_way_items(b["tasks"], e["tasks"], l["tasks"])
     if allow_structure:
         merged["projects"] = _three_way_items(b["projects"], e["projects"], l["projects"])
-        for k in ("stages", "settings", "workspaces", "boards"):
+        for k in ("stages", "settings", "workspaces", "boards", "templates"):
             if b.get(k) != e.get(k):
-                if b.get(k) != l.get(k):
+                if b.get(k) != l.get(k) and e.get(k) != l.get(k):
                     raise RuntimeError("CONFLICT: ساختار پروژه هم‌زمان تغییر کرده است.")
                 merged[k] = deepcopy(e.get(k))
     return merged

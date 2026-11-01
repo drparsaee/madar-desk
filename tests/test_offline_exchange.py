@@ -53,6 +53,43 @@ class OfflineExchangeTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             three_way_merge(state(), changed, state())
 
+    def test_admin_offline_template_edit_survives_unrelated_host_task_edit(self):
+        base = {**state(), "templates": [{"id": "tpl-1", "name": "Old"}]}
+        local = json.loads(json.dumps(base))
+        local["templates"][0]["name"] = "Offline template"
+        latest = json.loads(json.dumps(base))
+        latest["tasks"][1]["title"] = "Host task"
+        merged = three_way_merge(base, local, latest, allow_structure=True)
+        self.assertEqual(merged["templates"], local["templates"])
+        self.assertEqual(merged["tasks"][1]["title"], "Host task")
+
+    def test_editor_cannot_silently_lose_forbidden_template_changes(self):
+        base = {**state(), "templates": [{"id": "tpl-1", "name": "Old"}]}
+        local = json.loads(json.dumps(base))
+        local["templates"][0]["name"] = "Unauthorized"
+        with self.assertRaises(PermissionError):
+            three_way_merge(base, local, base, allow_structure=False)
+
+    def test_admin_concurrent_template_edit_conflicts_and_pending_is_retained(self):
+        base = {**state(), "templates": [{"id": "tpl-1", "name": "Old"}]}
+        self.store.remember(base, "base-rev", "admin")
+        local = json.loads(json.dumps(base))
+        local["templates"][0]["name"] = "Offline edit"
+        self.store.queue(local, "admin")
+        latest = json.loads(json.dumps(base))
+        latest["templates"][0]["name"] = "Host edit"
+        with self.assertRaisesRegex(RuntimeError, "CONFLICT"):
+            self.store.reconcile(latest, "host-rev", "admin", allow_structure=True)
+        self.assertTrue(self.store.has_pending())
+        self.assertEqual(self.store.get_cached()["templates"], local["templates"])
+
+    def test_admin_already_applied_structure_is_idempotent(self):
+        base = {**state(), "settings": {"theme": "light"}}
+        local = json.loads(json.dumps(base))
+        local["settings"]["theme"] = "dark"
+        self.assertEqual(three_way_merge(base, local, local, allow_structure=True)["settings"],
+                         local["settings"])
+
     def test_cloud_folder_publishes_immutable_sanitized_snapshots(self):
         cloud = self.root / "Google Drive"
         cloud.mkdir()
