@@ -46,7 +46,7 @@ test('LAN simple UI stays honest when discovery and service APIs are unavailable
   }));
   assert.match(html,/جست‌وجوی میزبان در شبکه/);
   assert.match(html,/تنظیمات پیشرفته: میزبان و اتصال دستی/);
-  assert.match(html,/HTTPS با گواهی و کلید PEM/);
+  assert.match(html,/HTTPS برای میزبانی روی شبکه الزامی است/);
   assert.doesNotMatch(html,/اثر انگشت اعلام‌شده در شبکه \(تأییدنشده\)/);
   assert.doesNotMatch(html,/سرویس میزبان طبق گزارش برنامه فعال است/);
 });
@@ -117,8 +117,8 @@ test('Chromium LAN pairing requires independently verified fingerprint; discover
     assert.equal(await advanced.getByLabel('نشانی سرور').inputValue(),
       'https://192.168.1.20:48370','discovered HTTPS URL is also filled for manual pairing');
     assert.equal(await advanced.getByLabel('اثر انگشت کامل SHA-256 گواهی سرور').inputValue(),'');
-    assert.equal(await advanced.getByLabel('HTTPS با گواهی و کلید PEM').count(),1,
-      'manual HTTPS host setup is still available');
+    assert.equal(await advanced.getByRole('button',{name:'راه‌اندازی میزبان HTTPS'}).count(),1,
+      'manual HTTPS host setup is still available and requires certificate paths');
     await advanced.locator('summary').click();
     await pairing.getByLabel('نام کاربری شبکه').fill('operator');
     await pairing.getByLabel('رمز حساب شبکه').fill('operator-strong-password');

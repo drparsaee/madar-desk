@@ -14,6 +14,10 @@ class NativeAppTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.patch_dir = patch.object(native_app, "datadir", return_value=self.root)
         self.patch_dir.start()
+        # This suite mostly verifies legacy populated profiles, not the new
+        # customer's intentionally empty first-run state.
+        if self._testMethodName != "test_first_run_creates_valid_local_data":
+            native_app.atomic_save(self.root / "tasks.json", native_app.initial_state())
         self.bridge = native_app.Bridge()
 
     def tearDown(self):
@@ -24,7 +28,8 @@ class NativeAppTests(unittest.TestCase):
         state = self.bridge.getState()
         self.assertTrue(native_app.is_valid(state))
         self.assertTrue((self.root / "tasks.json").exists())
-        self.assertEqual(len(state["tasks"]), 4)
+        self.assertEqual(len(state["tasks"]), 0)
+        self.assertEqual(len(state["projects"]), 0)
 
     def test_legacy_checklist_ids_survive_full_native_save_and_reload(self):
         original = native_app.initial_state()

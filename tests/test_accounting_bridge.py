@@ -45,6 +45,7 @@ class AccountingBridgeTests(unittest.TestCase):
         patched.start()
         self.addCleanup(patched.stop)
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         state = self.bridge.getState()
         selected = next(t for t in state["tasks"] if t["id"] == "example-2")
         selected.update({"cost": 500, "costEnabled": True})

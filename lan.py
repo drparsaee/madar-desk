@@ -1,9 +1,9 @@
 """Password-protected LAN task collaboration, independent from cloud services.
 
-The default HTTP listener is for trusted private networks only. TLS may be
-explicitly enabled with a certificate and key; HTTPS clients must verify the
-server certificate fingerprint before sending credentials or other data.
-Every mutation is authorized on the server.
+Plain HTTP is restricted to a literal loopback bind for local compatibility.
+Network-accessible listeners require TLS; HTTPS clients verify the certificate
+fingerprint before sending credentials or other data. Mutations are authorized
+on the server.
 """
 from __future__ import annotations
 from copy import deepcopy
@@ -1038,6 +1038,16 @@ class LanService:
             raise ValueError("ابتدا حساب مدیر سرور را بسازید.")
         if bool(self.certfile) != bool(self.keyfile):
             raise ValueError("TLS requires both certificate and private key")
+        if not self.certfile:
+            # Checking the listener address is essential: a private peer IP
+            # check inside Handler.process is too late to protect passwords.
+            # Hostnames are deliberately excluded from the plaintext exception.
+            try:
+                loopback_only = ipaddress.ip_address(self.bind).is_loopback
+            except ValueError:
+                loopback_only = False
+            if not loopback_only:
+                raise ValueError("TLS is required for non-loopback LAN listeners")
         tls_context = None
         if self.certfile:
             tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

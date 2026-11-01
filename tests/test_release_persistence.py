@@ -34,8 +34,15 @@ class ReleaseBridgePersistenceTests(unittest.TestCase):
                                    "LOCALAPPDATA": str(self.root)})
         env.start()
         self.addCleanup(env.stop)
-        self.bridge = native_app.Bridge()
         self.data = self.root / "MadarDesk"
+        self.data.mkdir(parents=True, exist_ok=True)
+        # Explicit profile authority prevents another legacy test's leaked
+        # datadir patch from selecting a different temporary location.
+        datadir = patch.object(native_app, "datadir", return_value=self.data)
+        datadir.start()
+        self.addCleanup(datadir.stop)
+        native_app.atomic_save(self.data / "tasks.json", native_app.initial_state())
+        self.bridge = native_app.Bridge()
         self.assertEqual(self.bridge.path, self.data / "tasks.json")
 
     def test_board_specific_columns_and_new_card_survive_real_save_and_restart(self):

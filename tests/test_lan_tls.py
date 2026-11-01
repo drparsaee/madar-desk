@@ -169,5 +169,30 @@ class DomainCommitTests(unittest.TestCase):
                 service._commit_domain("unknown", {})
 
 
+class PlaintextBindingPolicyTests(unittest.TestCase):
+    def test_non_loopback_plaintext_is_rejected_before_socket_open(self):
+        with tempfile.TemporaryDirectory(prefix="madar-lan-bind-") as directory:
+            for bind in ("0.0.0.0", "192.168.1.10", "::", "localhost"):
+                with self.subTest(bind=bind):
+                    service = LanService(_Bridge(), Path(directory) / ("users-" + str(len(bind)) + bind.encode('utf8').hex() + ".json"),
+                                         bind=bind, port=0)
+                    service.setup_owner("owner", "temporary-password-123")
+                    with self.assertRaisesRegex(ValueError, "TLS is required"):
+                        service.start()
+                    self.assertIsNone(service.server)
+                    self.assertIsNone(service.thread)
+
+    def test_loopback_plaintext_is_still_available_for_isolated_local_tools(self):
+        with tempfile.TemporaryDirectory(prefix="madar-loopback-") as directory:
+            service = LanService(_Bridge(), Path(directory) / "users.json",
+                                 bind="127.0.0.1", port=0)
+            service.setup_owner("owner", "temporary-password-123")
+            try:
+                self.assertGreater(service.start(), 0)
+                self.assertIsNotNone(service.server)
+            finally:
+                service.stop()
+
+
 if __name__ == "__main__":
     unittest.main()

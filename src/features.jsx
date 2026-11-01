@@ -157,9 +157,8 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  const [mode,setMode]=useState(status?.mode||'solo');
  const [username,setUsername]=useState('');
  const [password,setPassword]=useState('');
- const [url,setUrl]=useState(status?.url||'http://192.168.1.10:48370');
+ const [url,setUrl]=useState(status?.url||'https://192.168.1.10:48370');
  const [port,setPort]=useState(String(status?.port||48370));
- const [secureHost,setSecureHost]=useState(false);
  const [certfile,setCertfile]=useState('');
  const [keyfile,setKeyfile]=useState('');
  const [fingerprint,setFingerprint]=useState('');
@@ -260,12 +259,12 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
    setPairPassword('');setNotice('اتصال امن به میزبان انتخابی برقرار شد.');
  });
  const handleHost=()=>run(async()=>{
-   const s=await api.lanHost(username,password,parseInt(port,10),secureHost?certfile.trim():'',secureHost?keyfile.trim():'');
-   setMode(s.mode);setNotice(secureHost?'میزبان HTTPS راه‌اندازی شد. اثرانگشت SHA-256 را از پنل میزبان به کلاینت‌ها بده.':'میزبان HTTP قدیمی راه‌اندازی شد؛ ارتباط رمزگذاری نمی‌شود.');
+   const s=await api.lanHost(username,password,parseInt(port,10),certfile.trim(),keyfile.trim());
+   setMode(s.mode);setNotice('میزبان HTTPS راه‌اندازی شد. اثرانگشت SHA-256 را از پنل میزبان به کلاینت‌ها بده.');
  });
  const handleJoin=()=>run(async()=>{
    const s=await api.lanJoin(url.trim(),username,password,httpsTarget?normalizeLanFingerprint(fingerprint):'');
-   setMode(s.mode);await onConnected();setNotice(httpsTarget?'با بررسی اثرانگشت گواهی به سرور HTTPS متصل شدی.':'به میزبان HTTP قدیمی متصل شدی؛ ارتباط رمزگذاری نمی‌شود.');
+   setMode(s.mode);await onConnected();setNotice(httpsTarget?'با بررسی اثرانگشت گواهی به سرور HTTPS متصل شدی.':'ارتباط HTTP فقط در همین رایانه (loopback) مجاز است.');
  });
  const handleLeave=()=>run(async()=>{const s=await api.lanLeave();setMode(s.mode);await onConnected();setNotice('به حالت شخصی برگشتی.');});
  const resetUserForm=()=>{setEditingUsername('');setName('');setUserPassword('');setUserDisplayName('');setUserIcon('user');setUserColor(DEFAULT_AVATAR_COLOR);setUserPhoto('');setRole('viewer');setDisplayRole('employee');setCustomUserDisplay(false);setUserDisplayMode('basic');setUserDisplayFeatures([]);setScope('all');setSelectedProjects([]);};
@@ -341,7 +340,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  return <div className="overlay" onMouseDown={onClose}><section className="dialog lan-modal lan-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="شبکه محلی و کاربران"><div className="dialog-head"><h2><Users size={19}/> شبکه محلی و کاربران</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div><div className="dialog-body">
   <div className="lan-heading"><span className={'connection-dot '+(status?.mode!=='solo'?'online':'')}/><strong>{status?.mode==='server'?'میزبان شبکه فعال':status?.mode==='client'?'متصل به سرور':'حالت شخصی و آفلاین'}</strong></div>
   {status?.mode==='solo'&&<p className="lan-help" role="note">تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان شبکه فعال می‌شود؛ حالت شخصی حساب شبکه‌ای ندارد.</p>}
-  <details className="lan-density__help"><summary><ShieldCheck size={15}/> راهنمای اتصال امن و اثر انگشت گواهی</summary><p className="lan-help">برای اتصال امن، میزبان را با گواهی و کلید PEM راه‌اندازی کن، نشانی HTTPS را به کلاینت بده و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP قدیمی فقط برای شبکه مورداعتماد است و رمزگذاری ندارد.</p></details>
+  <details className="lan-density__help"><summary><ShieldCheck size={15}/> راهنمای اتصال امن و اثر انگشت گواهی</summary><p className="lan-help">میزبان شبکه باید با گواهی و کلید PEM راه‌اندازی شود. نشانی HTTPS و اثرانگشت کامل SHA-256 را مستقیماً از میزبان دریافت و در کلاینت وارد کن. HTTP فقط در همان رایانه با آدرس loopback برای سازگاری محلی مجاز است.</p></details>
   {status?.error&&<p className="lan-error">{status.error}</p>}
   {status?.mode==='solo'?<div className="lan-connect-setup">
     <section className="lan-pairing setting-block" aria-label="اتصال ساده به شبکه">
@@ -385,15 +384,15 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
     <div className="lan-modes">
     <div className="setting-block"><h3><Cloud size={17}/> فعال‌کردن سرور محلی</h3>
       <div className="setting-grid"><label>نام مدیر<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="admin"/></label><label>رمز مدیر (حداقل ۱۰ نویسه)<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>پورت<input dir="ltr" value={port} onChange={e=>setPort(e.target.value)}/></label></div>
-      <label className="lan-tls-toggle"><input type="checkbox" checked={secureHost} onChange={e=>setSecureHost(e.target.checked)}/> HTTPS با گواهی و کلید PEM</label>
-      {secureHost?<div className="lan-tls-fields"><label>مسیر گواهی PEM روی میزبان<input dir="ltr" autoComplete="off" value={certfile} onChange={e=>setCertfile(e.target.value)} placeholder="C:\\certs\\server.crt"/></label><label>مسیر کلید خصوصی PEM روی میزبان<input dir="ltr" autoComplete="off" value={keyfile} onChange={e=>setKeyfile(e.target.value)} placeholder="C:\\certs\\server.key"/></label><small>گواهی و کلید باید روی رایانه میزبان وجود داشته باشند؛ کلید خصوصی را به کلاینت‌ها نده.</small></div>:<p className="lan-warning">حالت HTTP قدیمی: رمز عبور و اطلاعات شبکه رمزگذاری نمی‌شوند.</p>}
-      <button disabled={busy||!username.trim()||password.length<10||(secureHost&&(!certfile.trim()||!keyfile.trim()))} className="btn primary" onClick={handleHost}>راه‌اندازی میزبان {secureHost?'HTTPS':'HTTP قدیمی'}</button>
+      <p className="lan-help"><ShieldCheck size={15}/> HTTPS برای میزبانی روی شبکه الزامی است.</p>
+      <div className="lan-tls-fields"><label>مسیر گواهی PEM روی میزبان<input dir="ltr" autoComplete="off" value={certfile} onChange={e=>setCertfile(e.target.value)} placeholder="C:\\certs\\server.crt"/></label><label>مسیر کلید خصوصی PEM روی میزبان<input dir="ltr" autoComplete="off" value={keyfile} onChange={e=>setKeyfile(e.target.value)} placeholder="C:\\certs\\server.key"/></label><small>گواهی و کلید باید روی رایانه میزبان وجود داشته باشند؛ کلید خصوصی را به کلاینت‌ها نده.</small></div>
+      <button disabled={busy||!username.trim()||password.length<10||!certfile.trim()||!keyfile.trim()} className="btn primary" onClick={handleHost}>راه‌اندازی میزبان HTTPS</button>
     </div>
     <div className="setting-block"><h3><Users size={17}/> اتصال به سرور دیگر</h3>
       <label>نشانی سرور<input dir="ltr" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://192.168.1.10:48370"/></label>
-      {httpsTarget?<div className="lan-tls-fields"><label>اثر انگشت کامل SHA-256 گواهی سرور<input dir="ltr" autoComplete="off" spellCheck={false} value={fingerprint} onChange={e=>setFingerprint(e.target.value)} placeholder="۶۴ رقم هگز از رایانه میزبان"/></label><small>این مقدار را از میزبان از مسیر قابل‌اعتماد دریافت کن. اتصال HTTPS بدون pin معتبر انجام نمی‌شود.</small></div>:<p className="lan-warning">نشانی HTTP قدیمی است و ارتباط رمزگذاری ندارد. برای اتصال امن نشانی HTTPS و اثرانگشت سرور را وارد کن.</p>}
+      {httpsTarget?<div className="lan-tls-fields"><label>اثر انگشت کامل SHA-256 گواهی سرور<input dir="ltr" autoComplete="off" spellCheck={false} value={fingerprint} onChange={e=>setFingerprint(e.target.value)} placeholder="۶۴ رقم هگز از رایانه میزبان"/></label><small>این مقدار را از میزبان از مسیر قابل‌اعتماد دریافت کن. اتصال HTTPS بدون pin معتبر انجام نمی‌شود.</small></div>:<p className="lan-warning">HTTP فقط با 127.0.0.1 یا ::1 روی همین دستگاه مجاز است؛ برای شبکه از HTTPS استفاده کن.</p>}
       <div className="setting-grid"><label>نام کاربری<input value={username} onChange={e=>setUsername(e.target.value)}/></label><label>رمز<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label></div>
-      <button disabled={busy||!username.trim()||!password||!(url.trim().startsWith('http://')||httpsTarget)||(httpsTarget&&!validPin)} className="btn secondary" onClick={handleJoin}>اتصال و دریافت کارها</button>
+      <button disabled={busy||!username.trim()||!password||!(/^(http:\/\/(127(?:\.\d{1,3}){3}|\[::1\]):\d+\/?)$/i.test(url.trim())||httpsTarget)||(httpsTarget&&!validPin)} className="btn secondary" onClick={handleJoin}>اتصال و دریافت کارها</button>
     </div>
     </div></details>
   </div>:

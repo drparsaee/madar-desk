@@ -52,8 +52,18 @@ class UpgradeTests(unittest.TestCase):
 
     def test_preflight_takes_full_verified_snapshot_without_mutating_data(self):
         backups = self.base / "ReleaseBackups"
-        result = ps_file(PREFLIGHT, "-DataRoot", str(self.data),
-                         "-BackupRoot", str(backups), "-TargetVersion", "1.0.2")
+        # The real machine can be running the installed Madar while we test
+        # snapshot logic against a disposable root. Mock only the external
+        # process enumerator in this QA PowerShell process; never weaken the
+        # production preflight that must refuse an active application.
+        command = (
+            "function Get-Process { @() }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backups}' -TargetVersion '1.0.2'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=35)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         archive, = list(backups.glob("Madar-Before-1.0.2-*.zip"))
         with ZipFile(archive) as zipped:

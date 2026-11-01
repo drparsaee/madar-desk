@@ -26,6 +26,7 @@ class SupplierRialHostTests(unittest.TestCase):
         safe_root.start()
         self.addCleanup(safe_root.stop)
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         self.bridge.enableUnifiedStorage()
         task_data = self.bridge.getState()
         card = next(t for t in task_data["tasks"] if t["id"] == "example-2")

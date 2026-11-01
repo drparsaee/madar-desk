@@ -38,6 +38,9 @@ class TwoHostLanV1Acceptance(unittest.TestCase):
         self.addCleanup(self.env.stop)
         self.host_a = self.make_bridge("host-a")
         self.host_b = self.make_bridge("host-b")
+        # Only acceptance fixtures get demo projects; never seed customer data.
+        self.host_a.saveState(native_app.initial_state())
+        self.host_b.saveState(native_app.initial_state())
         self.cert = self.root / "localhost-test.crt"
         self.key = self.root / "localhost-test.key"
         self.cert.write_text(_CERT, encoding="ascii")

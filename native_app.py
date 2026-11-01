@@ -68,6 +68,29 @@ def datadir():
     return folder
 
 
+def _validate_lan_target(url):
+    """Validate a LAN origin before touching profile caches or sending secrets."""
+    from urllib.parse import urlparse
+    import ipaddress
+    if not isinstance(url, str):
+        raise ValueError("نشانی میزبان شبکه معتبر نیست.")
+    try:
+        parsed = urlparse(url)
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or
+                parsed.port is None or parsed.username is not None or
+                parsed.password is not None or parsed.query or parsed.fragment or
+                parsed.path not in ("", "/")):
+            raise ValueError("نشانی میزبان باید فقط IP و پورت باشد.")
+        address = ipaddress.ip_address(parsed.hostname)
+    except (TypeError, ValueError) as error:
+        raise ValueError("برای اتصال، نشانی IP و پورت معتبر لازم است.") from error
+    if not (address.is_private or address.is_loopback):
+        raise ValueError("فقط IP شبکه خصوصی یا لوکال مجاز است.")
+    if parsed.scheme == "http" and not address.is_loopback:
+        raise ValueError("اتصال شبکه با رمز عبور فقط از طریق HTTPS مجاز است.")
+    return parsed
+
+
 @contextmanager
 def _state_write_guard(path):
     """Serialize cooperating Windows writers sharing one local task file.
@@ -479,12 +502,20 @@ class Bridge:
                                   certfile=self.connection.get("certfile") or None,
                                   keyfile=self.connection.get("keyfile") or None)
             try:
-                self._migrate_local_assignees_to_owner()
+                # A legacy HTTP host must not mutate local assignments or
+                # start a network listener while attempting auto-resume.
+                if not self.lan.certfile:
+                    raise ValueError("میزبان شبکه بدون HTTPS غیرفعال شد؛ گواهی TLS تنظیم کنید.")
                 self.lan.start()
+                # Do not change assignments if TLS certificate/key validation
+                # or listener startup fails.
+                self._migrate_local_assignees_to_owner()
                 self._start_lan_discovery()
-            except OSError:
-                # A port failure must not corrupt or lock the offline data.
-                self.connection = {"mode": "solo", "error": "پورت سرور در دسترس نیست."}
+            except (OSError, ValueError) as error:
+                # Preserve the saved configuration for explicit TLS repair,
+                # but do not silently revive a plaintext host.
+                self.lan = None
+                self.connection = {"mode": "solo", "error": str(error)}
         elif self.connection.get("mode") == "client":
             try:
                 credentials = json.loads(protect_windows(self.client_auth_path.read_bytes(), True))
@@ -1020,13 +1051,16 @@ class Bridge:
         if self.connection.get("mode") != "client":
             raise RuntimeError("برنامه به سرور دیگری متصل نیست.")
         base = self.connection["url"]
+        target = _validate_lan_target(base)
         headers = {"Content-Type": "application/json"}
         if not login:
             if not self.remote_token:
                 raise RuntimeError("اتصال شبکه قطع است؛ دوباره وارد شوید.")
             headers["Authorization"] = "Bearer " + self.remote_token
         try:
-            if base.startswith("https://"):
+            # Use the parsed scheme, not case-sensitive string prefix checks.
+            # A mixed-case HTTPS origin must NEVER bypass certificate pinning.
+            if target.scheme == "https":
                 result = pinned_https_json(
                     base + endpoint, self.connection.get("fingerprint", ""),
                     method="POST" if payload is not None else "GET",
@@ -1058,22 +1092,12 @@ class Bridge:
             raise
 
     def _remote_login(self, url, username, password, *, fingerprint=""):
-        from urllib.parse import urlparse
-        import ipaddress
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or not parsed.port:
-            raise ValueError("نشانی سرور باید به‌صورت http(s)://IP:PORT باشد.")
+        parsed = _validate_lan_target(url)
         if parsed.scheme == "https":
             if not isinstance(fingerprint, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", fingerprint):
                 raise ValueError("برای HTTPS اثر انگشت کامل SHA-256 میزبان لازم است.")
         elif fingerprint:
             raise ValueError("اثر انگشت TLS فقط با نشانی HTTPS قابل استفاده است.")
-        try:
-            address = ipaddress.ip_address(parsed.hostname)
-            if not (address.is_private or address.is_loopback):
-                raise ValueError("فقط IP شبکه خصوصی یا لوکال مجاز است.")
-        except ValueError as exc:
-            raise ValueError("برای اتصال، IP خصوصی شبکه را وارد کنید؛ نام دامنه عمومی مجاز نیست.") from exc
         previous = self.connection
         self.connection = {"mode": "client", "url": url.rstrip("/"),
                            "fingerprint": fingerprint.lower() if fingerprint else ""}
@@ -1142,7 +1166,7 @@ class Bridge:
                     # permission checks still occur on the authoritative host.
                     pass
             return {"mode": mode, "url": self.connection.get("url", ""),
-                    "transport": "https" if self.connection.get("url", "").startswith("https://") else "http",
+                    "transport": "https" if self.connection.get("url", "").lower().startswith("https://") else "http",
                     "fingerprint": self.connection.get("fingerprint", ""),
                     "user": self.remote_user, "connected": self._network_available,
                     "pending": self.offline.has_pending(),
@@ -1242,6 +1266,8 @@ class Bridge:
             raise ValueError("پورت معتبر نیست.")
         if bool(certfile) != bool(keyfile):
             raise ValueError("برای HTTPS فایل گواهی و کلید خصوصی هر دو لازم‌اند.")
+        if not certfile:
+            raise ValueError("میزبان LAN باید با گواهی و کلید HTTPS راه‌اندازی شود.")
         if certfile and (not isinstance(certfile, str) or not isinstance(keyfile, str)):
             raise ValueError("مسیر گواهی و کلید معتبر نیست.")
         certfile = str(Path(certfile).resolve()) if certfile else ""
@@ -1259,8 +1285,8 @@ class Bridge:
                                   certfile=certfile or None, keyfile=keyfile or None)
         if not self.lan.users:
             self.lan.setup_owner(username, password)
-        self._migrate_local_assignees_to_owner()
         self.lan.start()
+        self._migrate_local_assignees_to_owner()
         self._start_lan_discovery()
         self._save_connection({"mode": "server", "port": self.lan.port,
                                "transport": "https" if certfile else "http",
@@ -1299,6 +1325,9 @@ class Bridge:
     def lanJoin(self, url, username, password, fingerprint=""):
         if self.lan:
             raise ValueError("ابتدا سرور محلی خود را متوقف کنید.")
+        # In particular, reject historical HTTP LAN URLs *before* clearing
+        # another user's cached offline view or pending local state.
+        _validate_lan_target(url)
         # Delete before authenticating: a failed account switch must not leave
         # another user's directory available to an offline fallback.
         self._clear_profile_cache()

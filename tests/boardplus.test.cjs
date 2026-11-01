@@ -90,8 +90,9 @@ test('LAN HTTPS fingerprint input requires a full SHA-256 certificate pin',()=>{
  assert.equal(validLanFingerprint('sha256/'+hex),false);
  const solo=renderToStaticMarkup(React.createElement(LanPanel,{
    api:{},projects:[],status:{mode:'solo'},onClose:()=>{},onRefresh:()=>{},onConnected:()=>{}}));
- assert(solo.includes('HTTP قدیمی'));
- assert(solo.includes('HTTPS با گواهی و کلید PEM'));
+ assert(solo.includes('HTTPS برای میزبانی روی شبکه الزامی است.'));
+ assert(solo.includes('راه‌اندازی میزبان HTTPS'));
+ assert(!solo.includes('راه‌اندازی میزبان HTTP قدیمی'));
  const host=renderToStaticMarkup(React.createElement(LanPanel,{
    api:{},projects:[],status:{mode:'server',port:48370,transport:'https',fingerprint:hex,user:{role:'admin'}},
    onClose:()=>{},onRefresh:()=>{},onConnected:()=>{}}));

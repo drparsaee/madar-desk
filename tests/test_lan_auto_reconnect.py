@@ -88,7 +88,10 @@ class RealHttpsReconnectTests(unittest.TestCase):
     """Real HTTPS loopback host and two separate synthetic data authorities."""
 
     def test_cached_client_rejoins_host_after_outage_and_replays_pending_task(self):
-        from test_lan_tls import _CERT, _KEY  # Public, test-only fixture.
+        try:
+            from test_lan_tls import _CERT, _KEY  # unittest discover -s tests
+        except ModuleNotFoundError:
+            from tests.test_lan_tls import _CERT, _KEY  # Qualified invocation
 
         with TemporaryDirectory(prefix="madar-real-lan-reconnect-") as dirname:
             root = Path(dirname)
@@ -100,6 +103,7 @@ class RealHttpsReconnectTests(unittest.TestCase):
             key.write_text(_KEY, encoding="ascii")
             with patch.object(native_app, "datadir", return_value=host_root):
                 host = Bridge()
+            host.saveState(native_app.initial_state())
             lan = LanService(host, host_root / "lan-users.json",
                              bind="127.0.0.1", port=0,
                              certfile=cert, keyfile=key)

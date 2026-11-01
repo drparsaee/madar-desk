@@ -61,6 +61,7 @@ class M07HostPreflightTests(unittest.TestCase):
         datadir.start()
         self.addCleanup(datadir.stop)
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         self.assertEqual(self.bridge.enableUnifiedStorage()["mode"], "sqlite")
         self.assertEqual(self.bridge.enableAutomationEngine()["mode"], "active")
         self.store = UnifiedAppStorage(self.bridge.unified_path)

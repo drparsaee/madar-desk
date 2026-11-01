@@ -26,6 +26,7 @@ class IntegrationV1Tests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         with patch.object(native_app, "datadir", return_value=self.root):
             self.bridge = native_app.Bridge()
+            self.bridge.saveState(native_app.initial_state())
         self.cert = self.root / "test.crt"
         self.keyfile = self.root / "test.key"
         self.cert.write_text(_CERT, encoding="ascii")
