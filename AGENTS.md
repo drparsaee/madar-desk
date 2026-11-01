@@ -17,4 +17,4 @@ Read PROJECT_CONTEXT.md, LOCALFORGE_SOURCE_OF_TRUTH.md, docs/decision-inventory/
 See [coding principles](agent-standards/core/coding-principles.md), [change scope](agent-standards/core/change-scope.md) and [verification](agent-standards/core/verification-rules.md).
 
 ## Codex modernization planning
-For nontrivial modernization work, follow [the ExecPlan standard](.agent/PLANS.md). Work from a disposable Git worktree, document the current behavior and parity evidence before changing runtime code, and keep each pilot plan updated with exact test commands and observed results. This supplements rather than overrides the owner decisions and data-protection gates above.
+For nontrivial modernization work, follow [the ExecPlan standard](.agent/PLANS.md) and, when available, the project-local [Madar Code Modernization skill](.agents/skills/madar-code-modernization/SKILL.md). Work from a disposable Git worktree, document the current behavior and parity evidence before changing runtime code, and keep each pilot plan updated with exact test commands and observed results. This supplements rather than overrides the owner decisions and data-protection gates above.
