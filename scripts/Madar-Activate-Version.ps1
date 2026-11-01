@@ -1,0 +1,44 @@
+# Internal Inno Setup helper. Switch only the version pointer, never user data.
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$InstallRoot,
+    [Parameter(Mandatory=$true)][string]$Version,
+    [Parameter(Mandatory=$true)][string]$ExpectedSHA256
+)
+$ErrorActionPreference='Stop'
+Set-StrictMode -Version Latest
+if ($InstallRoot -notmatch '^[A-Za-z]:[\\/]' -or $Version -cnotmatch '^\d+\.\d+\.\d+$' -or
+    $ExpectedSHA256 -cnotmatch '^[0-9A-Fa-f]{64}$') {
+    throw 'Invalid activation arguments.'
+}
+$InstallRoot=[IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
+$exe=Join-Path $InstallRoot ('versions\'+$Version+'\Madar-Desk.exe')
+if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {throw 'Target program is missing.'}
+$actual=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+if ($actual -ine $ExpectedSHA256) {throw 'Target program integrity verification failed.'}
+$pointer=Join-Path $InstallRoot 'current-version.txt'
+if (Test-Path -LiteralPath $pointer) {
+    $previous=(Get-Content -LiteralPath $pointer -Raw).Trim()
+    if ($previous -cnotmatch '^\d+\.\d+\.\d+$') {throw 'Existing version pointer is malformed.'}
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot ('versions\'+$previous+'\Madar-Desk.exe')) -PathType Leaf)) {
+        throw 'Current installed version missing; refusing unsafe switch.'
+    }
+    if ($previous -ceq $Version) {
+        # Same-version repair/reinstall must not overwrite the last genuinely
+        # older version stored in previous-version.txt.
+        Write-Output ('VERSION_ALREADY_ACTIVE: '+$Version)
+        exit 0
+    }
+}
+$tmp=Join-Path $InstallRoot ('current-version-'+[guid]::NewGuid().ToString('N')+'.tmp')
+try {
+    [IO.File]::WriteAllText($tmp,$Version+[Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))
+    if (Test-Path -LiteralPath $pointer) {
+        [IO.File]::Replace($tmp,$pointer,(Join-Path $InstallRoot 'previous-version.txt'))
+    } else {
+        Move-Item -LiteralPath $tmp -Destination $pointer -ErrorAction Stop
+    }
+} finally {
+    if(Test-Path -LiteralPath $tmp){Remove-Item -LiteralPath $tmp -Force}
+}
+Write-Output ('VERSION_ACTIVATED: '+$Version)

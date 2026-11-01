@@ -1,14 +1,14 @@
 {
   "name": "madar-desk",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Personal offline task management for Windows",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "desktop:dev": "python native_app.py",
     "build": "python scripts/sync_font.py && vite build",
     "dist": "npm run dist:rc",
-    "dist:rc": "python scripts/ensure_new_release.py Madar-Desk-v1.0.1-Customer-20261028.exe && npm run build && python -m PyInstaller --noconfirm --onefile --windowed --name Madar-Desk-v1.0.1-Customer-20261028 --icon assets/madar.ico --distpath release --workpath .build-pyinstaller --specpath . --add-data \"dist;dist\" native_app.py",
+    "dist:rc": "python scripts/ensure_new_release.py Madar-Desk-v1.0.2-Update-20261101.exe && npm run build && python -m PyInstaller --noconfirm --onefile --windowed --name Madar-Desk-v1.0.2-Update-20261101 --icon assets/madar.ico --distpath release --workpath .build-pyinstaller --specpath . --add-data \"dist;dist\" native_app.py",
     "test": "python -m unittest discover -s tests -p test_*.py -v && node --test tests/*.test.cjs"
   },
   "dependencies": {
