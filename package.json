@@ -9,7 +9,7 @@
     "build": "python scripts/sync_font.py && vite build",
     "dist": "npm run dist:rc",
     "dist:rc": "python scripts/ensure_new_release.py Madar-Desk-v1.0.2-Update-20261101.exe && npm run build && python -m PyInstaller --noconfirm --onefile --windowed --name Madar-Desk-v1.0.2-Update-20261101 --icon assets/madar.ico --distpath release --workpath .build-pyinstaller --specpath . --add-data \"dist;dist\" native_app.py",
-    "test": "python -m unittest discover -s tests -p test_*.py -v && npm run build && node --test --test-concurrency=1 tests/*.test.cjs"
+    "test": "python -B tools/safe_test_runner.py"
   },
   "dependencies": {
     "@fontsource-variable/estedad": "5.3.0",
