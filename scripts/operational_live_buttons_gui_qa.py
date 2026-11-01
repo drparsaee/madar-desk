@@ -199,7 +199,7 @@ def GUI_run():
         check("jalali_input_not_gregorian",evaluate("""
           const fields=[...document.querySelectorAll('input[aria-label="تاریخ شمسی"]')];
           return fields.length>0 && fields.every(f=>f.type==='text') &&
-            fields.some(f=>/^۱۴۰۵\//.test(f.value)) &&
+            fields.some(f=>/^۱۴۰۵\\//.test(f.value)) &&
             ![...document.querySelectorAll('input[type="date"]')].length;
         """))
         details = [

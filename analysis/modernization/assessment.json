@@ -1,0 +1,148 @@
+{
+  "git_head": "fbe86e6c9c74c0988a8652e734888221ed6c43e5",
+  "tracked_count": 901,
+  "extensions": {
+    ".mdc": 1,
+    "": 2,
+    ".md": 171,
+    ".spec": 69,
+    ".txt": 4,
+    ".html": 3,
+    ".py": 353,
+    ".svg": 6,
+    ".ico": 2,
+    ".json": 17,
+    ".css": 44,
+    ".png": 10,
+    ".woff2": 1,
+    ".ps1": 36,
+    ".cs": 1,
+    ".cmd": 1,
+    ".cjs": 94,
+    ".iss": 1,
+    ".sql": 1,
+    ".jsx": 40,
+    ".js": 43,
+    ".jpg": 1
+  },
+  "python_production_count": 186,
+  "python_test_count": 167,
+  "python_parse_errors": [],
+  "python_files_over_1000_lines": [
+    [
+      "native_app.py",
+      3123
+    ],
+    [
+      "accounting_core.py",
+      1476
+    ],
+    [
+      "lan.py",
+      1303
+    ]
+  ],
+  "dynamic_eval_exec_calls": [],
+  "common_imports": [
+    [
+      "pathlib",
+      266
+    ],
+    [
+      "unittest",
+      251
+    ],
+    [
+      "json",
+      230
+    ],
+    [
+      "tempfile",
+      173
+    ],
+    [
+      "__future__",
+      172
+    ],
+    [
+      "os",
+      118
+    ],
+    [
+      "sys",
+      116
+    ],
+    [
+      "copy",
+      95
+    ],
+    [
+      "hashlib",
+      89
+    ],
+    [
+      "time",
+      76
+    ],
+    [
+      "threading",
+      70
+    ],
+    [
+      "native_app",
+      67
+    ],
+    [
+      "datetime",
+      65
+    ],
+    [
+      "re",
+      63
+    ],
+    [
+      "standalone_accounting_desktop",
+      56
+    ],
+    [
+      "lan",
+      54
+    ],
+    [
+      "standalone_accounting",
+      48
+    ],
+    [
+      "subprocess",
+      46
+    ],
+    [
+      "money_policy",
+      44
+    ],
+    [
+      "contextlib",
+      43
+    ],
+    [
+      "sqlite3",
+      43
+    ],
+    [
+      "urllib",
+      41
+    ],
+    [
+      "ctypes",
+      39
+    ],
+    [
+      "webview",
+      37
+    ],
+    [
+      "dataclasses",
+      34
+    ]
+  ]
+}
