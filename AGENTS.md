@@ -15,3 +15,6 @@ Read PROJECT_CONTEXT.md, LOCALFORGE_SOURCE_OF_TRUTH.md, docs/decision-inventory/
 - Report separately what is implemented, tested, committed, pushed and released. A built executable does not prove real accounting migration or production acceptance.
 
 See [coding principles](agent-standards/core/coding-principles.md), [change scope](agent-standards/core/change-scope.md) and [verification](agent-standards/core/verification-rules.md).
+
+## Codex modernization planning
+For nontrivial modernization work, follow [the ExecPlan standard](.agent/PLANS.md). Work from a disposable Git worktree, document the current behavior and parity evidence before changing runtime code, and keep each pilot plan updated with exact test commands and observed results. This supplements rather than overrides the owner decisions and data-protection gates above.

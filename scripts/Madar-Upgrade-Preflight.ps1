@@ -14,7 +14,14 @@ function Resolve-PathSafely([string]$Value) {
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch '^[A-Za-z]:[\\/]') {
         throw 'Expected explicit absolute Windows path.'
     }
-    return [IO.Path]::GetFullPath($Value).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Value)
+    # Do not permit a typo or a normalized '..' to turn the user-profile or
+    # backup target into the entire volume. TrimEnd would otherwise turn
+    # 'X:\' into 'X:', which PowerShell interprets as a drive-relative path.
+    if ($full.Equals([IO.Path]::GetPathRoot($full),[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Drive root is not an allowed Madar data or backup directory.'
+    }
+    return $full.TrimEnd('\')
 }
 function IsInside([string]$Path, [string]$Root) {
     return $Path.Equals($Root,[StringComparison]::OrdinalIgnoreCase) -or

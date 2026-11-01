@@ -116,6 +116,32 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
                           for p in self.data.rglob("*") if p.is_file()}, self.before)
 
+    def test_drive_root_data_path_is_rejected_before_any_snapshot(self):
+        # Use an unmounted drive letter: this remains safe even if the guard
+        # regresses, because an empty/unknown volume cannot be archived.
+        unused = next((f"{drive}:\\"
+                       for drive in "ZYXWVUTSRQPONMLKJIHGFED"
+                       if not Path(f"{drive}:\\").exists()), None)
+        if unused is None:
+            self.skipTest("No unused Windows drive letter for isolated test")
+        backups = self.base / "DriveRootMustNotCreateBackup"
+        for forbidden_root in (unused, unused + r"nested\.."):
+            with self.subTest(path=forbidden_root):
+                command = (
+                    "function Get-Process { @() }; "
+                    f"& '{PREFLIGHT}' -DataRoot '{forbidden_root}' "
+                    f"-BackupRoot '{backups}' -TargetVersion '1.0.2'"
+                )
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command", command],
+                    capture_output=True, text=True, timeout=20)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Drive root", result.stderr)
+                self.assertFalse(backups.exists())
+                self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
+                                  for p in self.data.rglob("*") if p.is_file()},
+                                 self.before)
+
 
 if __name__ == "__main__":
     unittest.main()
