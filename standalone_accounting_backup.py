@@ -184,6 +184,7 @@ def backup_standalone_accounting(
     _destination_target(source, destination)
 
     temporary = None
+    published = False
     prior_error = None
     try:
         fd, filename = tempfile.mkstemp(
@@ -199,10 +200,20 @@ def backup_standalone_accounting(
         # is forbidden: it would destroy an existing unrelated backup on a race.
         # Do not use copyfile fallback, which breaks our atomic/no-clobber claim.
         os.link(str(temporary), str(destination))
+        published = True
         _sync_directory(destination.parent)
         return destination
     except BaseException as exc:
         prior_error = exc
+        # If a post-publication step failed, revoke only our own hard link.
+        # Another process may have replaced the destination in the meantime.
+        if published and temporary is not None:
+            try:
+                if os.path.samefile(temporary, destination):
+                    destination.unlink()
+            except OSError as cleanup_exc:
+                exc.add_note("Could not revoke failed backup publication: " +
+                             str(cleanup_exc))
         raise
     finally:
         if temporary is not None:

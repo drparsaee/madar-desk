@@ -15,6 +15,8 @@ class AttachmentBridgeTests(unittest.TestCase):
         self.patch=patch.object(native_app,"datadir",return_value=self.root)
         self.patch.start()
         self.bridge=native_app.Bridge()
+        # Explicit historical scenario. Customer first-run must stay empty.
+        self.bridge.saveState(native_app.initial_state())
         self.content=base64.b64encode("متن تایید شده\n".encode("utf8")).decode("ascii")
 
     def tearDown(self):

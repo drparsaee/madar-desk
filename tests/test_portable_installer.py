@@ -87,11 +87,9 @@ class PortableInstallerTests(unittest.TestCase):
         self.assertEqual((self.install / "Madar-Desk.exe").read_bytes(), payload)
         self.assertEqual(self.source.read_bytes(), payload)
         self.assertEqual(list(self.install.glob("Madar-Desk.backup.*.exe")), [])
-        # PowerShell's auto-table renderer may shorten the SHA256 column to
-        # only eight hex digits plus "...", depending on console width.
-        # Exact installed bytes were already compared to the source above;
-        # assert only the visible prefix in human-readable installer output.
-        self.assertIn(digest[:8], result.stdout.lower())
+        # The human-readable PSCustomObject table is allowed to truncate its
+        # SHA column. Require a separate exact machine-readable confirmation.
+        self.assertIn("INSTALL_VERIFIED_SHA256: " + digest, result.stdout)
         self.assertClean()
 
     def test_updates_preserve_all_prior_backups_and_unrelated_artifacts(self):

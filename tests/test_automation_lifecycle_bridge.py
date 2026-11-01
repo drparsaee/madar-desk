@@ -13,6 +13,7 @@ class LifecycleBridgeTests(unittest.TestCase):
         self.patch = patch.object(native_app, "datadir", return_value=Path(self.temp.name))
         self.patch.start()
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
 
     def tearDown(self):
         self.patch.stop()

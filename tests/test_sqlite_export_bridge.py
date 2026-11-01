@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from app_storage import UnifiedAppStorage
 
 
@@ -16,7 +17,7 @@ class UnifiedSqliteExportBridgeTests(unittest.TestCase):
         self.mock = patch.object(native_app, "datadir", return_value=self.root)
         self.mock.start()
         self.addCleanup(self.mock.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def test_export_four_domains_without_activating_sqlite(self):
         self.bridge.collabCommand({"type": "comment.add", "eventId": "archive-comment",

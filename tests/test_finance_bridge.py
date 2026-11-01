@@ -23,6 +23,9 @@ class FinanceBridgeTests(unittest.TestCase):
         self.patch = patch.object(native_app, "datadir", return_value=self.root)
         self.patch.start()
         self.bridge = native_app.Bridge()
+        # This legacy contract refers to example-2/p-sample; populate only
+        # the synthetic test root rather than changing the real first-run.
+        self.bridge.saveState(native_app.initial_state())
 
     def tearDown(self):
         self.patch.stop()

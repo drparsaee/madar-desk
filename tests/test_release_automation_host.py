@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from app_storage import UnifiedAppStorage
 
 
@@ -15,7 +16,7 @@ class AutomationHostAcceptance(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         with patch.object(native_app, "datadir", return_value=self.root):
-            self.bridge = native_app.Bridge()
+            self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def activate(self):
         self.assertEqual(self.bridge.storageStatus()["mode"], "json")

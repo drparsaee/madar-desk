@@ -19,10 +19,29 @@ if ($resolvedRoot.Equals([IO.Path]::GetPathRoot($resolvedRoot),[StringComparison
 }
 $InstallRoot=$resolvedRoot.TrimEnd('\')
 $exe=Join-Path $InstallRoot ('versions\'+$Version+'\Madar-Desk.exe')
+$pointer=Join-Path $InstallRoot 'current-version.txt'
+$previousPointer=Join-Path $InstallRoot 'previous-version.txt'
+function AssertNoReparsePoints([string]$Path) {
+    # Elevated activation must never follow a junction/symlink outside the
+    # explicitly selected installation folder, including linked pointer files.
+    $current=$Path
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $item=Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and
+                ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw ('Linked or junction activation path is not allowed: '+$current)
+        }
+        $parent=[IO.Path]::GetDirectoryName($current)
+        if ($parent -eq $current) {break}
+        $current=$parent
+    }
+}
+AssertNoReparsePoints $exe
+AssertNoReparsePoints $pointer
+AssertNoReparsePoints $previousPointer
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {throw 'Target program is missing.'}
 $actual=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
 if ($actual -ine $ExpectedSHA256) {throw 'Target program integrity verification failed.'}
-$pointer=Join-Path $InstallRoot 'current-version.txt'
 if (Test-Path -LiteralPath $pointer) {
     $previous=(Get-Content -LiteralPath $pointer -Raw).Trim()
     if ($previous -cnotmatch '^\d+\.\d+\.\d+$') {throw 'Existing version pointer is malformed.'}
@@ -40,7 +59,7 @@ $tmp=Join-Path $InstallRoot ('current-version-'+[guid]::NewGuid().ToString('N')+
 try {
     [IO.File]::WriteAllText($tmp,$Version+[Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $pointer) {
-        [IO.File]::Replace($tmp,$pointer,(Join-Path $InstallRoot 'previous-version.txt'))
+        [IO.File]::Replace($tmp,$pointer,$previousPointer)
     } else {
         Move-Item -LiteralPath $tmp -Destination $pointer -ErrorAction Stop
     }

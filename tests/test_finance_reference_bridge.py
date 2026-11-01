@@ -24,6 +24,7 @@ class FinanceReferenceBridgeTests(unittest.TestCase):
         bound=patch.object(native_app,'datadir',return_value=self.root)
         bound.start(); self.addCleanup(bound.stop)
         self.bridge=native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         self.bridge.enableUnifiedStorage()
         self.document=self.bridge.accountingCommand(sale())['documentId']
 

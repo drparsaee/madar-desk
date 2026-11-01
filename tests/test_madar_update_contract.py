@@ -99,6 +99,39 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse((self.install / "previous-version.txt").exists())
         self.assertEqual(self.new.read_bytes(), b"signed-or-unsigned-v102-test-binary")
 
+    def test_activation_refuses_junction_to_external_version_directory(self):
+        # A version executable linked outside the install root may have the
+        # expected hash but must not authorize activation. Construct only
+        # disposable directories, and remove the junction before temp cleanup.
+        external = self.base / "OutsideInstallFixture"
+        external.mkdir()
+        binary = external / "Madar-Desk.exe"
+        binary.write_bytes(b"synthetic-version-103")
+        link = self.install / "versions" / "1.0.3"
+        command = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command",
+             f"New-Item -ItemType Junction -Path '{link}' -Target '{external}' "
+             "| Out-Null"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if command.returncode:
+            self.skipTest("Junction unavailable in disposable test fixture")
+        try:
+            result = ps_file(
+                ACTIVATE, "-InstallRoot", str(self.install),
+                "-Version", "1.0.3",
+                "-ExpectedSHA256", digest(binary.read_bytes()),
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("link", result.stderr.lower())
+            self.assertEqual(
+                (self.install / "current-version.txt").read_text().strip(), "1.0.1"
+            )
+            self.assertFalse((self.install / "previous-version.txt").exists())
+            self.assertEqual(binary.read_bytes(), b"synthetic-version-103")
+        finally:
+            link.rmdir()
+
     def test_activation_rejects_unmounted_drive_root_and_normalized_root(self):
         # A missing drive is deliberate: never exercise this dangerous old
         # root behavior on a mounted customer volume.

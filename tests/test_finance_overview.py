@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 import finance
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from lan import LanService
 
 
@@ -170,7 +171,7 @@ class OverviewBridgeTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.patch = patch.object(native_app, "datadir", return_value=self.root)
         self.patch.start()
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self.server = LanService(self.bridge, self.root / "users.json", bind="127.0.0.1", port=0)
         self.server.setup_owner("admin", "strong-password-123")
         self.admin = self.server.authenticate("admin", "strong-password-123")["token"]

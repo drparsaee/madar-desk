@@ -61,6 +61,13 @@ class BridgeOfflineTests(unittest.TestCase):
             self.bridge.saveState(local)
         latest = json.loads(json.dumps(self.sample))
         latest["tasks"][0]["title"] = "edited on host"
+        # This mock represents an already authenticated, reachable LAN host.
+        # The offline save correctly marked the network unavailable. Without
+        # restoring a synthetic session, getState() attempts DPAPI credential
+        # reconnection (not present in this disposable fixture) and returns
+        # the offline cache without ever invoking the mocked host response.
+        self.bridge.remote_token = "synthetic-authorized-session"
+        self.bridge._network_available = True
         with patch.object(self.bridge, "_remote_request", return_value={
             "state": latest, "revision": revision(latest),
             "user": self.bridge.remote_user

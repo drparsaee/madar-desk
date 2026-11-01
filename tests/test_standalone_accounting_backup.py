@@ -292,6 +292,33 @@ class StandaloneAccountingBackupTests(unittest.TestCase):
         self.assertEqual(self.destination.read_bytes(), sentinel)
         self.assert_no_partial()
 
+    def test_directory_sync_failure_revokes_own_new_publication(self):
+        self.create_source()
+        with patch.object(backup, "_sync_directory",
+                          side_effect=OSError("simulated directory sync failure")):
+            with self.assertRaisesRegex(OSError, "simulated directory sync failure"):
+                self.backup()
+        self.assertFalse(self.destination.exists(),
+                         "Failed backup must not leave a newly published file")
+        self.assertEqual(self.read_source()["revision"], 0)
+        self.assert_no_partial()
+
+    def test_directory_sync_failure_preserves_racing_replacement(self):
+        self.create_source()
+        sentinel = b"unrelated replacement after publication; preserve"
+
+        def replace_then_fail(_parent):
+            # Another process replaces our published name before sync fails.
+            self.destination.unlink()
+            self.destination.write_bytes(sentinel)
+            raise OSError("simulated directory sync after replacement")
+
+        with patch.object(backup, "_sync_directory", side_effect=replace_then_fail):
+            with self.assertRaisesRegex(OSError, "simulated directory sync"):
+                self.backup()
+        self.assertEqual(self.destination.read_bytes(), sentinel)
+        self.assert_no_partial()
+
     def test_existing_source_unmodified_after_backup(self):
         store = self.create_source()
         self.command(store, "event-1")

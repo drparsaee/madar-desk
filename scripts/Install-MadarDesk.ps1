@@ -181,6 +181,10 @@ try {
         $previousHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($previousHash -eq $sourceHash -and
             !$TestFailAfterBackup -and !$TestFailAfterRename) {
+            # Do not rely on PowerShell's width-dependent table renderer for
+            # machine verification: the Sha256 property can print as two
+            # characters on narrow hosts despite a valid 64-byte digest.
+            Write-Output ('INSTALL_VERIFIED_SHA256: ' + $previousHash)
             [pscustomobject]@{
                 Installed = $target
                 Sha256 = $previousHash
@@ -230,6 +234,7 @@ try {
         throw 'Installed target checksum differs from validated stage.'
     }
     $committed = $true
+    Write-Output ('INSTALL_VERIFIED_SHA256: ' + $installedHash)
     [pscustomobject]@{
         Installed = $target
         Sha256 = $installedHash

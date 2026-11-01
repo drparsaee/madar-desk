@@ -27,6 +27,7 @@ class ProcurementTests(unittest.TestCase):
         patch_root.start()
         self.addCleanup(patch_root.stop)
         self.bridge = native_app.Bridge()
+        self.bridge.saveState(native_app.initial_state())
         self.bridge.enableUnifiedStorage()
         state = self.bridge.getState()
         task = next(t for t in state['tasks'] if t['id'] == 'example-2')

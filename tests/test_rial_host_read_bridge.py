@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 import json
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from lan import LanService
 from ir_chart_model import ChartAccount, ChartSnapshot, PostingReference
 from ir_journal_v2 import (
@@ -44,7 +45,7 @@ class RIALHostReadBridgeTests(unittest.TestCase):
         datadir = patch.object(native_app, "datadir", return_value=self.root)
         datadir.start()
         self.addCleanup(datadir.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def _seed_rial(self):
         company = "company-A"

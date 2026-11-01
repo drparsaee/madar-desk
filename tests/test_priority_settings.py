@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from data_model import (DEFAULT_PRIORITY_DEFINITIONS, normalize_plus,
                         priority_definition_ids, validate_plus)
 from lan import LanService
@@ -122,7 +123,7 @@ class PriorityBridgeTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.mock_dir = patch.object(native_app, "datadir", return_value=self.root)
         self.mock_dir.start()
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def tearDown(self):
         self.mock_dir.stop()

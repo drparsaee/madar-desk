@@ -18,6 +18,8 @@ import unittest
 from unittest.mock import patch
 
 import madar_host_service as host
+import native_app
+from offline_exchange import atomic_json
 from lan import pinned_https_json
 
 
@@ -88,6 +90,9 @@ class HostServiceTests(unittest.TestCase):
         self.assertNotIn(self.password, accounts)
         self.assertIn("passwordHash", accounts)
         self.assertTrue((self.data / "tasks.json").exists())
+        self.assertEqual(
+            json.loads((self.data / "tasks.json").read_text(encoding="utf8"))["tasks"],
+            [], "A freshly provisioned real host must start with no sample cards")
         self.assertFalse((self.data / "lan-connection.json").exists())
         self.assertFalse((self.root / "user-appdata").exists())
         with self.assertRaisesRegex(RuntimeError, "existing Madar data"):
@@ -131,6 +136,10 @@ class HostServiceTests(unittest.TestCase):
 
     def test_tls_server_survives_gui_absence_and_preserves_saved_state(self):
         details = self.provision()
+        # This persistence test edits a card; provision correctly creates an
+        # EMPTY real host. Seed sample cards only in this disposable fixture.
+        atomic_json(self.data / "tasks.json",
+                    native_app.normalize_state(native_app.initial_state()))
         stop, thread, running = self.run_in_thread()
         port = running["port"]
         token = self.request_tls(port, "/api/login", body={

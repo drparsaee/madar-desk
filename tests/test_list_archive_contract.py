@@ -22,6 +22,7 @@ from app_storage import UnifiedAppStorage
 from data_model import normalize_plus, validate_plus
 from lan import LanService
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 
 
 SAMPLE_PROJECT = "p-sample"
@@ -121,7 +122,7 @@ class ListArchiveFixture(unittest.TestCase):
         datadir = patch.object(native_app, "datadir", return_value=self.root)
         datadir.start()
         self.addCleanup(datadir.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self._assert_isolated(self.bridge)
         self.assertEqual(self.bridge.connection.get("mode"), "solo")
 

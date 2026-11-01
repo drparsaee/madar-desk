@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from lan import LanService, clean_profile
 
 
@@ -17,7 +18,7 @@ class RoleProfilesTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.datadir_patch = patch.object(native_app, "datadir", return_value=self.root)
         self.datadir_patch.start()
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self.service = LanService(self.bridge, self.root / "accounts.json", "127.0.0.1", 0)
         self.service.setup_owner("admin", "server-owner-123")
         self.base = f"http://127.0.0.1:{self.service.start()}"

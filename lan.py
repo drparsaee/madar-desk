@@ -1070,6 +1070,15 @@ class LanService:
                 self.wfile.write(raw)
 
             def process(self):
+                # This direct LAN API accepts origin-form targets only. An
+                # absolute URI's authority must not silently become a local
+                # authenticated route when its path happens to match /api/.
+                # BaseHTTPRequestHandler normalizes leading double slashes in
+                # self.path, so inspect the original parsed request line.
+                request_target = self.requestline.split()[1]
+                if (not request_target.startswith("/") or
+                        request_target.startswith("//") or "#" in request_target):
+                    return self.reply(400, {"error": "نشانی درخواست نامعتبر است."})
                 endpoint = urlparse(self.path).path
                 try:
                     client_ip = ipaddress.ip_address(self.client_address[0])
@@ -1082,13 +1091,25 @@ class LanService:
                 names = [name.lower() for name in self.headers.keys()]
                 if len(names) != len(set(names)):
                     return self.reply(400, {"error": "هدر تکراری مجاز نیست."})
+                if self.request_version == "HTTP/1.1" and not self.headers.get("Host"):
+                    return self.reply(400, {"error": "هدر Host الزامی است."})
                 if self.headers.get("Transfer-Encoding") is not None:
                     return self.reply(400, {"error": "Transfer-Encoding پشتیبانی نمی‌شود."})
+                declared = self.headers.get("Content-Length")
+                if declared is not None:
+                    # Keep the historical 413 for negative/oversized bodies
+                    # on body-carrying routes, while disallowing signed and
+                    # otherwise ambiguous HTTP message framing globally.
+                    if re.fullmatch(r"-[0-9]+", declared):
+                        status = 400 if self.command == "GET" else 413
+                        return self.reply(status, {"error": "طول درخواست نامعتبر است."})
+                    if not re.fullmatch(r"[0-9]+", declared):
+                        return self.reply(400, {"error": "طول درخواست نامعتبر است."})
+                    if len(declared) > 20:
+                        status = 400 if self.command == "GET" else 413
+                        return self.reply(status, {"error": "طول درخواست نامعتبر است."})
                 if self.command == "GET":
-                    declared = self.headers.get("Content-Length")
-                    if declared is not None and (
-                            len(declared) > 20 or
-                            not re.fullmatch(r"[0-9]+", declared) or int(declared) != 0):
+                    if declared is not None and int(declared) != 0:
                         # Do not leave a body unread on an authenticated GET.
                         # Integration routes already enforced this contract.
                         return self.reply(400, {"error": "GET نباید داده داشته باشد."})

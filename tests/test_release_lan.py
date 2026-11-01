@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from lan import LanService
 from test_release_persistence import contract
 
@@ -28,7 +29,7 @@ class ReleaseLanIntegrationTests(unittest.TestCase):
                                    "LOCALAPPDATA": str(self.root)})
         env.start()
         self.addCleanup(env.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self.server = LanService(self.bridge, self.root / "accounts.json", "127.0.0.1", 0)
         self.server.setup_owner("owner", "release-owner-password")
         self.server.start()

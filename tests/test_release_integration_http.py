@@ -11,6 +11,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from lan import LanService, certificate_fingerprint, pinned_https_json
 
 try:
@@ -25,7 +26,7 @@ class IntegrationHttpAcceptance(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         with patch.object(native_app, "datadir", return_value=root):
-            self.bridge = native_app.Bridge()
+            self.bridge = seed_legacy_example_state(native_app.Bridge())
         cert, key = root / "server.crt", root / "server.key"
         cert.write_text(_CERT, encoding="ascii")
         key.write_text(_KEY, encoding="ascii")

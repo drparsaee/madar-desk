@@ -16,6 +16,7 @@ from data_model import (create_workspace, delete_empty_workspace,
                         rename_workspace, set_workspace_archived, validate_plus)
 from lan import LanService
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 
 
 def enriched_state():
@@ -110,7 +111,7 @@ class WorkspaceLANContractTests(unittest.TestCase):
         mock_dir = patch.object(native_app, "datadir", return_value=self.root)
         mock_dir.start()
         self.addCleanup(mock_dir.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self.host = LanService(self.bridge, self.root / "users.json", bind="127.0.0.1", port=0)
         self.host.setup_owner("owner", "password-owner-contract")
         self.owner = self.host.authenticate("owner", "password-owner-contract")["token"]

@@ -21,6 +21,15 @@ class ButtonTests(unittest.TestCase):
         self.override = patch.object(native_app, "datadir", return_value=self.root)
         self.override.start()
         self.bridge = native_app.Bridge()
+        # This suite tests automation receipts/activity from an *unchanged*
+        # sample state. Saving via Bridge would itself publish four card
+        # lifecycle events and invalidate those baseline counts. Prepare the
+        # JSON fixture directly inside the disposable test directory before
+        # opening a fresh Bridge; never change the real first-run default.
+        self.bridge.path.write_text(
+            json.dumps(native_app.initial_state(), ensure_ascii=False),
+            encoding="utf8")
+        self.bridge = native_app.Bridge()
         self.board = next(b["id"] for b in self.bridge.getState()["boards"]
                           if b.get("projectId") == "p-sample")
 

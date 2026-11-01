@@ -59,6 +59,9 @@ class LocalCASFixture(unittest.TestCase):
         self.addCleanup(isolated_datadir.stop)
 
         self.first = native_app.Bridge()
+        # This suite's comparisons use historical example-2/example-3 cards.
+        # Persist a baseline only inside the test's TemporaryDirectory.
+        self.first.saveState(native_app.initial_state())
         self._assert_safe_bridge(self.first)
         self.assertEqual(self.first.connection.get("mode"), "solo")
 

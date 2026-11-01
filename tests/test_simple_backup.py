@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 
 
 class SimpleBackupTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class SimpleBackupTests(unittest.TestCase):
         datadir_patch = patch.object(native_app, "datadir", return_value=self.data)
         datadir_patch.start()
         self.addCleanup(datadir_patch.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def test_local_one_click_backup_works_without_google_credentials(self):
         self.assertFalse(self.bridge.auth.exists())

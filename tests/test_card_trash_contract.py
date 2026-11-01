@@ -17,6 +17,7 @@ from app_storage import UnifiedAppStorage
 from data_model import normalize_plus, validate_plus
 from lan import LanService
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 
 CARD_ID = "example-2"
 OTHER_CARD = "example-3"
@@ -87,7 +88,7 @@ class TrashIsolatedFixture(unittest.TestCase):
         fake_datadir = patch.object(native_app, "datadir", return_value=self.root)
         fake_datadir.start()
         self.addCleanup(fake_datadir.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self._check_root(self.bridge)
         self.assertEqual(self.bridge.connection.get("mode"), "solo")
 

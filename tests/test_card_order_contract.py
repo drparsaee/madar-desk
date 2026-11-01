@@ -109,6 +109,9 @@ class CardOrderDiskContractTests(unittest.TestCase):
         fake_datadir.start()
         self.addCleanup(fake_datadir.stop)
         self.bridge = native_app.Bridge()
+        # The disk parity cases explicitly use example-1 and p-sample;
+        # initialize that disposable legacy fixture without seeding users.
+        self.bridge.saveState(native_app.initial_state())
 
     def test_bridge_persists_order_and_finance_together_across_fresh_instance(self):
         state = self.bridge.getState()

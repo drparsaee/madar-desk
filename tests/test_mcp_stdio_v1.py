@@ -46,6 +46,7 @@ class MCPStdioV1Tests(unittest.TestCase):
         (self.root / "store").mkdir(parents=True)
         with patch.object(native_app, "datadir", return_value=self.root / "store"):
             self.bridge = native_app.Bridge()
+            self.bridge.saveState(native_app.initial_state())
         self.cert, self.pemkey = self.root / "test.crt", self.root / "test.key"
         self.cert.write_text(_CERT, encoding="ascii")
         self.pemkey.write_text(_KEY, encoding="ascii")

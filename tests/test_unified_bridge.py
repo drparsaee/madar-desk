@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from app_storage import UnifiedAppStorage
 
 
@@ -18,7 +19,7 @@ class UnifiedHostBridgeTests(unittest.TestCase):
         mock = patch.object(native_app, "datadir", return_value=self.root)
         mock.start()
         self.addCleanup(mock.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
 
     def contract(self, suffix="a"):
         return {"type": "contract.set", "eventId": "contract-" + suffix,

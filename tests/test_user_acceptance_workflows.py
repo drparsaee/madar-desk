@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import native_app
+from tests.legacy_sample_fixture import seed_legacy_example_state
 from app_storage import UnifiedAppStorage
 from lan import LanService
 
@@ -33,7 +34,7 @@ class UserAcceptanceWorkflows(unittest.TestCase):
                                          return_value=self.root)
         self.datadir_patch.start()
         self.addCleanup(self.datadir_patch.stop)
-        self.bridge = native_app.Bridge()
+        self.bridge = seed_legacy_example_state(native_app.Bridge())
         self.assertEqual(self.bridge.enableUnifiedStorage()["mode"], "sqlite")
         self.store = UnifiedAppStorage(self.bridge.unified_path)
         self.today = datetime.now(timezone.utc).date().isoformat()
