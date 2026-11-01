@@ -279,6 +279,32 @@ class HostBackupSchedulerTests(unittest.TestCase):
         self.assertEqual(len(self.index()), 1)
         self.assertTrue(saved.exists())  # The orphan is not mistaken for an indexed backup.
 
+    def test_rotation_index_failure_keeps_retired_backup_bytes(self):
+        # A full index can be published before a second, pruned index fails.
+        # The failure must not delete a valid old snapshot first.
+        scheduler = HostBackupScheduler(self.bridge, max_backups=1)
+        self.assertTrue(scheduler.run_once())
+        original = self.bridge.backups_dir / self.index()[0]["name"]
+        original_bytes = original.read_bytes()
+        self.change("new revision")
+        publish = HostBackupScheduler._publish_index
+        attempts = 0
+
+        def fail_pruned_index(folder, entries):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 2:
+                raise OSError("synthetic index fsync failure")
+            return publish(folder, entries)
+
+        with patch.object(HostBackupScheduler, "_publish_index",
+                          side_effect=fail_pruned_index):
+            with self.assertRaisesRegex(OSError, "index fsync failure"):
+                scheduler.run_once()
+        self.assertEqual(attempts, 2)
+        self.assertEqual(original.read_bytes(), original_bytes)
+        self.assertEqual(len(self.index()), 2)
+
     def test_sqlite_revision_changes_and_published_backup_integrity(self):
         self.bridge = SyntheticSqliteBridge(self.root)
         scheduler = HostBackupScheduler(self.bridge, max_backups=2)

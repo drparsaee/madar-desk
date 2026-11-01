@@ -307,10 +307,12 @@ class HostBackupScheduler:
         for entry in retired:
             _validate_name(entry["name"], entry["kind"])
             self._exists_safe(folder, entry)
+        kept = entries[-self.max_backups:]
+        # Publish the new ownership set before removing any old snapshot.
+        # A failed index write must not delete bytes still named by the index.
+        self._publish_index(folder, kept)
         for entry in retired:
             (folder / entry["name"]).unlink(missing_ok=True)
-        kept = entries[-self.max_backups:]
-        self._publish_index(folder, kept)
         return kept
 
     def run_once(self):
