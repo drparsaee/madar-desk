@@ -1,0 +1,190 @@
+{
+  "lab": "Madar real Bridge / multi-Python-process HTTPS loopback",
+  "startedUtc": "2026-11-01T20:38:25.035385+00:00",
+  "bind": "127.0.0.1",
+  "syntheticOnly": true,
+  "clients": {
+    "lab-writer-a": {
+      "pid": 45424,
+      "role": "editor",
+      "projects": [
+        "p-sample"
+      ],
+      "isolatedProfile": true
+    },
+    "lab-writer-b": {
+      "pid": 35760,
+      "role": "editor",
+      "projects": [
+        "p-sample"
+      ],
+      "isolatedProfile": true
+    },
+    "lab-viewer": {
+      "pid": 40212,
+      "role": "viewer",
+      "projects": [
+        "p-personal"
+      ],
+      "isolatedProfile": true
+    }
+  },
+  "checks": [
+    {
+      "name": "host-listens-on-loopback-only",
+      "passed": true
+    },
+    {
+      "name": "login-lab-writer-a",
+      "passed": true
+    },
+    {
+      "name": "profile-lab-writer-a",
+      "passed": true
+    },
+    {
+      "name": "login-lab-writer-b",
+      "passed": true
+    },
+    {
+      "name": "profile-lab-writer-b",
+      "passed": true
+    },
+    {
+      "name": "login-lab-viewer",
+      "passed": true
+    },
+    {
+      "name": "profile-lab-viewer",
+      "passed": true
+    },
+    {
+      "name": "three-distinct-client-processes",
+      "passed": true
+    },
+    {
+      "name": "viewer-project-scope",
+      "passed": true
+    },
+    {
+      "name": "editor-project-scope",
+      "passed": true
+    },
+    {
+      "name": "viewer-state-write",
+      "passed": true,
+      "detail": "HTTPError"
+    },
+    {
+      "name": "viewer-user-list",
+      "passed": true,
+      "detail": "HTTPError"
+    },
+    {
+      "name": "editor-user-create",
+      "passed": true,
+      "detail": "HTTPError"
+    },
+    {
+      "name": "wrong-TLS-pin-refused",
+      "passed": true
+    },
+    {
+      "name": "wrong-pin-did-not-send-login",
+      "passed": true
+    },
+    {
+      "name": "concurrent-CAS-one-winner",
+      "passed": true,
+      "detail": {
+        "writerA": true,
+        "writerB": false
+      }
+    },
+    {
+      "name": "CAS-host-winner-persisted",
+      "passed": true
+    },
+    {
+      "name": "offline-client-base",
+      "passed": true
+    },
+    {
+      "name": "offline-local-queue",
+      "passed": true
+    },
+    {
+      "name": "offline-reconcile-two-edits",
+      "passed": true
+    },
+    {
+      "name": "reconcile-durable-on-host",
+      "passed": true
+    },
+    {
+      "name": "conflict-queued-offline",
+      "passed": true
+    },
+    {
+      "name": "same-card-conflict-protected",
+      "passed": true
+    },
+    {
+      "name": "host-not-overwritten-by-conflict",
+      "passed": true
+    },
+    {
+      "name": "new-host-loads-three-accounts",
+      "passed": true
+    },
+    {
+      "name": "reboot-new-process-lab-writer-a",
+      "passed": true
+    },
+    {
+      "name": "reboot-reconnect-lab-writer-a",
+      "passed": true
+    },
+    {
+      "name": "reboot-read-lab-writer-a",
+      "passed": true
+    },
+    {
+      "name": "reboot-new-process-lab-writer-b",
+      "passed": true
+    },
+    {
+      "name": "reboot-reconnect-lab-writer-b",
+      "passed": true
+    },
+    {
+      "name": "reboot-read-lab-writer-b",
+      "passed": true
+    },
+    {
+      "name": "reboot-new-process-lab-viewer",
+      "passed": true
+    },
+    {
+      "name": "reboot-reconnect-lab-viewer",
+      "passed": true
+    },
+    {
+      "name": "reboot-read-lab-viewer",
+      "passed": true
+    },
+    {
+      "name": "host-persistence-after-reboot",
+      "passed": true
+    }
+  ],
+  "result": "passed",
+  "host": {
+    "https": true,
+    "ephemeralPort": 5807,
+    "tlsPinLength": 64
+  },
+  "finishedUtc": "2026-11-01T20:38:40.002568+00:00",
+  "passed": 35,
+  "total": 35
+}

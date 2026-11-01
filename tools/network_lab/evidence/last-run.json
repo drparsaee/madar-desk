@@ -1,0 +1,51 @@
+{
+  "run": "904cdc7734574ed49df444e857147698",
+  "passed": true,
+  "checks": [
+    {
+      "check": "wrong_cert_pin_rejected",
+      "passed": true
+    },
+    {
+      "check": "editor_edit",
+      "passed": true,
+      "projects": [
+        "p-sample"
+      ],
+      "task_count": 4
+    },
+    {
+      "check": "viewer_scoped_and_readonly",
+      "passed": true,
+      "host_denial": 403,
+      "projects": [
+        "p-personal"
+      ],
+      "task_count": 0
+    },
+    {
+      "check": "editor_verify",
+      "passed": true,
+      "projects": [
+        "p-sample"
+      ],
+      "task_count": 4
+    },
+    {
+      "check": "three_distinct_appdata_stores",
+      "passed": true
+    },
+    {
+      "check": "host_durable_disk_write",
+      "passed": true
+    }
+  ],
+  "error": null,
+  "topology": {
+    "host": "separate Python process + native_app.Bridge + LanService",
+    "clients": "two isolated native_app.Bridge profiles in independent processes",
+    "network": "HTTPS over 127.0.0.1 ephemeral TCP port; no external LAN",
+    "tls": "pinned public test-only certificate"
+  },
+  "kept": false
+}
