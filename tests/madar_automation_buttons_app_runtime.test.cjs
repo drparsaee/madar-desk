@@ -114,9 +114,14 @@ async function expectRtlWithinViewport(page,locator,width){
 }
 
 async function openBoardPanel(page,width,{supported}){
-  const launcher=page.locator('.page-controls .ab-launcher').filter({hasText:'دکمه‌های برد'});
-  await launcher.waitFor({state:'visible'});
-  await launcher.click();
+  // Board automation now lives under global Settings, not the board toolbar.
+  await page.getByRole('button',{name:'تنظیمات مدار'}).click();
+  const settings=page.getByRole('dialog',{name:'تنظیمات مدار'});
+  await settings.waitFor({state:'visible'});
+  const group=settings.locator('details.settings-density__disclosure').filter({hasText:'دکمه‌های برد'}).first();
+  await group.locator(':scope > summary').click();
+  await group.getByRole('button',{name:'دکمه‌های برد',exact:true}).click();
+  await settings.waitFor({state:'hidden'});
   const dialog=page.getByRole('dialog',{name:'دکمه‌های اتوماسیون مدار'});
   await dialog.waitFor({state:'visible'});
   await expectRtlWithinViewport(page,dialog,width);
@@ -139,7 +144,12 @@ async function openCardInline(page,width,{supported}){
   await page.getByRole('button',{name:'جزئیات کارت نمونه اتوماسیون'}).click();
   const drawer=page.getByRole('dialog',{name:'جزئیات کار'});
   await drawer.waitFor({state:'visible'});
-  await drawer.locator('.task-quick-actions .ab-launcher').click();
+  // Both per-card and per-board actions live in the task Settings disclosure.
+  const cardSettings=drawer.locator('#task-section-settings');
+  if(await cardSettings.getAttribute('open')===null)
+    await cardSettings.locator(':scope > summary').click();
+  const cardLauncher=cardSettings.locator('.ab-launcher').filter({hasText:'دکمه‌های کارت'});
+  await cardLauncher.click();
   const panel=drawer.getByRole('region',{name:'دکمه‌های اتوماسیون مدار'});
   await panel.waitFor({state:'visible'});
   assert.equal(await panel.evaluate(el=>getComputedStyle(el).direction),'rtl');
@@ -153,7 +163,7 @@ async function openCardInline(page,width,{supported}){
     await panel.getByText('میزبان این قابلیت را ارائه نمی‌کند',{exact:false}).waitFor({state:'visible'});
     assert.equal(await drawer.getByRole('group',{name:'دکمه‌های اتوماسیون کارت'}).count(),0);
   }
-  await drawer.locator('.task-quick-actions .ab-launcher').click();
+  await cardLauncher.click();
   await panel.waitFor({state:'hidden'});
   await drawer.getByRole('button',{name:'بستن',exact:true}).click();
   await drawer.waitFor({state:'hidden'});

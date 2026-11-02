@@ -441,10 +441,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <div className="edit-section task-card-settings">
           <div className="task-card-settings__launchers">
             <AutomationButtonsLauncher scope="card" onClick={()=>{
-              setAutomationButtonView('card');setAutomationButtonsOpen(true);
+              setAutomationButtonsOpen(open=>automationButtonView==='card'?!open:true);
+              setAutomationButtonView('card');
             }} disabled={!task.boardId}/>
             <AutomationButtonsLauncher scope="board" onClick={()=>{
-              setAutomationButtonView('board');setAutomationButtonsOpen(true);
+              setAutomationButtonsOpen(open=>automationButtonView==='board'?!open:true);
+              setAutomationButtonView('board');
             }} disabled={!task.boardId}/>
           </div>
           {task.boardId&&typeof api?.automationButtonsList==='function'&&
