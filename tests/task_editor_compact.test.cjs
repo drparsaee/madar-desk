@@ -20,7 +20,7 @@ test('every visible quick action has a unique, actual and focusable destination'
   const nav=app.match(/<nav className="task-quick-actions"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(nav,'the task edit toolbar exists');
   const ids=Array.from(nav.matchAll(/aria-controls="(task-section-[a-z]+)"/g),m=>m[1]);
-  assert.equal(ids.length,7);
+  assert.equal(ids.length,10,'the complete ordered toolbar now includes metadata, time, dependencies and cover');
   assert.equal(new Set(ids).size,ids.length);
   for(const id of ids){
     assert.match(app,new RegExp('id="'+id+'" tabIndex=\\{-1\\}'),id+' should be keyboard focusable');
@@ -40,7 +40,10 @@ test('compact task layout reserves legible inputs and responsive columns',()=>{
 });
 
 test('less-used card features collapse safely while existing data opens them',()=>{
-  assert.match(app, /className="task-optional-block" defaultOpen=\{Boolean\(task\.cover\)\}/);
+  assert.match(app, /className="task-optional-block" id="task-section-cover" tabIndex=\{-1\} defaultOpen=\{Boolean\(task\.cover\)\}/);
+  for(const key of ['assignees','time','dependencies','reports']){
+    assert.match(app,new RegExp('open=\\{sectionOpen\\.'+key+'\\}'));
+  }
   assert.match(app, /className="task-optional-block task-step-expenses" defaultOpen=\{!!step\.expenseItems\?\.length\}/);
   assert.match(app, /<summary>چک‌لیست‌های بیشتر<\/summary>/);
   assert.match(css, /\.task-optional-block\[open\]/);
