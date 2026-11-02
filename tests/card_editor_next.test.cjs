@@ -20,21 +20,25 @@ test('disclosure layout is per-user and reused across cards without modifying ta
   const {readCardSectionPreferences,saveCardSectionPreferences}=load('src/card_section_preferences.js');
   const memory=new Map(),storage={getItem:key=>memory.get(key)??null,setItem:(key,val)=>memory.set(key,val)};
   assert.deepEqual(readCardSectionPreferences(storage,'employee'),{
-    assignees:false,time:false,dependencies:false,reports:false});
+    metadata:true,description:true,assignees:false,attachments:false,checklist:false,
+    tags:false,cover:false,time:false,dependencies:false,reports:false,
+    accounting:false,settings:false});
   saveCardSectionPreferences(storage,'employee',{assignees:true,reports:true});
   assert.deepEqual(readCardSectionPreferences(storage,'employee'),{
-    assignees:true,time:false,dependencies:false,reports:true});
+    metadata:false,description:false,assignees:true,attachments:false,checklist:false,
+    tags:false,cover:false,time:false,dependencies:false,reports:true,
+    accounting:false,settings:false});
   assert.equal(readCardSectionPreferences(storage,'viewer').reports,false);
   assert.doesNotThrow(()=>saveCardSectionPreferences({setItem(){throw Error('no storage')}},'employee',{time:true}));
 });
-test('task drawer four shared details and source order match quick-action navigation',()=>{
+test('card editor all native disclosures and exact user-specified toolbar and DOM order',()=>{
   const app=text('src/App.jsx');
-  for(const group of ['assignees','time','dependencies','reports']){
+  for(const group of ['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports','accounting','settings']){
     assert.match(app,new RegExp('id="task-section-'+group+'"'));
     assert.match(app,new RegExp('open=\\{sectionOpen\\.'+group+'\\}'));
     assert.match(app,new RegExp("onSectionToggle\\('"+group+"'"));
   }
-  const ids=['metadata','assignees','time','dependencies','description','cover','tags','checklist','reports','attachments'];
+  const ids=['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports'];
   const nav=app.slice(app.indexOf('<nav className="task-quick-actions"'),app.indexOf('</nav>',app.indexOf('<nav className="task-quick-actions"')));
   let previous=-1;
   for(const id of ids){
@@ -42,6 +46,15 @@ test('task drawer four shared details and source order match quick-action naviga
     assert.ok(at>previous,'quick section order: '+id);
     previous=at;
   }
+  const body=app.slice(app.indexOf('<nav className="task-quick-actions"'),app.indexOf('{canEdit&&<div className="drawer-danger">'));
+  previous=-1;
+  for(const id of ids){
+    const at=body.indexOf('id="task-section-'+id+'"');
+    assert.ok(at>previous,'rendered section DOM order: '+id);
+    previous=at;
+  }
+  assert.doesNotMatch(nav,/AutomationButtonsLauncher/);
+  assert.match(body,/id="task-section-settings"/);
   assert.match(app,/onArchive=\{\(\)=>archiveTask\(activeTask\.id\)\}/);
 });
 test('legacy Toman conversion control is gone, old nonzero money is not silently rewritten',()=>{
@@ -62,11 +75,13 @@ test('all six native color-pickers expose named common presets',()=>{
   assert.match(html,/aria-label="انتخاب قرمز برای اولویت"/);
   assert.match(html,/aria-pressed="true"/);
 });
-test('card cover renders at top for strip mode and across entire card for full mode',()=>{
+test('card cover strip colors the heading behind title, full colors entire card',()=>{
   const app=text('src/App.jsx');
   const component=app.slice(app.indexOf('function TaskCard('),app.indexOf('function WalletIcon('));
-  assert.ok(component.indexOf('task-card-cover task-card-cover-strip')<component.indexOf('className="task-title"'));
+  assert.match(component,/className="task-card-head"/);
+  assert.match(component,/task-card--cover-strip/);
   assert.match(component,/task-card--cover-full/);
+  assert.match(text('src/kanban_compact.css'),/\.task-card--cover-strip \.task-card-head/);
   assert.match(text('src/kanban_compact.css'),/\.task-card--cover-full/);
   assert.match(text('src/kanban_compact.css'),/background: var\(--card-cover-color\)/);
 });

@@ -52,16 +52,30 @@ test('full App reuses disclosure preference, offers Jalali popup, keeps full-cov
       await page.locator('.task-card .task-title').first().click();
       let drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
+      const orderedIds=['metadata','description','assignees','attachments','checklist','tags',
+        'cover','time','dependencies','reports','accounting','settings'];
+      const actualSections=await drawer.locator('.task-shared-disclosure[id^="task-section-"]')
+        .evaluateAll(items=>items.map(item=>item.id.replace('task-section-','')));
+      assert.deepEqual(actualSections,orderedIds,'actual DOM must match requested section order');
+      const navSections=await drawer.locator('.task-quick-actions button[aria-controls]')
+        .evaluateAll(items=>items.map(item=>item.getAttribute('aria-controls').replace('task-section-','')));
+      assert.deepEqual(navSections,orderedIds.slice(0,10),'toolbar exactly matches ten requested sections');
+      assert.notEqual(await drawer.locator('#task-section-metadata').getAttribute('open'),null,
+        'metadata opens by default so deadline remains accessible');
       const assignees=drawer.locator('#task-section-assignees');
       assert.equal(await assignees.getAttribute('open'),null);
       await assignees.locator('summary').click();
       await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')||'{}').assignees===true);
+      await drawer.locator('#task-section-cover > summary').click();
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')||'{}').cover===true);
       await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
       await page.locator('.task-card .task-title').nth(1).click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
       assert.notEqual(await drawer.locator('#task-section-assignees').getAttribute('open'),null,
         'second card inherits the first card disclosure preference');
+      assert.notEqual(await drawer.locator('#task-section-cover').getAttribute('open'),null,
+        'cover disclosure also persists per user across cards');
       // Clicking the compact deadline box itself opens the small picker.
       await drawer.getByRole('textbox',{name:'موعد انجام'}).click();
       const calendar=page.getByRole('group',{name:'تقویم انتخاب تاریخ'});
@@ -82,9 +96,9 @@ test('full App reuses disclosure preference, offers Jalali popup, keeps full-cov
       assert.equal(bounds.hasStripe,false);
       await coverCard.locator('.task-title').click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
-      await drawer.getByRole('button',{name:'انتقال به آرشیو'}).click();
+      await drawer.getByRole('button',{name:'آرشیو',exact:true}).click();
       await drawer.getByText('کارت بایگانی شود؟',{exact:false}).waitFor();
-      await drawer.getByRole('button',{name:'انتقال به آرشیو'}).last().click();
+      await drawer.getByRole('button',{name:'تأیید آرشیو'}).click();
       await drawer.waitFor({state:'hidden'});
       await page.getByRole('searchbox',{name:'جست‌وجوی پیشرفته کارها'}).fill('کارت دوم');
       const result=page.getByRole('region',{name:'نتایج جست‌وجوی همه کارت‌ها'});

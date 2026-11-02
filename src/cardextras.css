@@ -30,8 +30,13 @@
 .cardextras .card-cover-editor__modes button[aria-pressed="true"]{border-color:var(--accent,#5672ca);box-shadow:inset 0 0 0 1px var(--accent,#5672ca);font-weight:750}
 .card-cover-editor__preview{position:relative;display:flex;flex-direction:column;gap:7px;min-height:88px;padding:11px;border-radius:10px;border:1px solid #a9b8cd54;overflow:hidden;background:var(--surface,#fff);color:var(--text,#233149)}
 .card-cover-editor__preview--full{background:var(--cover-preview-color);color:var(--cover-preview-contrast)}
-.card-cover-editor__preview--strip{padding-block-start:32px}
-.card-cover-editor__preview-band{position:absolute;inset-inline:0;inset-block-start:0;block-size:24px;background:var(--cover-preview-color)}
+.card-cover-editor__preview--strip{padding-block-start:0}
+.card-cover-editor__preview--strip .card-cover-editor__preview-title{
+  z-index:1;display:flex;align-items:center;min-height:52px;
+  padding:9px 11px;margin:0 -11px 4px;
+  color:var(--cover-preview-contrast);background:var(--cover-preview-color);
+}
+.card-cover-editor__preview-band{display:none}
 .card-cover-editor__preview-title{font-size:13px;font-weight:750;overflow-wrap:anywhere;line-height:1.4}
 .card-cover-editor__preview-line{inline-size:66%;block-size:4px;border-radius:4px;background:currentColor;opacity:.16}
 .card-cover-editor__preview-line.short{inline-size:39%}

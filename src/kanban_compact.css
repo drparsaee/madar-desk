@@ -92,10 +92,19 @@
 }
 .kanban .task-card:hover { transform: translateY(-1px); }
 .kanban .task-card-top { justify-content: flex-end; margin-block-end: 1px; }
-.kanban .task-card--cover-strip { padding-block-start: 0; overflow: hidden; }
-.kanban .task-card--cover-strip .task-card-cover {
-  block-size: 20px; inline-size: calc(100% + 18px); margin: 0 -9px 6px;
-  border-radius: 7px 7px 0 0; background: var(--card-cover-color);
+.kanban .task-card--cover-strip { overflow: hidden; }
+.kanban .task-card--cover-strip .task-card-head {
+  display:flex;flex-direction:column;
+  min-block-size:76px;margin:-8px -9px 8px;padding:8px 10px 10px;
+  border-radius:7px 7px 0 0;
+  background:var(--card-cover-color);
+  color:var(--card-cover-contrast,#152238);
+}
+.kanban .task-card--cover-strip .task-title {
+  color:inherit;overflow-wrap:anywhere;
+}
+.kanban .task-card--cover-strip .task-complete-toggle {
+  color:inherit;border-color:currentColor;background:#fff3;
 }
 .kanban .task-card--cover-full {
   background: var(--card-cover-color);

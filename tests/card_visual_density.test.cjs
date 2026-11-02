@@ -14,7 +14,7 @@ test('board card avoids repeated board/project labels and separate cover overlay
   assert.match(taskCard,/task-card--cover-strip/);
   assert.match(taskCard,/coverTextColor\(cover.color\)/);
   const css=source('kanban_compact.css');
-  assert.match(css,/\.task-card--cover-strip \.task-card-cover/);
+  assert.match(css,/\.task-card--cover-strip \.task-card-head/);
   assert.match(css,/\.task-card--cover-full\s*\{/);
 });
 
