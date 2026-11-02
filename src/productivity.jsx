@@ -77,25 +77,35 @@ export function similarTasks(title,tasks,exclude=''){
  }).filter(x=>x.score>=0.25).sort((a,b)=>b.score-a.score).slice(0,4);
 }
 const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
-export const pathValid=path=>/^\\\\[^\\/:*?"<>|\s]+\\[^\\/:*?"<>|\s]+\\[^\x00-\x1f]+$/.test(path)&&!path.split('\\').some(x=>x==='..'||x==='.')&&!path.endsWith('\\');
+export const pathValid=path=>{
+ if(typeof path!=='string'||path.length>2048)return false;
+ const normalized=path.replace(/\//g,'\\');
+ if(!normalized.startsWith('\\\\')||normalized.startsWith('\\\\?\\')||normalized.startsWith('\\\\.\\'))return false;
+ const parts=normalized.slice(2).split('\\');
+ return parts.length>=3&&parts.slice(0,3).every(Boolean)&&
+   !parts.some(part=>part==='.'||part==='..')&&
+   !/[<>:"|?*\x00-\x1f]/.test(normalized.slice(2))&&!normalized.endsWith('\\');
+};
 
 export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
  const [name,setName]=useState(''),[path,setPath]=useState(''),[message,setMessage]=useState('');
  const open=async p=>{setMessage('');try{await api.openSharedFile(p);}catch(e){setMessage('بازکردن فایل ممکن نشد: '+e.message);}};
+ const download=async p=>{setMessage('');try{const result=await api.downloadSharedFile(p);setMessage('فایل در پوشه دانلودهای این سیستم ذخیره شد: '+result.name);}catch(e){setMessage('دانلود فایل ممکن نشد: '+e.message);}};
  const add=()=>{if(!pathValid(path)){setMessage('مسیر معتبر نمونه: \\\\OFFICE-PC\\Projects\\file.pdf');return;}
    if(!name.trim()){setMessage('عنوان فایل را وارد کنید.');return;}
    onChange([...links,{id:id(),name:name.trim().slice(0,180),path:path.replace(/\//g,'\\')}]);setName('');setPath('');setMessage('');
  };
  return <div className="shared-links">
  {links.map(item=><div className="shared-item" key={item.id}><FileText size={16}/>
-   <button className="shared-open" onClick={()=>open(item.path)} title={item.path}><strong>{item.name}</strong><small dir="ltr">{item.path}</small></button>
+   <button className="shared-open" onClick={()=>download(item.path)} title={'دانلود فایل: '+item.path}><strong>{item.name}</strong><small dir="ltr">{item.path}</small></button>
+   <button title="دانلود روی این سیستم" onClick={()=>download(item.path)}>دانلود</button>
    <button title="نمایش در File Explorer" onClick={()=>open(item.path)}><FolderOpen size={16}/></button>
    {canEdit&&<button title="حذف لینک" onClick={()=>onChange(links.filter(x=>x.id!==item.id))}><X size={15}/></button>}
  </div>)}
  {!links.length&&<p className="shared-empty">هنوز لینک فایل اشتراکی ثبت نشده است.</p>}
  {canEdit&&<div className="shared-create"><input aria-label="عنوان فایل" placeholder="نام فایل یا پوشه" value={name} onChange={e=>setName(e.target.value)}/><input dir="ltr" aria-label="مسیر اشتراک ویندوز" placeholder="\\Server\Share\Folder\File.pdf" value={path} onChange={e=>setPath(e.target.value)}/><button className="btn secondary" onClick={add}><Plus size={15}/> ثبت لینک</button></div>}
  {!!message&&<div className="field-error">{message}</div>}
- <small className="shared-note">برای استفاده روی سیستم‌های دیگر، پوشه باید با Windows File Sharing به اشتراک گذاشته شده باشد و حساب ویندوز آن سیستم مجوز دسترسی داشته باشد. فایل‌ها در مدار آپلود نمی‌شوند.</small>
+ <small className="shared-note">برای استفاده روی سیستم‌های دیگر، پوشه باید با Windows File Sharing به اشتراک گذاشته شده باشد و حساب ویندوز آن سیستم مجوز دسترسی داشته باشد. دانلود روی همان کامپیوتر در پوشه Downloads ذخیره می‌شود؛ فایل‌ها در مدار آپلود نمی‌شوند.</small>
  </div>;
 }
 export function TimeDashboard({tasks,projects,onOpen,calendar='jalali'}){

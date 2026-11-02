@@ -64,9 +64,14 @@ test('duration aggregation formatting does not invent missing values',()=>{
 });
 test('only UNC network share paths can be added as file links',()=>{
   assert.equal(pathValid('\\\\OFFICE-PC\\Projects\\design file.pdf'),true);
+  assert.equal(pathValid('\\\\FILESERVER\\Scan Drive\\sample\\مهر\\English.zip'),true);
   assert.equal(pathValid('https://example.com/file.pdf'),false);
   assert.equal(pathValid('C:\\Users\\file.pdf'),false);
   assert.equal(pathValid('\\\\SERVER\\Shared\\..\\secret.pdf'),false);
+  assert.equal(pathValid('\\\\SERVER\\Shared\\.\\secret.pdf'),false);
+  assert.equal(pathValid('\\\\?\\C:\\secret.pdf'),false);
+  assert.equal(pathValid('\\\\.\\pipe\\name'),false);
+  assert.equal(pathValid('\\\\SERVER\\Shared\\bad:document.pdf'),false);
 });
 test('per-card cost preference overrides the project default',()=>{
   assert.equal(cardCostEnabled({costEnabled:null},{costEnabled:true}),true);

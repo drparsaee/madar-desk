@@ -136,6 +136,7 @@ const mockBridge={
   getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
+  downloadSharedFile:async()=>{throw Error('دانلود فایل اشتراکی فقط در EXE ویندوز فعال است.');},
   createLocalBackup:async()=>{throw Error('نسخه پشتیبان داخلی فقط در EXE فعال است.');},
   listLocalBackups:async()=>[],
   automaticBackupStatus:async()=>({running:false,intervalSeconds:30,complete:false,scope:null}),

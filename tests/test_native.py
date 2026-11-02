@@ -160,8 +160,11 @@ class NativeAppTests(unittest.TestCase):
 
     def test_smb_links_only_and_estimate_validation(self):
         self.assertTrue(native_app.valid_share_path(r"\\OFFICE-PC\Projects\folder\file.pdf"))
+        self.assertTrue(native_app.valid_share_path(r"\\FILESERVER\Scan Drive\sample\مهر\English.zip"))
         for illegal in ("https://example.com/file", r"C:\folder\file.pdf",
-                        r"\\server\share\..\hidden.txt", r"\\server\share\bad:file.txt"):
+                        r"\\server\share\..\hidden.txt", r"\\server\share\.\hidden.txt",
+                        r"\\server\share\bad:file.txt", r"\\?\C:\hidden.txt",
+                        r"\\.\pipe\name"):
             self.assertFalse(native_app.valid_share_path(illegal), illegal)
         state = self.bridge.getState()
         state["projects"][0]["fileLinks"] = [{
@@ -186,6 +189,38 @@ class NativeAppTests(unittest.TestCase):
         self.assertIn(r"\\FILESERVER\Shared\photo.jpg", popen.call_args.args[0])
         with self.assertRaises(ValueError):
             self.bridge.openSharedFile("https://example.org/")
+
+    def test_share_download_copies_into_local_folder_without_overwriting_or_executing(self):
+        source = self.root / "English.zip"
+        source.write_bytes(b"synthetic-zip-test-bytes")
+        downloads = self.root / "Downloads"
+        original = native_app.copy_shared_file_to_directory(source, downloads)
+        repeated = native_app.copy_shared_file_to_directory(source, downloads)
+        self.assertTrue(original["downloaded"])
+        self.assertEqual(original["name"], "English.zip")
+        self.assertEqual(repeated["name"], "English (1).zip")
+        self.assertEqual((downloads / "English.zip").read_bytes(), source.read_bytes())
+        self.assertEqual((downloads / "English (1).zip").read_bytes(), source.read_bytes())
+        self.assertEqual(source.read_bytes(), b"synthetic-zip-test-bytes")
+
+        with patch.object(native_app.shutil, "copyfileobj", side_effect=OSError("synthetic failure")):
+            with self.assertRaisesRegex(OSError, "synthetic failure"):
+                native_app.copy_shared_file_to_directory(source, downloads)
+        self.assertFalse((downloads / "English (2).zip").exists())
+
+    def test_share_download_bridge_validates_and_only_uses_client_downloads(self):
+        valid = r"\\FILESERVER\Scan Drive\sample\مهر\English.zip"
+        with patch.object(native_app, "windows_downloads_directory", return_value=self.root) as folder:
+            with patch.object(native_app, "copy_shared_file_to_directory", return_value={
+                "downloaded": True, "name": "English.zip", "path": str(self.root / "English.zip")
+            }) as copy:
+                result = self.bridge.downloadSharedFile(valid)
+        self.assertEqual(result["name"], "English.zip")
+        folder.assert_called_once_with()
+        copy.assert_called_once_with(valid, self.root)
+        for illegal in (r"\\server\share\..\secret", r"\\?\C:\secret", "https://example.com/"):
+            with self.assertRaises(ValueError):
+                self.bridge.downloadSharedFile(illegal)
 
     def test_local_backup_auto_and_manual_restore(self):
         original = self.bridge.getState()
