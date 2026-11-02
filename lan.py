@@ -752,6 +752,26 @@ class LanService:
                 try:
                     self._store_users(remaining_users)
                 except Exception:
+                    # The registry writer may have published the deletion and
+                    # then raised. A task-state rollback alone would leave a
+                    # live session backed by a deleted on-disk identity.
+                    try:
+                        persisted_users = self._read_users()
+                    except Exception as inspection_error:
+                        raise RuntimeError(
+                            "LAN deletion registry save failed; persisted registry could not be inspected"
+                        ) from inspection_error
+                    if persisted_users != self.users:
+                        if persisted_users != remaining_users:
+                            raise RuntimeError(
+                                "LAN deletion registry save failed; unexpected registry revision prevents rollback"
+                            )
+                        try:
+                            self._store_users(self.users)
+                        except Exception as rollback_error:
+                            raise RuntimeError(
+                                "LAN deletion failed and user-registry rollback failed"
+                            ) from rollback_error
                     if updated:
                         try:
                             self.bridge.saveState(previous_state)
