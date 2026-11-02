@@ -188,13 +188,15 @@ def view_for(data, account):
     permitted = set(account["projects"])
     filtered["projects"] = [p for p in filtered["projects"] if p["id"] in permitted]
     filtered["tasks"] = [t for t in filtered["tasks"] if t["projectId"] in permitted]
-    if "boards" in data:
-        filtered["boards"] = [b for b in data["boards"] if b.get("projectId") in permitted]
+    if "boards" in filtered:
+        # Never reintroduce references to the live host state after deepcopy.
+        # Read projections must remain detached until an authorized write.
+        filtered["boards"] = [b for b in filtered["boards"] if b.get("projectId") in permitted]
         allowed_boards = {b["id"] for b in filtered["boards"]}
-        filtered["templates"] = [t for t in data.get("templates", [])
+        filtered["templates"] = [t for t in filtered.get("templates", [])
                                  if t["boardId"] in allowed_boards]
         allowed_workspaces = {b["workspaceId"] for b in filtered["boards"]}
-        filtered["workspaces"] = [w for w in data.get("workspaces", [])
+        filtered["workspaces"] = [w for w in filtered.get("workspaces", [])
                                   if w["id"] in allowed_workspaces]
     return filtered
 
