@@ -717,7 +717,33 @@ class LanService:
                         task["assignees"] = [u for u in task["assignees"] if u != username]
                         updated = True
                 if updated:
-                    self.bridge.saveState(state)
+                    try:
+                        self.bridge.saveState(state)
+                    except Exception:
+                        # A writer may publish the state and then fail during
+                        # post-commit work. Never leave an active identity with
+                        # silently removed assignments after such an error.
+                        # A pre-commit failure must not trigger a second write;
+                        # never overwrite a third-party revision on recovery.
+                        try:
+                            observed = deepcopy(self.bridge.getState())
+                        except Exception as inspection_error:
+                            raise RuntimeError(
+                                "LAN deletion state save failed; persisted state could not be inspected"
+                            ) from inspection_error
+                        if observed == previous_state:
+                            raise
+                        if observed != state:
+                            raise RuntimeError(
+                                "LAN deletion state save failed; unexpected state revision prevents rollback"
+                            )
+                        try:
+                            self.bridge.saveState(previous_state)
+                        except Exception as rollback_error:
+                            raise RuntimeError(
+                                "LAN deletion state save failed and task-state rollback failed"
+                            ) from rollback_error
+                        raise
                 # If registry persistence fails after task unassignment was
                 # saved, compensate while holding the same user/state locks.
                 # This handles ordinary errors, not a crash between files.
