@@ -1,7 +1,12 @@
-; Madar Desk 1.0.2 safe-update installer. Compile with Inno Setup 6.
+; Madar Desk safe-update installer. Compile with Inno Setup 6.
 ; Existing profile data is NEVER an installer-owned file.
+; Override version/executable/output at build time for immutable releases.
+#ifndef MadarVersion
 #define MadarVersion "1.0.2"
+#endif
+#ifndef ExeFile
 #define ExeFile "Madar-Desk-v1.0.2-Update-20261101.exe"
+#endif
 #ifndef EXE_SHA256
   #error Pass /DEXE_SHA256=<SHA256> to ISCC.
 #endif
@@ -9,14 +14,22 @@
   #ifndef QA_ROOT
     #error QA_ROOT is required for isolated installer builds.
   #endif
+  #ifdef RCOutputBase
+  #define SetupBasename RCOutputBase
+  #else
   #ifdef QAFRESH
   #define SetupBasename "Madar-Setup-v1.0.2-QA-Fresh-Fix1"
   #else
   #define SetupBasename "Madar-Setup-v1.0.2-QA-Fix1"
   #endif
+  #endif
   #define AppGuid "{{7CBA8B02-1D55-480C-953D-00AE0DAB4104}"
 #else
+  #ifdef RCOutputBase
+  #define SetupBasename RCOutputBase
+  #else
   #define SetupBasename "Madar-Setup-v1.0.2-Update-20261101-Fix1"
+  #endif
   #define AppGuid "{{92E35390-0AD9-4968-8F0B-64C0E9C51F7A}"
 #endif
 

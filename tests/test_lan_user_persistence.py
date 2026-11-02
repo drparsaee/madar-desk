@@ -1,6 +1,11 @@
 """Synthetic failure-injection checks for LAN identity persistence and ACL."""
 
 from copy import deepcopy
+import json
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -8,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lan import LanService, verify_password
+from offline_exchange import atomic_json
 
 
 class _Bridge:
@@ -20,6 +26,19 @@ class _Bridge:
 
     def saveState(self, state):
         self.state = deepcopy(state)
+
+
+class _DiskBridge:
+    """Test-only durable board fixture, wholly under a disposable root."""
+    def __init__(self, path):
+        self._lock = threading.RLock()
+        self.path = Path(path)
+
+    def getState(self):
+        return json.loads(self.path.read_text(encoding="utf8"))
+
+    def saveState(self, state):
+        atomic_json(self.path, state)
 
 
 class UserPersistenceFailureTests(unittest.TestCase):
@@ -149,6 +168,84 @@ class UserPersistenceFailureTests(unittest.TestCase):
         self.assertNotIn("editor", self.service._read_users())
         with self.assertRaises(PermissionError):
             self.service.account_for(editor_token)
+
+    def test_hard_stopped_delete_recovers_consistently_before_host_start(self):
+        # Actual child process hard exits (not an injected exception): first
+        # after registry publication, next after the card store publication.
+        # These are two isolated synthetic databases, never a user profile.
+        source = self.service.users_path
+        code = r'''
+import os, sys
+from pathlib import Path
+from tests.test_lan_user_persistence import _DiskBridge
+from lan import LanService
+root = Path(sys.argv[1]); stage = sys.argv[2]
+bridge = _DiskBridge(root / "cards.json")
+service = LanService(bridge, root / "users.json", bind="127.0.0.1", port=0)
+token = service.authenticate("admin", "synthetic-admin-password")["token"]
+if stage == "registry":
+    original = service._store_users
+    def crash(users=None):
+        original(users)
+        os._exit(71)
+    service._store_users = crash
+else:
+    original = bridge.saveState
+    def crash(state):
+        original(state)
+        os._exit(72)
+    bridge.saveState = crash
+service.delete_user(token, "editor")
+raise AssertionError("hard-stop was not reached")
+'''
+        for stage, exit_code in (("registry", 71), ("cards", 72)):
+            with self.subTest(stage=stage):
+                root = Path(self.scratch.name) / ("hard-stop-" + stage)
+                root.mkdir()
+                shutil.copy2(source, root / "users.json")
+                atomic_json(root / "cards.json", {"projects": [], "tasks": [
+                    {"id": "synthetic-card", "assignees": ["admin", "editor"]}]})
+                env = dict(os.environ)
+                env["APPDATA"] = str(root / "roaming")
+                env["LOCALAPPDATA"] = str(root / "local")
+                for folder in (env["APPDATA"], env["LOCALAPPDATA"]):
+                    Path(folder).mkdir()
+                result = subprocess.run(
+                    [sys.executable, "-B", "-c", code, str(root), stage],
+                    cwd=Path(__file__).resolve().parents[1], env=env,
+                    capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, exit_code, result.stderr)
+                journal = root / "users.json.delete-pending.json"
+                self.assertTrue(journal.is_file())
+                # New host must recover before offering any identity session.
+                recovered = LanService(_DiskBridge(root / "cards.json"),
+                                       root / "users.json", bind="127.0.0.1", port=0)
+                self.assertNotIn("editor", recovered.users)
+                self.assertNotIn("editor", recovered._read_users())
+                self.assertEqual(_DiskBridge(root / "cards.json").getState()["tasks"][0]["assignees"],
+                                 ["admin"])
+                self.assertFalse(journal.exists())
+                # Subsequent restarts must remain idempotently consistent.
+                second = LanService(_DiskBridge(root / "cards.json"),
+                                    root / "users.json", bind="127.0.0.1", port=0)
+                self.assertEqual(second.users, recovered.users)
+
+    def test_malformed_recovery_marker_rejects_startup_without_mutation(self):
+        root = Path(self.scratch.name) / "malformed-intent"
+        root.mkdir()
+        users = root / "users.json"
+        shutil.copy2(self.service.users_path, users)
+        cards = root / "cards.json"
+        atomic_json(cards, {"tasks": [{"id": "safe", "assignees": ["editor"]}],
+                            "projects": []})
+        marker = root / "users.json.delete-pending.json"
+        marker.write_text('{"version":1,"operation":"other","username":"editor"}', encoding="utf8")
+        original_users, original_cards = users.read_bytes(), cards.read_bytes()
+        with self.assertRaisesRegex(ValueError, "pending LAN user deletion journal"):
+            LanService(_DiskBridge(cards), users)
+        self.assertEqual(users.read_bytes(), original_users)
+        self.assertEqual(cards.read_bytes(), original_cards)
+        self.assertTrue(marker.exists())
 
 
 if __name__ == "__main__":

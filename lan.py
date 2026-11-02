@@ -299,6 +299,11 @@ class LanService:
         self.users = self._read_users()
         self.display_roles_path = self.users_path.with_name(self.users_path.stem + ".display-roles.json")
         self.display_roles = self._read_display_roles()
+        self.delete_journal_path = self.users_path.with_name(self.users_path.name + ".delete-pending.json")
+        self._delete_recovery_required = False
+        # Never accept a login or account mutation against mismatched task
+        # assignments and user identities after a previous host hard-stop.
+        self._recover_pending_delete()
         self.server = None
         self.thread = None
         self.integration_router = None
@@ -328,6 +333,53 @@ class LanService:
         # Use a unique, fsynced temporary file rather than a fixed *.tmp
         # path which may be owned or planted by an unrelated process.
         atomic_json(self.users_path, self.users if users is None else users)
+
+    def _recover_pending_delete(self):
+        """Complete an authenticated delete intent before the host serves LAN.
+
+        A single process owns this LAN host. The journal is written before
+        either JSON registry or board store, so a crash at either boundary is
+        recoverable by idempotently finishing the deletion, not resurrecting
+        an identity whose credentials might already have been revoked.
+        """
+        marker = self.delete_journal_path
+        if not marker.exists() and not marker.is_symlink():
+            self._delete_recovery_required = False
+            return
+        if marker.is_symlink() or marker.stat().st_size > 4096:
+            raise ValueError("Unsafe pending LAN user deletion journal")
+        try:
+            intent = json.loads(marker.read_text(encoding="utf8"))
+        except (ValueError, UnicodeError) as exc:
+            raise ValueError("Corrupt pending LAN user deletion journal") from exc
+        if (type(intent) is not dict or set(intent) != {"version", "operation", "username"}
+                or type(intent["version"]) is not int or intent["version"] != 1
+                or intent["operation"] != "user.delete" or
+                type(intent["username"]) is not str or
+                not 3 <= len(intent["username"]) <= 40 or
+                any(not c.isascii() or (not c.isalnum() and c not in "._-")
+                    for c in intent["username"])):
+            raise ValueError("Invalid pending LAN user deletion journal")
+        username = intent["username"]
+        with self.lock, self.bridge._lock:
+            # Refresh disk truth; a completed delete may have reached the
+            # registry but not yet removed the journal or card assignments.
+            current_users = self._read_users()
+            state = deepcopy(self.bridge.getState())
+            changed = False
+            for task in state["tasks"]:
+                if username in task.get("assignees", []):
+                    task["assignees"] = [u for u in task["assignees"] if u != username]
+                    changed = True
+            updated = {name: account for name, account in current_users.items()
+                       if name != username}
+            if updated != current_users:
+                self._store_users(updated)
+            if changed:
+                self.bridge.saveState(state)
+            self.users = updated
+            marker.unlink()
+            self._delete_recovery_required = False
 
     def _read_display_roles(self):
         defaults = default_roles()
@@ -408,6 +460,8 @@ class LanService:
         if not isinstance(username, str) or not isinstance(password, str):
             raise ValueError("نام کاربری و رمز عبور باید متن باشند.")
         with self.lock:
+            if self._delete_recovery_required:
+                raise PermissionError("LAN user deletion recovery is required before login")
             now = time.time()
             failures, last = self.failed.get(ip, (0, 0))
             if now - last >= 120:
@@ -441,6 +495,8 @@ class LanService:
 
     def account_for(self, token):
         with self.lock:
+            if self._delete_recovery_required:
+                raise PermissionError("LAN user deletion recovery is required before serving requests")
             record = self.sessions.get(token)
             if not record or time.time() >= record[1]:
                 self.sessions.pop(token, None)
@@ -691,7 +747,8 @@ class LanService:
                 raise ValueError("کاربر پیدا نشد.")
             # Prepare a separate task snapshot; getState() may return a live
             # object and must not expose uncommitted assignee removals.
-            state = deepcopy(self.bridge.getState())
+            before_state = deepcopy(self.bridge.getState())
+            state = deepcopy(before_state)
             changed = False
             for task in state["tasks"]:
                 if username in task.get("assignees", []):
@@ -699,23 +756,37 @@ class LanService:
                     changed = True
             updated_users = {name: account for name, account in self.users.items()
                              if name != username}
-            # Persist identity first: if it fails, neither assignments nor
-            # active sessions may be changed. The bridge is saved only after
-            # a successful identity write and under the same lock order.
-            self._store_users(updated_users)
+            if self.delete_journal_path.exists() or self.delete_journal_path.is_symlink():
+                self._delete_recovery_required = True
+                raise RuntimeError("Pending LAN user deletion requires recovery")
+            # Durable, intentionally small write-ahead intent. A hard stop
+            # after this point is completed on the next host construction.
+            atomic_json(self.delete_journal_path, {
+                "version": 1, "operation": "user.delete", "username": username})
+            registry_written = False
             try:
+                self._store_users(updated_users)
+                registry_written = True
                 if changed:
                     self.bridge.saveState(state)
             except BaseException:
-                # Best-effort compensation for the second independent store.
-                # A process crash between both writes still needs a durable
-                # cross-store recovery protocol, not merely this exception path.
-                self._store_users(self.users)
+                # Ordinary failed writes retain their previous semantics. If
+                # compensation itself fails, keep the journal and fail closed;
+                # restart completes the authorized deletion deterministically.
+                try:
+                    if registry_written:
+                        self._store_users(self.users)
+                    if changed and self.bridge.getState() != before_state:
+                        self.bridge.saveState(before_state)
+                    self.delete_journal_path.unlink()
+                except BaseException:
+                    self._delete_recovery_required = True
                 raise
             self.users = updated_users
             for key, record in list(self.sessions.items()):
                 if record[0] == username:
                     del self.sessions[key]
+            self.delete_journal_path.unlink()
         return True
 
     def read_state(self, token):
@@ -1073,6 +1144,8 @@ class LanService:
             raise ValueError("Invalid attachment kind")
 
     def start(self):
+        if self._delete_recovery_required or self.delete_journal_path.exists():
+            raise RuntimeError("LAN user deletion recovery required before listener start")
         if self.server:
             return self.port
         if not self.users:
