@@ -698,11 +698,16 @@ class LanService:
                         updated = True
                 if updated:
                     self.bridge.saveState(state)
-            self.users.pop(username)
+            # Do not revoke a live identity until its deletion is durable.
+            # A failed registry write must not leave the running host with a
+            # different ACL from the account registry on disk.
+            remaining_users = {key: value for key, value in self.users.items()
+                               if key != username}
+            self._store_users(remaining_users)
+            self.users = remaining_users
             for key, record in list(self.sessions.items()):
                 if record[0] == username:
                     del self.sessions[key]
-            self._store_users()
         return True
 
     def read_state(self, token):

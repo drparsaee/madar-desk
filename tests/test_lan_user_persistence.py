@@ -78,6 +78,16 @@ class UserPersistenceFailureTests(unittest.TestCase):
         self.assertEqual(self.service.current_user(self.admin)["displayName"],
                          "Synthetic updated profile")
 
+    def test_failed_user_deletion_keeps_account_session_and_registry(self):
+        editor_token = self.service.authenticate("editor", "synthetic-editor-password")["token"]
+        disk_before = self.service.users_path.read_bytes()
+        with patch.object(self.service, "_store_users", side_effect=OSError("synthetic disk failure")):
+            with self.assertRaises(OSError):
+                self.service.delete_user(self.admin, "editor")
+        self.assertEqual(self.service.users_path.read_bytes(), disk_before)
+        self.assertEqual(self.service.account_for(editor_token)["username"], "editor")
+        self.assertEqual(self.service.users["editor"]["role"], "editor")
+
 
 if __name__ == "__main__":
     unittest.main()
