@@ -45,6 +45,21 @@ class SimpleBackupTests(unittest.TestCase):
         self.assertEqual(saved["scope"], "task-state-only")
         self.assertIn(saved["name"], [b["name"] for b in self.bridge.listLocalBackups()])
 
+    def test_manual_json_backup_must_read_back_before_claiming_success(self):
+        """Synthetic disk-corruption injection; never report a damaged backup as successful."""
+        with patch.object(native_app, "atomic_save", side_effect=lambda target, state:
+                          target.write_text("{}", encoding="utf8")):
+            with self.assertRaisesRegex(RuntimeError, "backup|پشتیبان"):
+                self.bridge.createLocalBackup()
+
+    def test_manual_sqlite_backup_must_validate_published_database(self):
+        """An incomplete/copied SQLite image must not produce a success receipt."""
+        self.bridge.enableUnifiedStorage()
+        with patch.object(self.bridge._unified_store, "backup_database",
+                          side_effect=lambda target: target.write_bytes(b"not-sqlite")):
+            with self.assertRaisesRegex(RuntimeError, "backup|پشتیبان"):
+                self.bridge.createLocalBackup()
+
     def test_picker_cancel_is_safe_and_selected_folder_backup_requires_no_oauth(self):
         chosen = self.root / "desktop-sync-location"
         chosen.mkdir()

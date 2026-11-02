@@ -29,13 +29,24 @@ const fixture={version:1,
   settings:{theme:'dark',costDefault:true}
 };
 
-function freePort(){return new Promise((resolve,reject)=>{
-  const server=net.createServer();server.once('error',reject);
-  server.listen(0,'127.0.0.1',()=>{
-    const port=server.address().port;
-    server.close(error=>error?reject(error):resolve(port));
-  });
-});}
+async function freePort(){
+  // Chromium blocks a set of local ports (including 1719) even though the
+  // TCP listener is valid. Choose within a safe high range instead of the
+  // OS-assigned ephemeral range, which may consist entirely of low ports.
+  for(let attempt=0;attempt<40;attempt++){
+    const port=20000+Math.floor(Math.random()*20000);
+    try{
+      await new Promise((resolve,reject)=>{
+        const server=net.createServer();server.once('error',reject);
+        server.listen(port,'127.0.0.1',()=>{
+          server.close(error=>error?reject(error):resolve());
+        });
+      });
+      return port;
+    }catch(error){if(error.code!=='EADDRINUSE')throw error;}
+  }
+  throw new Error('Could not reserve a browser-safe test port');
+}
 
 test('full App card details keep checklist costs folded and board definitions separate at 1440/480',
   {skip:!available,timeout:100000},async()=>{

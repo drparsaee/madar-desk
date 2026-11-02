@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import base64
 import ctypes
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from ctypes import wintypes
 import hashlib
 import http.server
@@ -21,6 +21,7 @@ from pathlib import Path, PureWindowsPath
 import secrets
 import shutil
 import re
+import sqlite3
 import socket
 import subprocess
 import sys
@@ -885,7 +886,23 @@ class Bridge:
             if self._unified_store is not None:
                 name = datetime.now(timezone.utc).strftime("madar-unified-%Y%m%d-%H%M%S-%f.sqlite3")
                 output = self.backups_dir / name
+                prior = self._unified_store.load()
+                if prior is None:
+                    raise RuntimeError("پشتیبان‌گیری انجام نشد: نسخه معتبر SQLite وجود ندارد.")
                 self._unified_store.backup_database(output)
+                try:
+                    # Open the published file read-only; never repair or mutate
+                    # the backup while deciding whether to report success.
+                    with closing(sqlite3.connect(output.resolve().as_uri() + "?mode=ro", uri=True)) as copy:
+                        check = copy.execute("PRAGMA quick_check").fetchone()
+                        head = copy.execute(
+                            "SELECT revision,digest FROM app_revisions WHERE revision="
+                            "(SELECT revision FROM app_head WHERE id=1)"
+                        ).fetchone()
+                    if check != ("ok",) or head != (prior.revision, prior.sha256):
+                        raise ValueError("snapshot does not match committed host revision")
+                except (sqlite3.Error, ValueError, OSError) as error:
+                    raise RuntimeError("پشتیبان‌گیری SQLite نامعتبر است؛ فایل را برای بازیابی استفاده نکنید.") from error
                 return {"name": name, "path": str(output), "complete": False,
                         "scope": "sqlite-domains-only",
                         "omitted": ["attachment-binaries", "planner-local-storage",
@@ -895,6 +912,13 @@ class Bridge:
             name = datetime.now(timezone.utc).strftime("madar-%Y%m%d-%H%M%S-%f.json")
             output = self.backups_dir / name
             atomic_save(output, current)
+            try:
+                with output.open(encoding="utf8") as stream:
+                    recovered = json.load(stream)
+                if recovered != normalize_state(current) or not is_valid(recovered):
+                    raise ValueError("snapshot differs from committed host state")
+            except (OSError, ValueError, TypeError) as error:
+                raise RuntimeError("پشتیبان‌گیری JSON نامعتبر است؛ فایل را برای بازیابی استفاده نکنید.") from error
             return {"name": name, "path": str(output), "complete": False,
                     "scope": "task-state-only",
                     "omitted": ["finance", "collaboration", "attachment-binaries",

@@ -78,7 +78,8 @@ const restoreButtons = markup => buttons(markup).filter(tag=>tag.includes('aria-
 
 test('App imports both pure transitions and never removes card from tasks in deleteTask',()=>{
   assert.match(appText,/import\s*\{softDeleteCardState,restoreDeletedCardState\}\s*from\s*['"]\.\/cardtrash\.js['"]/);
-  const handler=section('const deleteTask=id=>','const restoreTrashedCard=id=>');
+  // The card archive handler is independent of trash; inspect only deleteTask.
+  const handler=section('const deleteTask=id=>','const archiveTask=id=>');
   assert.match(handler,/if\(!canEdit\)return/);
   assert.match(handler,/softDeleteCardState\(data,id,options\)/);
   assert.match(handler,/change\(s=>softDeleteCardState\(s,id,options\)\)/);

@@ -5,6 +5,15 @@
 *{box-sizing:border-box}
 html,body,#root{height:100%;margin:0}
 body{overflow:hidden}
+.madar-card-context-menu{position:fixed;z-index:100000;width:250px;max-width:calc(100vw - 16px);padding:8px;background:var(--panel-bg,#fff);color:var(--text,#243349);border:1px solid #96a6bd55;border-radius:12px;box-shadow:0 12px 36px #101d3655;display:grid;gap:3px;direction:rtl}
+.madar-card-context-menu__head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px 8px;border-bottom:1px solid #8796ae44}
+.madar-card-context-menu__head strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.madar-card-context-menu button{display:flex;gap:8px;align-items:center;text-align:right;width:100%;border-radius:7px;padding:9px;background:transparent;color:inherit}
+.madar-card-context-menu button:hover,.madar-card-context-menu button:focus-visible{background:#6384ae28}
+.madar-card-context-menu__head button{flex:none;width:28px;height:28px;justify-content:center;padding:4px}
+.backup-easy-limitation--error{border:1px solid #d78a71!important;background:#fff2ec!important;color:#7b2416!important}
+[data-theme="dark"] .backup-easy-limitation--error{background:#4d241e!important;color:#ffcdc2!important}
+[data-theme="dark"] .madar-card-context-menu{background:#1e293b;color:#edf2fa;border-color:#52637e}
 button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.6}

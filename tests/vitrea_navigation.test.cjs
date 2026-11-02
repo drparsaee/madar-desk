@@ -27,7 +27,10 @@ test('Vitrea layout uses accessible real navigation, not fake placeholder links'
   assert.match(source,/inert=\{!mobileNavOpen&&!desktopNavOpen\}/);
   assert.match(source,/setDesktopNavOpen\(false\);quickDockTrigger\.current\?\.focus\(\)/);
   assert.match(source,/window\.location\.assign\('\.\/accounting\.html'\)/);
-  assert.match(source,/changeAdmin\(state=>\(\{\.\.\.state,settings:/);
+  // Theme is an individual appearance preference, including for LAN viewers.
+  // It must never require admin mutation or write shared board/task settings.
+  assert.match(source,/onClick=\{toggleTheme\}/);
+  assert.match(source,/writeTheme\(localStorage,appearanceScope,next\)/);
 });
 
 test('capsule and rail have keyboard focus and a mobile bottom-dock layout',()=>{

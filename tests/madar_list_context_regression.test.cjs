@@ -171,8 +171,15 @@ test('real App: list context-menu target matrix and action availability',
       assert.equal(await menu.count(),0);
       console.log('Collapsed and full menu target matrix:',JSON.stringify(results.slice(-2)));
       const cardHits=results.filter(item=>item.selector.includes('task-'));
-      assert.ok(cardHits.every(item=>!item.prevented),
-        'card right-click should remain available for a future card-specific context menu');
+      assert.ok(cardHits.every(item=>item.prevented),
+        'card right-click now has an explicit dedicated menu and suppresses native context');
+      await lane.locator('.task-card .task-title').click({button:'right'});
+      const cardMenu=page.getByRole('menu',{name:/عملیات کارت/});
+      await cardMenu.waitFor({state:'visible'});
+      assert.ok(await cardMenu.getByRole('menuitem',{name:'بایگانی کارت'}).isVisible());
+      assert.equal(await menu.count(),0,'card menu must not trigger the lane menu');
+      await page.keyboard.press('Escape');
+      await cardMenu.waitFor({state:'hidden'});
       assert.ok(results.filter(item=>!item.selector.includes('task-'))
         .every(item=>item.prevented),'list-target right-click must suppress the native browser menu');
       assert.deepEqual(errors,[],'App must not emit runtime errors');

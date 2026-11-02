@@ -42,6 +42,10 @@ import {sortLaneState,moveAllLaneCardsState} from './lane_operations.js';
 import {WorkspaceManager} from './workspaces_panel.jsx';
 import {archiveListState,restoreListState,activeBoardLists} from './listarchive.js';
 import {softDeleteCardState,restoreDeletedCardState} from './cardtrash.js';
+import {archiveCardState,restoreArchivedCardState} from './cardarchive.js';
+import {CardContextMenu} from './card_context_menu.jsx';
+import {themeScope,readTheme,writeTheme} from './theme_preference.js';
+import {hostBackupHealth} from './host_backup_health.js';
 import {syncHealth} from './sync_health.js';
 import {createBoardPerformanceIndex} from './board_performance.js';
 import {PortableExportPanel} from './portable_export_panel.jsx';
@@ -160,13 +164,13 @@ function Empty({title,description,onAdd}){
   return <div className="lane-empty"><span className="lane-empty-icon"><Plus size={18}/></span><strong>{title}</strong><small>{description}</small>{onAdd&&<button onClick={onAdd}>افزودن کار <Plus size={14}/></button>}</div>;
 }
 
-function TaskCard({task,project,users,onOpen,onDrag,onToggleStep,onToggleComplete,onCardDrop,onKeyboardReorder,calendar,priorities,canEdit=true,canManage=false,showCosts=true}){
+function TaskCard({task,project,users,onOpen,onContextRequest,onDrag,onToggleStep,onToggleComplete,onCardDrop,onKeyboardReorder,calendar,priorities,canEdit=true,canManage=false,showCosts=true}){
   const [collapsed,setCollapsed]=useState(true);
   const done=task.checklist.filter(i=>i.done).length;
   const percent=task.checklist.length?Math.round(done/task.checklist.length*100):0;
   const report=task.reports[task.reports.length-1];
   const priority=priorityById(priorities,task.priority);
-  return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect+(task.completed===true?' task-card--completed':'')} style={{'--priority-color':priority.color}} draggable={canEdit} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown':undefined} aria-label={'جزئیات '+task.title}>
+  return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect+(task.completed===true?' task-card--completed':'')} style={{'--priority-color':priority.color}} draggable={canEdit} onContextMenu={e=>{e.preventDefault();e.stopPropagation();onContextRequest?.(task,e);}} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();onContextRequest?.(task,{clientX:rect.left+20,clientY:rect.top+20});}else if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown Shift+F10':'Shift+F10'} aria-label={'جزئیات '+task.title}>
     {task.cover?.type==='color'&&/^#[0-9a-f]{6}$/i.test(task.cover.color)&&<div className={'task-card-cover task-card-cover-'+(task.cover.size==='full'?'full':'strip')} style={{backgroundColor:task.cover.color}}/>}
     <div className="task-card-top"><span className="project-tiny"><i style={{background:project?.color||'#7790aa'}}></i>{project?.name||'پروژه'}</span><button type="button" disabled={!canEdit} className="task-complete-toggle" aria-label={(task.completed===true?'برگرداندن از تکمیل ':'تکمیل کارت ')+task.title} title={task.completed===true?'برگرداندن از تکمیل':'تکمیل کارت'} aria-pressed={task.completed===true} onClick={e=>{e.preventDefault();e.stopPropagation();onToggleComplete?.(task.id);}} onKeyDown={e=>e.stopPropagation()}><Check size={15}/></button></div>
     <div className="task-title">{task.title}</div>
@@ -400,7 +404,16 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
   useEffect(()=>{api.cloudPeerStatus().then(setPeerStatus).catch(()=>{});},[]);
   useEffect(()=>{if(typeof api.storageStatus==='function')api.storageStatus().then(setStorageStatus).catch(e=>setMessage(e.message));},[]);
   useEffect(()=>{if(typeof api.automationEngineStatus==='function')api.automationEngineStatus().then(setAutomationStatus).catch(e=>setMessage(e.message));},[]);
-  useEffect(()=>{if(typeof api.automaticBackupStatus==='function')api.automaticBackupStatus().then(setAutomaticBackup).catch(()=>{});},[]);
+  useEffect(()=>{
+    if(typeof api.automaticBackupStatus!=='function')return;
+    let mounted=true;
+    const readBackupHealth=()=>api.automaticBackupStatus()
+      .then(status=>{if(mounted)setAutomaticBackup(status);})
+      .catch(error=>{if(mounted)setAutomaticBackup({running:false,lastError:String(error.message||error)});});
+    readBackupHealth();
+    const timer=setInterval(readBackupHealth,30000);
+    return()=>{mounted=false;clearInterval(timer);};
+  },[]);
   const operation=async(name,fn)=>{setBusy(name);setMessage('');try{await fn();}catch(e){setMessage(e.message||String(e));}finally{setBusy('');}};
   const fetchBackups=async()=>{const items=await api.driveList();setBackups(items);};
   const connect=()=>operation('connect',async()=>{await api.driveConnect(id.trim());setConnected(true);setMessage('حساب Google Drive متصل شد.');await fetchBackups();});
@@ -419,7 +432,11 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
     <div className="dialog-body cloud-panel">
       <div className="cloud-hero"><div className="cloud-hero-icon"><HardDriveDownload size={27}/></div><div><strong>پشتیبان‌گیری، بدون تنظیمات فنی</strong><p>یک نسخه از اطلاعات اصلی برنامه نگه دارید. برای نگهداری نسخه در فضای ابری، کافی است پوشه همگام‌شده را انتخاب کنید؛ نیازی به گرفتن API یا شناسه گوگل نیست.</p></div></div>
       <section className="backup-easy-quick" aria-label="پشتیبان‌گیری سریع">
-        {automaticBackup&&<p className="backup-easy-limitation" role="status">{isClient?'پشتیبان‌گیری خودکار روی رایانه میزبان انجام می‌شود.':automaticBackup.running?'پشتیبان خودکار اطلاعات اصلی هر ۳۰ ثانیه تغییرات را بررسی می‌کند و فقط در صورت تغییر نسخه تازه می‌سازد.':'پشتیبان خودکار ۳۰ثانیه‌ای در این فرایند فعال نیست.'} این نسخه‌ها کامل نیستند و پیوست‌ها و حساب‌های شبکه را شامل نمی‌شوند.</p>}
+        {automaticBackup&&<p className={'backup-easy-limitation'+(hostBackupHealth(automaticBackup,isClient).kind==='error'?' backup-easy-limitation--error':'')} role="status">
+          {hostBackupHealth(automaticBackup,isClient).description}
+          {!isClient&&automaticBackup.lastSuccess&&<> آخرین موفقیت: {new Date(automaticBackup.lastSuccess).toLocaleString('fa-IR')}.</>}
+          {' '}این نسخه‌ها کامل نیستند و پیوست‌ها و حساب‌های شبکه را شامل نمی‌شوند.
+        </p>}
         <div className="backup-easy-quick__item"><div><strong>۱. ذخیره روی این رایانه</strong><small>{isClient?'ایجاد پشتیبان به رایانه میزبان محدود است.':'نسخه‌ای از اطلاعات اصلی ذخیره می‌شود. پیوست‌ها و حساب‌های شبکه جداگانه‌اند.'}</small></div>
           <button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{
             const result=await api.createLocalBackup();
@@ -461,7 +478,7 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
       {connected&&<><div className="cloud-actions"><button className="btn primary" disabled={!!busy} onClick={upload}><CloudUpload size={17}/> ذخیره پشتیبان جدید</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('list',fetchBackups)}><CloudDownload size={17}/> نمایش نسخه‌ها</button></div><div className="backup-list"><h4>نسخه‌های موجود در Drive</h4>{backups.length?backups.map(b=><div className="backup-row" key={b.id}><div><FileText size={17}/><div><strong>{shortDate(b.createdAt)} · {new Date(b.createdAt).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'})}</strong><small>{b.name}</small></div></div><button onClick={()=>setRestoreId(b.id)}>بازیابی</button></div>):<p>نسخه‌ای یافت نشد. برای شروع یک پشتیبان جدید بساز.</p>}</div><button className="subtle-action" onClick={()=>operation('disconnect',async()=>{await api.driveDisconnect();setConnected(false);setBackups([]);})}>قطع اتصال Google</button></>}
       {!!restoreId&&<div className="warning-strip"><strong>جایگزینی اطلاعات محلی</strong><p>اطلاعات فعلی با نسخه انتخاب‌شده جایگزین می‌شود. ابتدا یک کپی محلی از اطلاعات فعلی ذخیره خواهد شد.</p><div><button onClick={()=>setRestoreId('')} className="btn secondary">انصراف</button><button disabled={!!busy} className="btn primary" onClick={restore}>تأیید بازیابی</button></div></div>}
       <div className="local-backups"><button className="btn secondary" onClick={()=>operation('export',async()=>{const result=await api.exportBackup();if(!result.canceled)setMessage('فایل پشتیبان ذخیره شد.');})}><Download size={16}/> خروجی JSON</button><button className="btn secondary" onClick={()=>operation('import',async()=>{if(!window.confirm('اطلاعات فعلی جایگزین شوند؟ یک کپی خودکار از داده‌های قبلی نگهداری می‌شود.'))return;const result=await api.importBackup();if(result.state)onRestore(result.state);})}><ArrowDownToLine size={16}/> ورود JSON</button></div>
-      <div className="local-backup-section"><h3><HardDriveDownload size={17}/> نسخه‌های پشتیبان روی این کامپیوتر</h3><div className="local-backups"><button className="btn primary" disabled={!!busy} onClick={()=>operation('local',async()=>{await api.createLocalBackup();setLocalBackups(await api.listLocalBackups());setMessage('نسخه پشتیبان محلی ایجاد شد.');})}>ایجاد پشتیبان محلی</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('load-local',async()=>setLocalBackups(await api.listLocalBackups()))}>تازه‌سازی فهرست</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('attachments-backup',async()=>{const result=await api.attachmentBackup();setMessage('پشتیبان مجزای '+result.blobs+' فایل پیوست روی میزبان ایجاد شد: '+result.path);})}>بکاپ جداگانه پیوست‌ها</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('sqlite-export',async()=>{const result=await api.createUnifiedSqliteBackup();setMessage('خروجی آزمایشی SQLite یکپارچه ایجاد شد: '+result.path);})}>خروجی SQLite یکپارچه</button></div>{localBackups.map(item=><div className="backup-row" key={item.name}><div><FileText size={16}/><small dir="ltr">{item.name}</small></div><button disabled={!!busy} onClick={()=>operation('restore-local',async()=>{if(!window.confirm('این نسخه بازیابی و داده فعلی جایگزین شود؟ از داده فعلی نسخه ایمنی ساخته می‌شود.'))return;onRestore(await api.restoreLocalBackup(item.name));})}>بازیابی</button></div>)}</div>
+      <div className="local-backup-section"><h3><HardDriveDownload size={17}/> نسخه‌های پشتیبان روی این کامپیوتر</h3><div className="local-backups"><button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{const result=await api.createLocalBackup();setLocalBackups(await api.listLocalBackups());setMessage('پشتیبان ناقص اما اعتبارسنجی‌شده ایجاد شد: '+result.name);})}>ایجاد پشتیبان محلی</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('load-local',async()=>setLocalBackups(await api.listLocalBackups()))}>تازه‌سازی فهرست</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('attachments-backup',async()=>{const result=await api.attachmentBackup();setMessage('پشتیبان مجزای '+result.blobs+' فایل پیوست روی میزبان ایجاد شد: '+result.path);})}>بکاپ جداگانه پیوست‌ها</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('sqlite-export',async()=>{const result=await api.createUnifiedSqliteBackup();setMessage('خروجی آزمایشی SQLite یکپارچه ایجاد شد: '+result.path);})}>خروجی SQLite یکپارچه</button></div>{localBackups.map(item=><div className="backup-row" key={item.name}><div><FileText size={16}/><small dir="ltr">{item.name}</small></div><button disabled={!!busy||isClient} onClick={()=>operation('restore-local',async()=>{if(!window.confirm('این نسخه بازیابی و داده فعلی جایگزین شود؟ از داده فعلی نسخه ایمنی ساخته می‌شود.'))return;onRestore(await api.restoreLocalBackup(item.name));})}>بازیابی</button></div>)}</div>
       <aside role="note" className="warning-strip"><strong>محدوده واقعی پشتیبان‌ها</strong><p>خروجی JSON و Google Drive فقط اطلاعات اصلی کارها و بردها را منتقل می‌کنند. فایل SQLite محلی دامنه‌های ثبت‌شده در پایگاه داده را دارد، اما فایل‌های پیوست و حساب‌های LAN را شامل نمی‌شود. برنامه‌ریزی شخصی در حافظه همین دستگاه ذخیره می‌شود و در هیچ‌یک از این خروجی‌ها نیست. برای بازیابی گسترده همراه با پیوست‌ها از ابزار مستقل maintenance_recovery.py فقط پس از توقف کامل برنامه و نویسنده‌های شبکه استفاده کنید؛ آرشیو آن رمزنگاری نشده است.</p></aside>
       {storageStatus&&<section className="unified-storage-panel"><h3><HardDriveDownload size={17}/> ذخیره‌سازی یکپارچه SQLite</h3>
         <p className={storageStatus.mode==='sqlite'?'positive':'warning'}>وضعیت میزبان: {storageStatus.mode==='sqlite'?'SQLite فعال':'ذخیره‌سازی فایل‌های JSON'}{storageStatus.revision!=null?' · نسخه '+storageStatus.revision:''}</p>
@@ -631,6 +648,8 @@ export default function App(){
   const [filter,setFilter]=useState('all');
   const [advanced,setAdvanced]=useState({priority:'all',member:'all',label:'all',status:'all',due:'all',attachments:false});
   const [editorId,setEditorId]=useState(null);
+  const [cardContext,setCardContext]=useState(null);
+  const [cardArchiveOpen,setCardArchiveOpen]=useState(false);
   const [adding,setAdding]=useState(null);
   const [collapsedLists,setCollapsedLists]=useState({});
   const [laneContextRequest,setLaneContextRequest]=useState(null);
@@ -666,6 +685,7 @@ export default function App(){
   const [integrationOpen,setIntegrationOpen]=useState(false);
   const [calendarInteropOpen,setCalendarInteropOpen]=useState(false);
   const [lanStatus,setLanStatus]=useState({mode:'solo',user:{role:'admin'}});
+  const [themeChoice,setThemeChoice]=useState(null);
   const displayScope=resolvedDisplayScope(lanStatus);
   const interfaceMode=displayScope.mode;
   const [users,setUsers]=useState([]);
@@ -742,14 +762,22 @@ export default function App(){
     }},15000);
     return()=>clearInterval(timer);
   },[]);
-  useEffect(()=>{document.documentElement.dataset.theme=data?.settings?.theme==='dark'?'dark':'light';},[data?.settings?.theme]);
+  const appearanceScope=themeScope(lanStatus);
+  const uiTheme=themeChoice?.scope===appearanceScope?themeChoice.theme:
+    readTheme(localStorage,appearanceScope,data?.settings?.theme);
+  useEffect(()=>{document.documentElement.dataset.theme=uiTheme;},[uiTheme]);
   useEffect(()=>{
     if(!data)return;
     // The standalone finance route uses the same display preference, without
     // receiving task state or authorization through localStorage.
-    try{localStorage.setItem('madar-ui-theme',data.settings?.theme==='light'?'light':'dark');}
+    try{localStorage.setItem('madar-ui-theme',uiTheme);}
     catch(_error){/* Private storage may be disabled in a hardened WebView. */}
-  },[data?.settings?.theme]);
+  },[uiTheme,!!data]);
+  const toggleTheme=()=>{
+    const next=uiTheme==='dark'?'light':'dark';
+    writeTheme(localStorage,appearanceScope,next);
+    setThemeChoice({scope:appearanceScope,theme:next});
+  };
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
   const tasks=data?.tasks||[];
   const projects=data?.projects||[];
@@ -1028,6 +1056,33 @@ export default function App(){
       setToast('کارت به زباله‌دان منتقل شد؛ هزینه‌ها و اطلاعات آن حفظ شدند.');
     }catch(e){setToast('انتقال به زباله‌دان انجام نشد: '+e.message);}
   };
+  const archiveTask=id=>{
+    if(!canEdit)return;
+    try {
+      const options=cardTrashOptions();
+      if(archiveCardState(data,id,options)===data)return;
+      change(state=>archiveCardState(state,id,options));
+      setCardContext(null);
+      setEditorId(null);
+      setToast('کارت بایگانی شد؛ اطلاعات و مدارک آن حفظ شدند.');
+    } catch(error){setToast('بایگانی کارت انجام نشد: '+error.message);}
+  };
+  const restoreArchivedTask=id=>{
+    if(!canEdit)return;
+    try {
+      const options=cardTrashOptions();
+      if(restoreArchivedCardState(data,id,options)===data)return;
+      change(state=>restoreArchivedCardState(state,id,options));
+      setToast('کارت به موقعیت قبلی خود بازیابی شد.');
+    } catch(error){setToast('بازیابی کارت انجام نشد: '+error.message);}
+  };
+  const archivedCards=tasks.filter(t=>t.archived===true&&t.archivedByBoard!==true&&
+    t.deleted!==true&&projects.some(project=>project.id===t.projectId)&&
+    (!t.boardId||boards.some(board=>board.id===t.boardId&&board.workspaceId===activeWorkspaceId)));
+  const requestCardMenu=(task,event)=>setCardContext({
+    id:uid(),cardId:task.id,title:task.title,
+    x:event.clientX,y:event.clientY,
+  });
   const restoreTrashedCard=id=>{
     if(!canEdit)return;
     try{
@@ -1356,11 +1411,10 @@ export default function App(){
         aria-label="تعریف کاربران"><Users size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">کاربران</span></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
         title="Google Drive" aria-label="Google Drive"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
-      {canManage&&<button type="button" title={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
-        aria-label={data.settings?.theme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
-        onClick={()=>changeAdmin(state=>({...state,settings:{...state.settings,
-          theme:state.settings?.theme==='dark'?'light':'dark'}}))}>
-        {data.settings?.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}<span className="vitrea-quickdock__label" aria-hidden="true">تغییر تم</span></button>}
+      <button type="button" title={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
+        aria-label={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
+        onClick={toggleTheme}>
+        {uiTheme==='dark'?<Sun size={19}/>:<Moon size={19}/>}<span className="vitrea-quickdock__label" aria-hidden="true">تغییر تم</span></button>
       <button type="button" title="تنظیمات" aria-label="تنظیمات مدار"
         onClick={()=>setSettingsOpen(true)}><Settings2 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">تنظیمات</span></button>
     </nav>
@@ -1471,7 +1525,7 @@ export default function App(){
       </div>
       <div className="workspace-scroll">
 
-        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
+        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
         {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
@@ -1534,7 +1588,7 @@ export default function App(){
                     ?renderLaneComposer(stage)
                     :<button type="button" className="lane-insert-before" aria-label={i===0?'افزودن کارت در ابتدای '+stage.label:'افزودن کارت پیش از '+t.title} title={i===0?'افزودن کارت در بالا':'افزودن کارت در این موقعیت'} onClick={()=>openAdd(stage.id,'before',t.id)}><Plus size={13}/> افزودن کارت</button>}
                 </div>}
-                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
+                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onContextRequest={requestCardMenu} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
               </React.Fragment>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
               {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id&&
                 (adding.placement==='end'||(adding.placement==='start'&&items.length===0))
@@ -1560,7 +1614,7 @@ export default function App(){
                 </form>:
                 <button type="button" className="kanban-add-list__trigger" onClick={()=>setAddingLane(true)}><Plus size={20}/> افزودن یک لیست دیگر</button>}
             </div>}
-        </div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
+        </div>:<div className="list-mode">{filtered.length?<ProgressiveLane items={filtered} scopeKey={[activeWorkspaceId,activeBoard?.id||'legacy',selected,search,filter,lanStatus.mode,lanStatus.user?.username||'local','list'].join('|')} regionId="madar-task-list" label="فهرست کارها" containerClassName="progressive-list-rows" renderCard={t=><button key={t.id} className="list-row" onClick={()=>setEditorId(t.id)} onContextMenu={event=>{event.preventDefault();requestCardMenu(t,event);}}><span className="list-title"><Circle size={16} color={viewStages.find(s=>s.id===(activeBoard?(t.listId||t.status):t.status))?.color}/>{t.title}</span><span>{projects.find(p=>p.id===t.projectId)?.name}</span><span>{displayDate(t.dueDate||t.createdAt,calendar,true)}</span><span className="priority" style={{color:priorityById(priorities,t.priority).color}}><Flag size={13}/>{priorityById(priorities,t.priority).label}</span><ChevronLeft size={16}/></button>} />:<div className="empty-list">کاری با این فیلتر پیدا نشد.</div>}</div>}
         </section> : <section className="workspace-empty-board" aria-label="راه‌اندازی برد فضای کاری">
           <LayoutGrid size={26} aria-hidden="true"/>
           <h2>این فضای کاری هنوز بردی ندارد</h2>
@@ -1588,6 +1642,22 @@ export default function App(){
       </div>
     </main>
     {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}
+    <CardContextMenu request={cardContext} onClose={()=>setCardContext(null)}
+      onOpen={setEditorId} onArchive={archiveTask} canEdit={canEdit}/>
+    {cardArchiveOpen&&<Modal title="آرشیو کارت‌ها" width={680} onClose={()=>setCardArchiveOpen(false)}>
+      <div className="dialog-body">
+        <p className="board-info-note">آرشیو کارت از حذف متفاوت است. شناسه، وضعیت، فاکتورها و پیوست‌های کارت محفوظ می‌مانند.</p>
+        {archivedCards.length?archivedCards.map(task=>{
+          const board=boards.find(item=>item.id===task.boardId);
+          const workspace=workspaces.find(item=>item.id===board?.workspaceId);
+          return <div className="similar-row" key={task.id} style={{padding:'12px 0'}}>
+            <span><strong>{task.title}</strong><small>{board?.name||'برد قدیمی'}</small></span>
+            <button type="button" disabled={!canEdit||!!board?.archived||!!workspace?.archived}
+              onClick={()=>restoreArchivedTask(task.id)} aria-label={'بازگرداندن کارت '+task.title}>بازیابی کارت</button>
+          </div>;
+        }):<p className="shared-empty">در این فضای کاری کارت بایگانی‌شده‌ای وجود ندارد.</p>}
+      </div>
+    </Modal>}
     {show('projectFinance')&&financeOpen&&selectedProject&&<FinancePanel api={api} project={selectedProject} tasks={tasks.filter(t=>t.projectId===selectedProject.id)} onClose={()=>setFinanceOpen(false)}/>}
     {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} stages={viewStages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
     {trashOpen&&<Modal title="زباله‌دان کارت‌ها" width={680} onClose={()=>setTrashOpen(false)}>

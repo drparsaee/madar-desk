@@ -83,7 +83,7 @@ function requireGrant(options, projectId) {
   }
 }
 
-function selectedCard(state, cardId, options) {
+export function selectedCard(state, cardId, options) {
   object(state, 'state');
   // Legacy task IDs can be longer than newer board IDs. Do not rewrite them.
   identifier(cardId, 'cardId', 2048);
