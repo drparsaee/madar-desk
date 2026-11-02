@@ -5,7 +5,12 @@ const path=require('node:path');
 const esbuild=require('esbuild');
 let playwright;
 try {playwright=require('playwright');}
-catch {playwright=require(path.join(process.env.APPDATA||'', 'npm/node_modules/playwright'));}
+catch {
+  // Synthetic QA intentionally redirects APPDATA away from real profiles.
+  // Resolve the globally installed test runner from the retained user home.
+  const home=process.env.USERPROFILE||process.env.HOME||'';
+  playwright=require(path.join(home,'AppData','Roaming','npm','node_modules','playwright'));
+}
 
 const root=path.resolve(__dirname,'..');
 const output=esbuild.buildSync({
