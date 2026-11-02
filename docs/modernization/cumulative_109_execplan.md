@@ -63,9 +63,12 @@ binary, two-PC data-preservation rehearsal and manual rollback smoke test.
 - Existing `tests.test_madar_update_contract` and `tests.test_madar_update`
   passed together with the new suite (23/23). Portable installer and restore
   guard regressions passed (18 passed, 1 optional binary skipped).
-- **BLOCKED for actual build:** baseline `package.json` is 1.0.8 and
-  `madar_update.CURRENT_VERSION` is 1.0.6. Both must be 1.0.9 on the final
-  integrated source before `build_integrated_v109.py` is eligible to run.
+- Release metadata on this worktree now aligns `package.json`, both
+  `package-lock.json` version fields, `madar_update.CURRENT_VERSION` and the
+  `npm run dist` entrypoint to **1.0.9**, with a source-only test gate.
+- **BLOCKED for actual build:** final integration, dedicated QA approval,
+  signed prerequisite and actual binary creation remain under the prime
+  release owner; this worker did not run `npm run dist` or a binary installer.
 - Inno setup has not been compiled or installed during this worker task;
   real user/host/SQLite migration and installation remain unverified.
 
