@@ -23,9 +23,9 @@
 .cardextras-colors button{width:35px;height:35px;padding:0;color:white}
 .cardextras-cover{width:100%;border-radius:10px;border:1px solid #0001}
 .cardextras-cover-strip{height:44px}.cardextras-cover-full{height:120px}
-.card-cover-editor{gap:10px}
-.card-cover-editor__header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.card-cover-editor__modes{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.card-cover-editor{gap:10px;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.card-cover-editor__header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;min-width:0}
+.card-cover-editor__modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-width:0}
 .cardextras .card-cover-editor__modes button{padding:9px 7px;min-height:38px;line-height:1.5}
 .cardextras .card-cover-editor__modes button[aria-pressed="true"]{border-color:var(--accent,#5672ca);box-shadow:inset 0 0 0 1px var(--accent,#5672ca);font-weight:750}
 .card-cover-editor__preview{position:relative;display:flex;flex-direction:column;gap:7px;min-height:88px;padding:11px;border-radius:10px;border:1px solid #a9b8cd54;overflow:hidden;background:var(--surface,#fff);color:var(--text,#233149)}

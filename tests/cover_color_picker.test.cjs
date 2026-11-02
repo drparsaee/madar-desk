@@ -30,14 +30,26 @@ test('picker HSV conversion stays bounded and rejects malicious invalid colors',
     assert.equal(hsvToHex(h,s,v),hex.toUpperCase());
   }
 });
-test('color picker presents 16 ready swatches plus 80 keyboard-accessible spectrum cells',()=>{
+test('color picker exposes 16 accessible presets, a keyboard spectrum and a hue slider',()=>{
   const html=renderToStaticMarkup(React.createElement(CoverColorPicker,{
     value:'#5672CA',disabled:false,onChange:()=>{}
   }));
-  assert.equal((html.match(/cover-picker__cell/g)||[]).length,80);
+  assert.equal((html.match(/madar-common-colors__swatch/g)||[]).length,16);
+  assert.match(html,/role="slider"/);
+  assert.match(html,/aria-label="اشباع و روشنایی رنگ کاور"/);
+  assert.match(html,/cover-picker__spectrum/);
   assert.match(html,/طیف رنگ کاور/);
   assert.match(html,/کد شش رقمی رنگ/);
   assert.match(html,/aria-label="رنگ‌های مرسوم کاور"/);
   assert.match(html,/ساخت رنگ دلخواه/);
   assert.doesNotMatch(html,/url\(/i);
+});
+test('disabled and malformed colors are safe to display',()=>{
+  const html=renderToStaticMarkup(React.createElement(CoverColorPicker,{
+    value:'red;url(javascript:alert(1))',disabled:true,onChange:()=>{}
+  }));
+  assert.match(html,/aria-disabled="true"/);
+  assert.match(html,/tabindex="-1"/);
+  assert.match(html,/value="#5672CA"/);
+  assert.doesNotMatch(html,/javascript:|url\(/i);
 });
