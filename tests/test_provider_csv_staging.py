@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from provider_csv_staging import CsvStagingError, stage_provider_csv
+from provider_csv_staging import CsvStagingError, stage_provider_csv, inspect_csv_headers
 
 
 class ProviderCsvStagingTests(unittest.TestCase):
@@ -68,6 +68,15 @@ class ProviderCsvStagingTests(unittest.TestCase):
         self.assertFalse(result["canApplyToMadar"])
         self.assertTrue(result["previewOnly"])
         self.assertEqual({path: path.read_bytes() for path in self.root.iterdir()}, before)
+
+    def test_selected_csv_header_inspection_rejects_bad_encoding(self):
+        source=str(self.root / 'parties.csv')
+        self.assertEqual(inspect_csv_headers(source,encoding='utf-8-sig',delimiter=','),
+                         ['Code','Name','Role'])
+        with self.assertRaises(CsvStagingError):
+            inspect_csv_headers(source,encoding=[],delimiter=',')
+        with self.assertRaises(CsvStagingError):
+            inspect_csv_headers(source,encoding='utf-8-sig',delimiter='|')
 
     def test_fingerprints_stable_under_csv_row_reorder(self):
         first = stage_provider_csv(self.spec)

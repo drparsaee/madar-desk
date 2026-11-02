@@ -10,6 +10,7 @@ import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';
 import ParsianRawArchiveExplorer from './parsian_raw_archive_explorer.jsx';
+import ProviderCsvMigration from './provider_csv_migration.jsx';
 import {buildAccountingInvoiceEntryTemplate,parseAccountingInvoiceEntryTemplate}
   from './accounting_invoice_entry_templates.js';
 import AccountingPrintDesigner from './accounting_print_designer.jsx';
@@ -215,7 +216,7 @@ const SECTIONS=[['overview','داشبورد'],['company','مشخصات شرکت'
   ['proforma','پیش‌فاکتور مستقل'],
   ['invoice','فاکتورهای فروش'],['bill','صورتحساب‌های خرید'],
   ['contractors','کارهای پیمانکاران'],
-  ['parties','اشخاص'],['migration','سوابق انتقالی پارسیان'],['cheques','خزانه و چک'],
+  ['parties','اشخاص'],['migration','مهاجرت و سوابق'],['cheques','خزانه و چک'],
   ['items','کالا، انبار و کاردکس'],['settlements','دریافت، پرداخت و اقساط'],
   ['cash','صندوق، بانک و مغایرت'],['accounts','حساب‌ها و دفترکل'],
   ['journal','سند دستی و برگشت'],['reports','گزارش‌های مالی'],
@@ -2162,6 +2163,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             </form></Panel>}
           </>}
           {tab==='migration'&&<>
+            <ProviderCsvMigration api={api} canAdmin={canAdmin}/>
             <ParsianRawArchiveExplorer api={api} canAdmin={canAdmin}/>
             {!historical?<Panel title="سوابق پارسیان"
               description="این دفتر فاقد بسته معتبر اطلاعات تاریخی پارسیان است.">

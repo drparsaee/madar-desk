@@ -143,11 +143,13 @@ class StandaloneAccountingAcceptanceTests(unittest.TestCase):
                 server.shutdown(); server.server_close(); worker.join(timeout=5)
 
     def test_main_app_accounting_javascript_wrapper_is_page_scoped(self):
-        """The accounting HTML gets a two-name facade, NOT task facade."""
+        """The accounting HTML gets a restricted facade, NOT task facade."""
         from native_app import JS_BRIDGE as MAIN_BRIDGE, ACCOUNTING_JS_BRIDGE
         self.assertIn("'getState'", MAIN_BRIDGE)  # index.html keeps the old API
         self.assertIn("'standaloneAccountingRead'", ACCOUNTING_JS_BRIDGE)
         self.assertIn("'standaloneAccountingCommand'", ACCOUNTING_JS_BRIDGE)
+        self.assertIn("'standaloneAccountingCsvChooseFile'", ACCOUNTING_JS_BRIDGE)
+        self.assertIn("'standaloneAccountingCsvPreview'", ACCOUNTING_JS_BRIDGE)
         for forbidden in ("'getState'", "'saveState'", "'financeCommand'",
                           "'accountingRead'", "'accountingCommand'"):
             self.assertNotIn(forbidden, ACCOUNTING_JS_BRIDGE)

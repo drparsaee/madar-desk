@@ -517,6 +517,8 @@ class Bridge:
         self.finance_outbox_path = datadir() / "finance-completion-outbox.json"
         self.automation_outbox_path = datadir() / "automation-card-outbox.json"
         self._finance_warning = ""
+        from provider_csv_bridge import ProviderCsvPreviewBridge
+        self._csv_preview = ProviderCsvPreviewBridge()
         self._lan_discovery = None
         self._lan_discovery_error = ""
         self.peer_code_path = datadir() / "cloud-peer-code.bin"
@@ -1958,6 +1960,29 @@ class Bridge:
             return self._standalone_accounting_read_local(
                 actor="local", accounts=local)
 
+    def standaloneAccountingCsvChooseFile(self, group, encoding, delimiter):
+        """Native-selected local CSV headers only, without any finance write."""
+        from provider_csv_bridge import GROUPS
+        if type(group) is not str or group not in GROUPS:
+            raise ValueError("Unknown CSV group")
+        if self.connection.get("mode") == "client" and (
+                (self.remote_user or {}).get("role") != "admin"):
+            raise PermissionError("CSV review is restricted to the accounting administrator")
+        if not webview.windows:
+            raise RuntimeError("Native file chooser is unavailable")
+        chosen = webview.windows[0].create_file_dialog(
+            webview.FileDialog.OPEN, file_types=("CSV files (*.csv)",))
+        with self._lock:
+            return self._csv_preview.select(group, encoding, delimiter, chosen)
+
+    def standaloneAccountingCsvPreview(self, request):
+        """Only analyze three explicitly selected local CSVs; no ledger writes."""
+        if self.connection.get("mode") == "client" and (
+                (self.remote_user or {}).get("role") != "admin"):
+            raise PermissionError("CSV review is restricted to the accounting administrator")
+        with self._lock:
+            return self._csv_preview.preview(request)
+
     def standaloneAccountingCommand(self, request):
         """One strict CAS command; the remote/client path never opens local DB."""
         from lan import standalone_command_request
@@ -2760,7 +2785,9 @@ window.madar = Object.fromEntries(
            'cloudPeerStatus','cloudPeerConfigure','cloudPeerGenerate','cloudPeerForget',
            'financeRead','financeOverview','financeStatus','financeCommand',
            'accountingRead','accountingCommand',
-           'standaloneAccountingRead','standaloneAccountingCommand','standaloneAccountingPrepare',
+           'standaloneAccountingRead','standaloneAccountingCommand',
+           'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview',
+           'standaloneAccountingPrepare',
            'standaloneAccountingQuote',
            'runDueScheduler','attachmentList','attachmentPreview','attachmentRead',
            'attachmentUpload','attachmentDelete','attachmentBackup',
@@ -2794,7 +2821,8 @@ window.madar = Object.fromEntries(
 ACCOUNTING_JS_BRIDGE = """
 <script>
 window.madar = Object.fromEntries(
- ['standaloneAccountingRead','standaloneAccountingCommand'].map(key =>
+ ['standaloneAccountingRead','standaloneAccountingCommand',
+  'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview'].map(key =>
  [key, (...args) => new Promise((resolve, reject) => {
    // The standalone page frequently follows an in-window navigation from the
    // task desk. Its JavaScript API must not race WebView2 method injection.

@@ -4,10 +4,23 @@
 accounting package chosen by the user. It does not use Parsian, SQL Server,
 Madar's operational database, application state, or financial postings.
 
-This independent staging module is **not integrated into the accounting UI**.
-Its results are suitable for a subsequent, separate, human-reviewed import
-workflow only. No proprietary BAK/MDF/SQLite/accounting application formats
-are parsed by this adapter.
+The standalone accounting Migration tab includes a restricted CSV preview
+panel for administrators. Native file selection is provided by
+`standaloneAccountingCsvChooseFile(group, encoding, delimiter)`; this returns
+the exact selected path, filename and header columns without showing records.
+The subsequent `standaloneAccountingCsvPreview(spec)` accepts only the three
+previously selected local paths and their declared text encodings/delimiters.
+Both methods are exposed through the Windows `native_app.Bridge` and the
+independent `AccountingDesktopAPI`. The volatile selection state is local to
+each bridge instance, with no disk writes. No financial store is constructed
+while selecting files or validating the preview.
+
+The page provides explicit field selectors, optional source enum translations,
+optional ignored-column confirmation, source provider and RIAL currency,
+optional source counts and sums, plus three example rows per CSV. Results
+remain read-only. It is suitable for a subsequent, separate, human-reviewed
+import workflow only. No proprietary BAK/MDF/SQLite/accounting application
+formats are parsed by this adapter.
 
 ## Contract v1
 
@@ -98,4 +111,8 @@ ledger balances from these CSV totals. The return value always includes
 separate reviewed adapter, verified monetary units, full source coverage,
 reconciliation and recovery/rollback controls.
 
-Tests: `python -m unittest tests.test_provider_csv_staging -v`.
+Tests: `python -m unittest tests.test_provider_csv_staging tests.test_provider_csv_bridge -v`,
+`node --test tests/provider_csv_migration.test.cjs`, and the existing accounting
+desktop/standalone UI suites. The React production bundle may be checked using
+`npm run build` from the isolated worktree; building an installer and operating
+the actual Windows file dialog are separate acceptance steps.
