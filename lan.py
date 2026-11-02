@@ -147,6 +147,15 @@ def verify_password(password, stored):
         return False
 
 
+# Public dummy verifier, not a credential: PBKDF2-SHA256 of a synthetic string
+# with a zero salt. Unknown LAN usernames must do the same KDF work as a wrong
+# password for an existing account, without creating a login-capable identity.
+_UNKNOWN_ACCOUNT_HASH = (
+    "00000000000000000000000000000000:"
+    "4c10f81f63c0d92af760073a748e39961670145213c09e81db117eff04dc361a"
+)
+
+
 def make_account(username, password, role="viewer", projects=None):
     if not isinstance(username, str) or not 3 <= len(username) <= 40 or not all(
         c.isascii() and (c.isalnum() or c in "._-") for c in username
@@ -434,7 +443,11 @@ class LanService:
                 account_failures = 0
             if failures >= 6 or account_failures >= 6 or unknown_failures >= 6:
                 raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
-            if not account or not verify_password(password, account["passwordHash"]):
+            # Do not expose account existence through a skipped PBKDF2 call.
+            # A dummy-hash match never authenticates a nonexistent username.
+            verified = verify_password(
+                password, account["passwordHash"] if account else _UNKNOWN_ACCOUNT_HASH)
+            if not account or not verified:
                 self.failed[ip] = (failures + 1, now)
                 prior_target = self.failed_target.get(ip)
                 self.failed_target[ip] = (target_digest if failures == 0 else
