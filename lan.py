@@ -325,11 +325,9 @@ class LanService:
         return data
 
     def _store_users(self, users=None):
-        filename = self.users_path
-        tmp = filename.with_name(filename.name + ".tmp")
-        tmp.write_text(json.dumps(self.users if users is None else users,
-                                  ensure_ascii=False, indent=2), encoding="utf8")
-        tmp.replace(filename)
+        # The old fixed *.tmp filename could overwrite an unrelated file or
+        # follow a planted link. Reuse the unique, fsynced atomic JSON writer.
+        atomic_json(self.users_path, self.users if users is None else users)
 
     def _read_display_roles(self):
         defaults = default_roles()

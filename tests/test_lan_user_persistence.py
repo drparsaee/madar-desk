@@ -67,6 +67,17 @@ class UserPersistenceFailureTests(unittest.TestCase):
         self.assertEqual(self.service.current_user(self.admin), before)
         self.assertEqual(self.service.users_path.read_bytes(), disk_before)
 
+    def test_user_registry_update_never_overwrites_unowned_fixed_temp_file(self):
+        # A predictable *.tmp pathname may already belong to another process.
+        # The registry writer must not truncate or repurpose that file.
+        unrelated = self.service.users_path.with_name(self.service.users_path.name + ".tmp")
+        sentinel = b"unrelated-synthetic-file-do-not-clobber"
+        unrelated.write_bytes(sentinel)
+        self.service.update_profile(self.admin, {"displayName": "Synthetic updated profile"})
+        self.assertEqual(unrelated.read_bytes(), sentinel)
+        self.assertEqual(self.service.current_user(self.admin)["displayName"],
+                         "Synthetic updated profile")
+
 
 if __name__ == "__main__":
     unittest.main()
