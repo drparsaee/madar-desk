@@ -77,7 +77,9 @@ class DeleteUserRegistryFailureTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "task-state rollback failed"):
                     service.delete_user(admin, "editor")
 
-            self.assertEqual(service.account_for(editor)["username"], "editor")
+            with self.assertRaisesRegex(PermissionError, "recovery is required"):
+                service.account_for(editor)
+            self.assertTrue(service.delete_journal_path.is_file())
             self.assertEqual(bridge.state["tasks"][0]["assignees"], [])
 
 

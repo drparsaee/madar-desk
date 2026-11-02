@@ -29,7 +29,8 @@ const PAGE_SIZE = 60;
  */
 export function SearchResultsPanel({
   query = '', onQueryChange, results = [], onOpenTask, onRestoreArchived,
-  onRestoreTrashed, onGoToLocation, onClose, canEdit = false
+  onRestoreTrashed, onGoToLocation, onClose, canEdit = false,
+  formatDate = value => new Date(value).toLocaleDateString('fa-IR')
 }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date');
@@ -91,7 +92,7 @@ export function SearchResultsPanel({
                 <span key={index} style={label.color ? {borderColor: label.color} : undefined}>{label.name}</span>)}
             </div>}
             <div className="tsr-result-footer">
-              <time dateTime={result.date || undefined}>{result.date ? new Date(result.date).toLocaleDateString('fa-IR') : 'بدون تاریخ'}</time>
+              <time dateTime={result.date || undefined}>{result.date ? formatDate(result.date) : 'بدون تاریخ'}</time>
               <div className="tsr-actions">
                 {result.status === 'active' && onOpenTask &&
                   <button type="button" onClick={() => onOpenTask(result.id, result)}>باز کردن کارت</button>}

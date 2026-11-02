@@ -45,6 +45,7 @@ class DeletePartialStateSaveTests(unittest.TestCase):
             self.assertEqual(json.loads(bridge.state_path.read_text(encoding="utf8")), before)
             self.assertEqual(service.users_path.read_bytes(), registry_before)
             self.assertEqual(service.account_for(editor)["username"], "editor")
+            self.assertFalse(service.delete_journal_path.exists())
             self.assertEqual(calls, 2)
 
     def test_partial_save_and_failed_compensation_reports_both_failures(self):
@@ -64,7 +65,11 @@ class DeletePartialStateSaveTests(unittest.TestCase):
             with patch.object(bridge, "saveState", side_effect=fail_both):
                 with self.assertRaisesRegex(RuntimeError, "task-state rollback failed"):
                     service.delete_user(admin, "editor")
-            self.assertEqual(service.account_for(editor)["username"], "editor")
+            # A durable incomplete mutation blocks all account access until
+            # startup reconciliation can finish the pending delete.
+            with self.assertRaisesRegex(PermissionError, "recovery is required"):
+                service.account_for(editor)
+            self.assertTrue(service.delete_journal_path.is_file())
             self.assertEqual(calls, 2)
 
 

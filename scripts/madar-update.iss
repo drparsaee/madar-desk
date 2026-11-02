@@ -1,7 +1,12 @@
-; Madar Desk 1.0.2 safe-update installer. Compile with Inno Setup 6.
+; Madar Desk safe-update installer. Compile with Inno Setup 6.
 ; Existing profile data is NEVER an installer-owned file.
+; Override version/executable/output at build time for immutable releases.
+#ifndef MadarVersion
 #define MadarVersion "1.0.2"
+#endif
+#ifndef ExeFile
 #define ExeFile "Madar-Desk-v1.0.2-Update-20261101.exe"
+#endif
 #ifndef EXE_SHA256
   #error Pass /DEXE_SHA256=<SHA256> to ISCC.
 #endif
@@ -9,14 +14,22 @@
   #ifndef QA_ROOT
     #error QA_ROOT is required for isolated installer builds.
   #endif
+  #ifdef RCOutputBase
+  #define SetupBasename RCOutputBase
+  #else
   #ifdef QAFRESH
   #define SetupBasename "Madar-Setup-v1.0.2-QA-Fresh-Fix1"
   #else
   #define SetupBasename "Madar-Setup-v1.0.2-QA-Fix1"
   #endif
+  #endif
   #define AppGuid "{{7CBA8B02-1D55-480C-953D-00AE0DAB4104}"
 #else
+  #ifdef RCOutputBase
+  #define SetupBasename RCOutputBase
+  #else
   #define SetupBasename "Madar-Setup-v1.0.2-Update-20261101-Fix1"
+  #endif
   #define AppGuid "{{92E35390-0AD9-4968-8F0B-64C0E9C51F7A}"
 #endif
 
@@ -67,7 +80,9 @@ Source: "..\release\{#ExeFile}"; DestDir: "{app}\versions\{#MadarVersion}"; Dest
 Source: "Run-Madar.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Madar-Upgrade-Preflight.ps1"; Flags: dontcopy
 Source: "Madar-Activate-Version.ps1"; Flags: dontcopy
+#ifndef COMPACT
 Source: "..\release\.madar-inno-prereq\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"; Flags: dontcopy
+#endif
 
 #ifndef QA
 [Icons]
@@ -130,6 +145,9 @@ begin
   Result := '';
   Params := '-DataRoot "' + DataRoot() + '" -BackupRoot "' + BackupRoot() +
             '" -TargetVersion "{#MadarVersion}"';
+  #ifdef QA
+  Params := Params + ' -IsolatedQA';
+  #endif
   if not RunHiddenPowerShell('Madar-Upgrade-Preflight.ps1', Params, Code) then begin
     Result := 'Could not run the pre-update safety check. Nothing was installed.';
     exit;
@@ -140,6 +158,10 @@ begin
     exit;
   end;
   if not WebViewInstalled() then begin
+#ifdef COMPACT
+    Result := 'Microsoft Edge WebView2 Runtime is required. Install WebView2 from Microsoft before running this compact update.';
+    exit;
+#else
 #ifdef QA
     { QA never installs a global prerequisite. }
     Result := '';
@@ -154,6 +176,7 @@ begin
       Result := 'Microsoft WebView2 Runtime prerequisite could not be installed. Setup stopped.';
       exit;
     end;
+#endif
 #endif
   end;
 end;

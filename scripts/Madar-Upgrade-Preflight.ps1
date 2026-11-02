@@ -4,7 +4,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$DataRoot,
     [Parameter(Mandatory=$true)][string]$BackupRoot,
-    [Parameter(Mandatory=$true)][string]$TargetVersion
+    [Parameter(Mandatory=$true)][string]$TargetVersion,
+    [switch]$IsolatedQA
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -42,20 +43,34 @@ function AssertNoLinks([string]$Path) {
 }
 $DataRoot=Resolve-PathSafely $DataRoot
 $BackupRoot=Resolve-PathSafely $BackupRoot
+if ($IsolatedQA -and $DataRoot -notmatch '[\\/]\.qa-inno-v[0-9]+-[^\\/]+[\\/]Roaming[\\/]MadarDesk$') {
+    throw 'Isolated QA mode is restricted to the dedicated disposable QA profile.'
+}
 if (IsInside $DataRoot $BackupRoot) {throw 'Backup path overlaps user data.'}
 if (IsInside $BackupRoot $DataRoot) {throw 'Backup path overlaps user data.'}
 AssertNoLinks $DataRoot
 AssertNoLinks $BackupRoot
 
-# The native desktop and LAN Host must not be writing while SQLite and WAL
-# files are copied. Never terminate a running customer application.
-$running=@(Get-Process -ErrorAction Stop | Where-Object {
-    $_.ProcessName -like 'Madar-Desk*' -or $_.ProcessName -eq 'MadarHost'
-})
-if ($running.Count -gt 0) {throw 'Close all Madar windows and MadarHost before updating.'}
-$service=Get-Service -Name 'MadarHost' -ErrorAction SilentlyContinue
-if ($null -ne $service -and $service.Status -eq 'Running') {
-    throw 'Stop the MadarHost service before updating.'
+# The desktop profile must not be written during the backup. The dedicated
+# MadarHost has a separate ProgramData authority: a CLIENT-ONLY installer
+# must neither stop it nor require its shutdown.
+# The versioned installer itself can be named Madar-Desk-1.0.4-Setup.exe.
+# Inno starts a second Madar-Desk-1.0.4-Setup.tmp process as well. An earlier
+# broad Madar-Desk* check incorrectly rejected both, so upgrades ALWAYS failed
+# while the user was looking at the installer. Exclude only that specific
+# versioned setup naming scheme; continue to fail closed for real writers.
+function Test-MadarWriterProcessName([string]$Name) {
+    if ($Name -notlike 'Madar-Desk*') {return $false}
+    if ($Name -match '^Madar-Desk-\d+\.\d+\.\d+-Setup(?:-[A-Za-z0-9.-]+)?(?:\.tmp)?$') {
+        return $false
+    }
+    return $true
+}
+if (-not $IsolatedQA) {
+    $running=@(Get-Process -ErrorAction Stop | Where-Object {
+        Test-MadarWriterProcessName $_.ProcessName
+    })
+    if ($running.Count -gt 0) {throw 'Close all Madar windows before updating.'}
 }
 
 if (-not (Test-Path -LiteralPath $DataRoot -PathType Container)) {

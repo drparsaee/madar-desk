@@ -169,6 +169,71 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual({p.relative_to(self.data).as_posix(): p.read_bytes()
                           for p in self.data.rglob("*") if p.is_file()}, self.before)
 
+    def test_versioned_setup_and_inno_child_are_not_mistaken_for_app(self):
+        # Regression for the 1.0.4 real-user report. During installation,
+        # Inno runs BOTH setup.exe and setup.tmp. Neither writes Madar data.
+        backups = self.base / "InstallerFalsePositiveRegression"
+        command = (
+            "function Get-Process { @("
+            "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup'},"
+            "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup.tmp'},"
+            "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup-Fix2'},"
+            "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup-Fix2.tmp'},"
+            "[pscustomobject]@{ProcessName='WinRAR'}"
+            ") }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backups}' -TargetVersion '1.0.4'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=35)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BACKUP_VERIFIED", result.stdout)
+        archive, = list(backups.glob("Madar-Before-1.0.4-*.zip"))
+        with ZipFile(archive) as zipped:
+            self.assertIsNone(zipped.testzip())
+            self.assertEqual(
+                {name: zipped.read(name) for name in self.before},
+                self.before)
+
+    def test_real_writer_still_blocks_even_when_installer_processes_exist(self):
+        # Do not solve the false positive by disabling the protection.
+        for writer in ("Madar-Desk", "Madar-Desk-v1.0.4-RC",
+                       "Madar-Desk-live"):
+            with self.subTest(writer=writer):
+                backup = self.base / ("Reject_" + writer)
+                command = (
+                    "function Get-Process { @("
+                    "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup'},"
+                    "[pscustomobject]@{ProcessName='Madar-Desk-1.0.4-Setup.tmp'},"
+                    f"[pscustomobject]@{{ProcessName='{writer}'}}"
+                    ") }; "
+                    f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+                    f"-BackupRoot '{backup}' -TargetVersion '1.0.4'"
+                )
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command", command],
+                    capture_output=True, text=True, timeout=25)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("Close all Madar", result.stderr)
+                self.assertFalse(backup.exists())
+
+    def test_dedicated_madarhost_is_not_interrupted_by_desktop_only_update(self):
+        backup = self.base / "HostStaysOnline"
+        command = (
+            "function Get-Process { @([pscustomobject]@{ProcessName='MadarHost'}) }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backup}' -TargetVersion '1.0.5'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=35)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BACKUP_VERIFIED", result.stdout)
+        archive, = list(backup.glob("Madar-Before-1.0.5-*.zip"))
+        with ZipFile(archive) as zipped:
+            self.assertEqual({name: zipped.read(name) for name in self.before}, self.before)
+
     def test_volume_root_paths_fail_closed_even_after_normalization(self):
         # Never pass a mounted drive's root to the old implementation: use an
         # unused volume letter that has no data to read or delete.

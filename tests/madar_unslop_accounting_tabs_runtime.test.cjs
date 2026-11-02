@@ -21,7 +21,7 @@ const groups=[
   ['اشخاص و کالا',['اشخاص','کالا، انبار و کاردکس','مشخصات شرکت']],
   ['خزانه و پرداخت',['دریافت، پرداخت و اقساط','صندوق، بانک و مغایرت','خزانه و چک']],
   ['حسابداری',['حساب‌ها و دفترکل','سند دستی و برگشت','سال مالی و بستن دوره']],
-  ['گزارش‌ها و سوابق',['گزارش‌های مالی','سوابق انتقالی پارسیان']],
+  ['گزارش‌ها و سوابق',['گزارش‌های مالی','مهاجرت و سوابق']],
   ['تنظیمات و مدیریت',['حقوق و مالیات']],
 ];
 const port=()=>new Promise((resolve,reject)=>{
@@ -60,8 +60,10 @@ test('Unslop graphite/blue theme keeps 17 accounting screens reachable in both t
         await page.locator('.sac-header h1').waitFor({state:'visible'});
         let count=0;
         for(const [group,sections] of groups){
-          await page.locator('.sac-ribbon-tabs').getByRole('button',{name:group,exact:true}).click();
           for(const label of sections){
+            // Choosing a page can legitimately select its canonical ribbon
+            // category. Reopen the requested group for each independent page.
+            await page.locator('.sac-ribbon-tabs').getByRole('button',{name:group,exact:true}).click();
             await page.locator('.sac-ribbon-tools').getByRole('button',{name:label,exact:true}).click();
             // Some modes intentionally hide the redundant H1. Assert its
             // actual state text, not a particular ribbon-group presentation.

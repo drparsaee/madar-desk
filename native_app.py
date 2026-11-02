@@ -48,6 +48,7 @@ from automation_events import card_change_events
 from attachments import AttachmentStore
 from app_storage import UnifiedAppStorage
 import automation_v1
+import madar_update
 
 APP_NAME = "MadarDesk"
 SCOPE = "https://www.googleapis.com/auth/drive.appdata"
@@ -861,15 +862,82 @@ class Bridge:
         temp.replace(self.preferences_path)
         return self.getPreferences()
 
+    def downloadSharedFile(self, path):
+        if not valid_share_path(path):
+            raise ValueError('مسیر فایل اشتراکی معتبر نیست.')
+        if sys.platform != 'win32':
+            raise RuntimeError('دانلود فایل اشتراکی فقط در ویندوز فعال است.')
+        return copy_shared_file_to_directory(path.replace('/', '\\'), windows_downloads_directory())
+
     def openSharedFile(self, path):
         if not valid_share_path(path):
             raise ValueError("فقط مسیر فایل SMB از نوع \\\\Server\\Share\\Folder\\File مجاز است.")
         if sys.platform != "win32":
             raise RuntimeError("بازکردن فایل اشتراکی فقط در ویندوز فعال است.")
-        # Runs locally on the client. Windows share permissions remain authoritative.
-        subprocess.Popen(["explorer.exe", "/select,", path.replace("/", "\\")],
+        # Runs locally on the client with the current Windows SMB permissions.
+        location = path.replace("/", "\\")
+        if os.path.isfile(location):
+            args = ["explorer.exe", "/select,", location]
+        elif os.path.isdir(location):
+            args = ["explorer.exe", location]
+        else:
+            raise FileNotFoundError("فایل یا پوشه اشتراکی در دسترس نیست؛ مسیر و مجوز SMB را بررسی کنید.")
+        subprocess.Popen(args, close_fds=True)
+        return {"opened": True, "kind": "file" if len(args) == 3 else "folder"}
+
+    def chooseSharedFile(self):
+        """Pick an SMB file, recording only a portable UNC path."""
+        if sys.platform != "win32":
+            raise RuntimeError("انتخاب فایل اشتراکی فقط در ویندوز فعال است.")
+        chosen = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN)
+        if not chosen:
+            return {"canceled": True}
+        selected = str(chosen if isinstance(chosen, str) else chosen[0])
+        if re.match(r"^[A-Za-z]:[\\/]", selected):
+            capacity = wintypes.DWORD(32768)
+            buffer = ctypes.create_unicode_buffer(capacity.value)
+            status = ctypes.windll.mpr.WNetGetConnectionW(
+                selected[:2], buffer, ctypes.byref(capacity))
+            if status == 0:
+                selected = buffer.value.rstrip("\\") + selected[2:]
+        if not valid_share_path(selected):
+            raise ValueError("فقط فایل‌های اشتراک شبکه پذیرفته می‌شوند؛ مسیر C: یا درایو محلی منتشر نمی‌شود.")
+        return {"path": selected.replace("/", "\\"), "name": Path(selected).name}
+
+    def releaseCheck(self):
+        """Only fetch public version metadata; no tasks, tokens or LAN data."""
+        return madar_update.check()
+
+    def releaseDownload(self):
+        """Never trust asset URLs supplied by JavaScript."""
+        return madar_update.download(madar_update.check())
+
+    def releaseInstall(self):
+        """Explicit opt-in: defer the verified Inno installer until GUI exits.
+
+        Inno performs an independently verified desktop-profile backup before
+        switching versions. The separately running MadarHost is never stopped.
+        """
+        info = madar_update.check()
+        saved = madar_update.download(info)
+        if not saved["verified"] or sys.platform != "win32":
+            raise RuntimeError("بسته معتبر ویندوز برای نصب آماده نیست.")
+        target = saved["path"]
+        sha = info["sha256"]
+        parent = os.getpid()
+        # No user-controlled shell expression enters the generated command.
+        ps = ("$ErrorActionPreference='Stop'; "
+              f"if(Get-Process -Id {parent} -ErrorAction SilentlyContinue)"
+              f"{{Wait-Process -Id {parent} -Timeout 1800 -ErrorAction Stop}}; "
+              f"$file='{target.replace(chr(39), chr(39)*2)}'; "
+              f"if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine '{sha}')"
+              "{throw 'Update integrity mismatch'}; "
+              "Start-Process -FilePath $file -Wait")
+        subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive",
+                          "-EncodedCommand", base64.b64encode(ps.encode("utf-16le")).decode("ascii")],
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                          close_fds=True)
-        return {"opened": True}
+        return {"scheduledAfterExit": True, "version": info["latest"]}
 
     def downloadSharedFile(self, path):
         if not valid_share_path(path):
@@ -2323,6 +2391,46 @@ class Bridge:
     def attachmentRead(self, attachment_id):
         return self._attachment_action("read", attachment_id=attachment_id)
 
+    def attachmentSave(self, attachment_id):
+        """Native Save-As, avoiding WebView2's synthetic-anchor download path."""
+        import binascii
+        result = self.attachmentRead(attachment_id)
+        meta = result.get("attachment")
+        encoded = result.get("contentBase64")
+        if (not isinstance(meta, dict) or not isinstance(encoded, str) or
+                not re.fullmatch(r"[0-9a-f]{64}", str(meta.get("sha256", ""))) or
+                len(encoded) > 4 * ((4 * 1024 * 1024 + 2) // 3)):
+            raise ValueError("اطلاعات فایل دریافتی معتبر نیست.")
+        from attachments import _filename
+        filename, _ = _filename(meta.get("filename"))
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("محتوای پیوست مخدوش است.") from exc
+        if (not raw or len(raw) > 4 * 1024 * 1024 or
+                len(raw) != meta.get("size") or
+                hashlib.sha256(raw).hexdigest() != meta["sha256"]):
+            raise ValueError("صحت فایل دریافتی تأیید نشد.")
+        chosen = webview.windows[0].create_file_dialog(
+            webview.FileDialog.SAVE, save_filename=filename)
+        if not chosen:
+            return {"canceled": True}
+        target = Path(chosen if isinstance(chosen, str) else chosen[0])
+        if not target.parent.is_dir():
+            raise FileNotFoundError("پوشه مقصد برای ذخیره در دسترس نیست.")
+        # Stage on the destination volume; a failed write cannot truncate an
+        # existing file. The Save As dialog owns the overwrite confirmation.
+        staged = target.with_name(".madar-attachment-" + secrets.token_hex(16) + ".partial")
+        try:
+            with staged.open("xb") as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(staged, target)
+        finally:
+            staged.unlink(missing_ok=True)
+        return {"saved": True, "filename": target.name, "size": len(raw)}
+
     def attachmentUpload(self, card_id, filename, content_base64, request_id):
         return self._attachment_action("upload", payload={"cardId": card_id,
             "filename": filename, "contentBase64": content_base64, "requestId": request_id})
@@ -2777,7 +2885,7 @@ window.madar = Object.fromEntries(
   'lanStatus','lanDiscover','hostServiceStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
   'lanDisplayRoles','lanSaveDisplayRole','lanDeleteDisplayRole',
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
-  'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','downloadSharedFile','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
+  'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','downloadSharedFile','chooseSharedFile','attachmentSave','releaseCheck','releaseDownload','releaseInstall','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
   .concat(['collabRead','collabCommand','automationButtonsList',
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',

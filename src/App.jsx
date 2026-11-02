@@ -144,6 +144,11 @@ const mockBridge={
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
   downloadSharedFile:async()=>{throw Error('دانلود فایل اشتراکی فقط در EXE ویندوز فعال است.');},
+  chooseSharedFile:async()=>{throw Error('انتخاب مسیر SMB فقط در EXE ویندوز فعال است.');},
+  attachmentSave:async()=>{throw Error('ذخیره پیوست فقط در EXE ویندوز فعال است.');},
+  releaseCheck:async()=>({available:false,current:packageInfo.version}),
+  releaseDownload:async()=>{throw Error('آپدیت اینترنتی فقط در EXE ویندوز فعال است.');},
+  releaseInstall:async()=>{throw Error('نصب اینترنتی فقط در EXE ویندوز فعال است.');},
   createLocalBackup:async()=>{throw Error('نسخه پشتیبان داخلی فقط در EXE فعال است.');},
   listLocalBackups:async()=>[],
   automaticBackupStatus:async()=>({running:false,intervalSeconds:30,complete:false,scope:null}),
@@ -743,6 +748,26 @@ export default function App(){
   const [calendar,setCalendar]=useState('jalali');
   const [widgetSettings,setWidgetSettings]=useState(DEFAULT_WIDGET_SETTINGS);
   const [toast,setToast]=useState('');
+  const [updateInfo,setUpdateInfo]=useState(null);
+  const [updateBusy,setUpdateBusy]=useState(false);
+  const [updateDownloaded,setUpdateDownloaded]=useState(false);
+  useEffect(()=>{
+    if(!isDesktop)return;
+    let mounted=true;
+    const check=()=>api.releaseCheck().then(info=>{if(mounted){setUpdateInfo(info?.available?info:null);setUpdateDownloaded(false);}}).catch(()=>{});
+    check();
+    const timer=setInterval(check,6*60*60*1000);
+    return()=>{mounted=false;clearInterval(timer);};
+  },[]);
+  const actOnUpdate=async()=>{
+    if(updateBusy)return;
+    setUpdateBusy(true);
+    try{
+      if(!updateDownloaded){await api.releaseDownload();setUpdateDownloaded(true);setToast('نسخه جدید با بررسی SHA-256 دانلود شد.');}
+      else {await api.releaseInstall();setToast('آپدیت پس از خروج کامل از مدار نصب می‌شود. برنامه را ببندید.');}
+    }catch(error){setToast('خطای آپدیت: '+(error?.message||String(error)));}
+    finally{setUpdateBusy(false);}
+  };
   const [savingError,setSavingError]=useState('');
   const [pendingRecovery,setPendingRecovery]=useState(false);
   const [draftTitle,setDraftTitle]=useState('');
@@ -757,9 +782,15 @@ export default function App(){
   const blocked=useRef(false);
   const saving=useRef(false);
   const lastSaved=useRef('');
+  const dataMutationEpoch=useRef(0);
   const refresh=async(force=false)=>{
     if((dirty.current||saving.current||blocked.current)&&!force)return;
+    const startEpoch=dataMutationEpoch.current;
     const fresh=normalize(await (api.getStateForUi?api.getStateForUi():api.getState()));
+    // A refresh issued before an edit must not publish a stale snapshot after
+    // that edit, even if the save debounce has already cleared dirty.current.
+    if(!force&&((dirty.current||saving.current||blocked.current)||
+                dataMutationEpoch.current!==startEpoch))return;
     setData(previous=>!previous||JSON.stringify(previous)!==JSON.stringify(fresh)?fresh:previous);
     lastSaved.current=JSON.stringify(fresh);
     setLastSync(new Date());
@@ -939,7 +970,7 @@ export default function App(){
   }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
-  const change=next=>{if(!canEdit)return;dirty.current=true;setData(current=>{
+  const change=next=>{if(!canEdit)return;dataMutationEpoch.current++;dirty.current=true;setData(current=>{
     const newState=typeof next==='function'?next(current):next;
     if(blocked.current){try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}}
     return newState;
@@ -975,6 +1006,14 @@ export default function App(){
     const space=workspaces.find(item=>item.id===board?.workspaceId);
     if(!board||board.archived||space?.archived){
       setToast('محل این کارت بایگانی شده است. ابتدا برد یا فضای کاری را بازیابی کنید.');
+      return;
+    }
+    if(board.projectId==null||!projects.some(project=>project.id===board.projectId)){
+      setToast('این برد پروژه قابل انتخاب ندارد؛ موقعیت کارت در نتایج جست‌وجو نمایش داده شده است.');
+      return;
+    }
+    if(board.stages?.some(stage=>stage.id===result.listId&&stage.archived===true)){
+      setToast('فهرست این کارت بایگانی شده است؛ ابتدا فهرست را بازیابی کنید.');
       return;
     }
     setWorkspaceId(board.workspaceId);
@@ -1466,6 +1505,11 @@ export default function App(){
       onExit={()=>setRialJournalOpen(false)}/>
   </div>;
   return <div className="app-shell vitrea-layout">
+    {updateInfo&&<div role="status" style={{position:'fixed',bottom:16,left:16,zIndex:1500,padding:12,borderRadius:12,background:'var(--surface, #eef3fa)',color:'var(--text, #17324b)',boxShadow:'0 4px 22px #0003',display:'flex',alignItems:'center',gap:12,maxWidth:440}}>
+      <span>نسخه {updateInfo.latest} مدار منتشر شده است.</span>
+      <button type="button" className="btn primary" disabled={updateBusy} onClick={actOnUpdate}>{updateBusy?'در حال پردازش…':updateDownloaded?'نصب بعد از خروج':'دریافت آپدیت'}</button>
+      <button type="button" className="tiny-icon" aria-label="بعداً" onClick={()=>setUpdateInfo(null)}><X size={15}/></button>
+    </div>}
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
@@ -1604,6 +1648,7 @@ export default function App(){
       <div className="workspace-scroll">
         {search.trim()&&<>{globalSearch.error&&<p role="alert" className="warning">{globalSearch.error}</p>}
           <SearchResultsPanel query={search} results={globalSearch.results} canEdit={canEdit}
+            formatDate={date=>displayDate(date,calendar,true)}
             onOpenTask={(id)=>{setSearch('');setEditorId(id);}}
             onRestoreArchived={(id)=>restoreArchivedTask(id)}
             onRestoreTrashed={(id)=>restoreTrashedCard(id)}
