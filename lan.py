@@ -296,6 +296,9 @@ class LanService:
         self.lock = threading.RLock()
         self.sessions = {}
         self.failed = {}
+        # A valid account must not erase failed guesses aimed at other users.
+        # Store only a fixed-size digest, never arbitrary attempted usernames.
+        self.failed_target = {}
         self.failed_accounts = {}
         self.failed_unknown_users = {}
         self.users = self._read_users()
@@ -414,6 +417,9 @@ class LanService:
             failures, last = self.failed.get(ip, (0, 0))
             if now - last >= 120:
                 failures = 0
+                self.failed.pop(ip, None)
+                self.failed_target.pop(ip, None)
+            target_digest = hashlib.sha256(username.encode("utf-8")).digest()
             account = self.users.get(username)
             # A valid login cannot erase the IP's budget for probing arbitrary
             # nonexistent usernames. Keep one entry per IP, never per guess.
@@ -430,12 +436,20 @@ class LanService:
                 raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
             if not account or not verify_password(password, account["passwordHash"]):
                 self.failed[ip] = (failures + 1, now)
+                prior_target = self.failed_target.get(ip)
+                self.failed_target[ip] = (target_digest if failures == 0 else
+                                          target_digest if prior_target == target_digest else None)
                 if key is not None:
                     self.failed_accounts[key] = (account_failures + 1, now)
                 else:
                     self.failed_unknown_users[ip] = (unknown_failures + 1, now)
                 raise PermissionError("نام کاربری یا رمز عبور نادرست است.")
-            self.failed.pop(ip, None)
+            # Only a success for the sole previously guessed target can
+            # reset the IP-wide budget. Otherwise password spraying across
+            # known accounts would evade the global throttle.
+            if self.failed_target.get(ip) == target_digest:
+                self.failed.pop(ip, None)
+                self.failed_target.pop(ip, None)
             self.failed_accounts.pop(key, None)
             token = secrets.token_urlsafe(32)
             self.sessions[token] = (username, now + 12 * 3600)
