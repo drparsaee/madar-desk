@@ -413,7 +413,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
     <h3>کاربران شبکه</h3>
     <div className="users-list">{users.map(u=><div className="user-row" key={u.username}>
       <Avatar user={u} size={36}/>
-      <span><strong>{u.displayName||u.username}</strong><small dir="ltr">@{u.username}</small>
+      <span><strong>{u.displayName||(u.username==='local'?'کاربر محلی':u.username)}</strong>{u.username!=='local'&&<small dir="ltr">@{u.username}</small>}
         <small>قالب نمایش: {lanRoleLabel(displayRoles,lanDefaultDisplayRoleForUser(u))}</small>
         <span>مجوز فنی: <RoleBadge role={u.role}/></span>
         <small>{u.projects===null?'تمام پروژه‌ها':u.projects.length?u.projects.length+' پروژه مجاز':'بدون پروژه مجاز'}</small>

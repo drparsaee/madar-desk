@@ -29,7 +29,7 @@ export function RoleBadge({role,compact=false}){
 export function Avatar({user,size=28}){
  const Icon=AVATARS[user?.avatarIcon]?.[0]||UserRound;
  const job=AVATARS[user?.avatarIcon]?.[1]||AVATARS.user[1];
- const label=(user?.displayName||user?.username||'کاربر')+' · '+(ROLE_LABELS[user?.role]||'نقش نامشخص')+' · '+job;
+ const label=(user?.displayName||(user?.username==='local'?'کاربر محلی':user?.username)||'کاربر')+' · '+(ROLE_LABELS[user?.role]||'نقش نامشخص')+' · '+job;
  return <span className="person-avatar workplace-avatar" style={{width:size,height:size,'--avatar-color':avatarColor(user)}} title={label} aria-label={label}>
    {user?.avatarPhoto?<img src={user.avatarPhoto} alt=""/>:<Icon size={Math.max(13,Math.round(size*.52))}/>}
    {ROLE_LABELS[user?.role]&&<span className={'avatar-role-pin avatar-role-'+user.role} aria-hidden="true">{ROLE_LABELS[user.role][0]}</span>}
@@ -57,10 +57,10 @@ export function AssignedMembers({assignees=[],users=[]}){
 export function AssigneeSelector({value=[],users=[],projectId,onChange,disabled=false}){
  const allowed=users.filter(u=>u.role==='admin'||u.projects===null||u.projects?.includes(projectId));
  return <div className="assignee-picker">
-   {allowed.map(u=><label key={u.username} title={u.displayName||u.username}>
+   {allowed.map(u=><label key={u.username} title={u.displayName||(u.username==='local'?'کاربر محلی':u.username)}>
      <input type="checkbox" disabled={disabled} checked={value.includes(u.username)}
        onChange={e=>onChange(e.target.checked?[...value,u.username]:value.filter(x=>x!==u.username))}/>
-     <Avatar user={u} size={32}/><span>{u.displayName||u.username}<small>@{u.username} · {AVATARS[u.avatarIcon]?.[1]||'کاربر'}</small><RoleBadge role={u.role}/></span>
+     <Avatar user={u} size={32}/><span>{u.displayName||(u.username==='local'?'کاربر محلی':u.username)}<small>{u.username!=='local'&&('@'+u.username+' · ')}{AVATARS[u.avatarIcon]?.[1]||'کاربر'}</small><RoleBadge role={u.role}/></span>
    </label>)}
    {allowed.length===0&&<small>برای انتساب مسئول، ابتدا در بخش شبکه محلی کاربر تعریف کنید.</small>}
  </div>;
@@ -100,7 +100,7 @@ export function ProfilePanel({user,api,onClose,onUpdated}){
  return <div className="overlay" onMouseDown={onClose}><section className="dialog member-modal" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true">
    <div className="dialog-head"><h2><UserRound size={19}/> پروفایل من</h2><button className="icon-btn" onClick={onClose}><X size={20}/></button></div>
    <div className="dialog-body member-content">
-     <div className="profile-hero"><Avatar user={{...user,avatarPhoto:photo,avatarIcon:icon,avatarColor:color,displayName:name}} size={66}/><div><strong>{user?.username||'local'}</strong><RoleBadge role={user?.role}/><small>حوزه فعالیت و رنگ آواتار را خودت انتخاب می‌کنی؛ این‌ها برداشت سیستم از شخصیت تو نیستند.</small></div></div>
+     <div className="profile-hero"><Avatar user={{...user,avatarPhoto:photo,avatarIcon:icon,avatarColor:color,displayName:name}} size={66}/><div><strong>{user?.username==='local'?'کاربر محلی':user?.username||'کاربر'}</strong><RoleBadge role={user?.role}/><small>حوزه فعالیت و رنگ آواتار را خودت انتخاب می‌کنی؛ این‌ها برداشت سیستم از شخصیت تو نیستند.</small></div></div>
      <label className="member-field">نام نمایشی<input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
      <h3>حوزه فعالیت یا نماد دلخواه</h3><AvatarIconPicker value={icon} onChange={value=>{setIcon(value);setPhoto('');}}/>
      <label className="member-color-field">رنگ آواتار<input type="color" value={color} aria-label="رنگ آواتار من" onChange={e=>setColor(e.target.value)}/></label>
