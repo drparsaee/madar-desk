@@ -168,10 +168,6 @@ export function LaneActionsMenu({
             </label>
             <button type="submit" className="lane-actions-popover__save" disabled={!onSave||!name.trim()}><Check size={15}/> ذخیره تغییرات</button>
           </form>
-          <label className="lane-actions-popover__color"><Palette size={16}/> رنگ ستون
-            <input type="color" aria-label={'رنگ ستون '+stage.label} disabled={!onSave} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'}
-              onChange={e=>onSave?.({color:e.target.value})}/>
-          </label>
           <CommonColorOptions value={stage.color} disabled={!onSave} label={'ستون '+stage.label} onChange={color=>onSave?.({color})}/>
           </details>
           <div className="lane-actions-popover__moves" role="group" aria-label="جابجایی ستون">

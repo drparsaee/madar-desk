@@ -103,7 +103,6 @@ export function ProfilePanel({user,api,onClose,onUpdated}){
      <div className="profile-hero"><Avatar user={{...user,avatarPhoto:photo,avatarIcon:icon,avatarColor:color,displayName:name}} size={66}/><div><strong>{user?.username==='local'?'کاربر محلی':user?.username||'کاربر'}</strong><RoleBadge role={user?.role}/><small>حوزه فعالیت و رنگ آواتار را خودت انتخاب می‌کنی؛ این‌ها برداشت سیستم از شخصیت تو نیستند.</small></div></div>
      <label className="member-field">نام نمایشی<input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
      <h3>حوزه فعالیت یا نماد دلخواه</h3><AvatarIconPicker value={icon} onChange={value=>{setIcon(value);setPhoto('');}}/>
-     <label className="member-color-field">رنگ آواتار<input type="color" value={color} aria-label="رنگ آواتار من" onChange={e=>setColor(e.target.value)}/></label>
      <CommonColorOptions value={color} onChange={setColor} label="آواتار من"/>
      <div className="profile-photo-actions"><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={upload}/><button className="btn secondary" onClick={()=>fileRef.current?.click()}><Camera size={16}/> بارگذاری تصویر شخصی</button>{photo&&<button className="btn secondary" onClick={()=>setPhoto('')}>حذف عکس</button>}</div>
      <button className="btn primary" disabled={busy} onClick={()=>run(async()=>{const updated=await api.lanMyProfile({displayName:name,avatarIcon:icon,avatarPhoto:photo,avatarColor:color});onUpdated?.(updated);setNotice('پروفایل ذخیره شد.');})}><Save size={16}/> ذخیره پروفایل</button>

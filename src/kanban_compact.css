@@ -115,6 +115,17 @@
 }
 .kanban .task-card--cover-full .task-footer { border-top-color: #0000002c; }
 .kanban .task-card--cover-full .task-description { opacity: .82; }
+/* General dark-mode card backgrounds and priority effects must not repaint
+   the user's explicit solid cover. Applies to the entire card, not its header. */
+:root[data-theme="dark"] .kanban .task-card.task-card--cover-full,
+:root[data-theme="light"] .kanban .task-card.task-card--cover-full {
+  background:var(--card-cover-color);
+  border-color:color-mix(in srgb,var(--card-cover-color),#000 15%);
+}
+:root[data-theme="dark"] .kanban .task-card.task-card--cover-full :is(.task-title,.task-description,.progress-caption,.priority,.task-footer,.agent-line),
+:root[data-theme="light"] .kanban .task-card.task-card--cover-full :is(.task-title,.task-description,.progress-caption,.priority,.task-footer,.agent-line) {
+  color:var(--card-cover-contrast,#152238);
+}
 .kanban .task-card--completed { border-color: #69a998; }
 .kanban .task-card--completed .task-title { text-decoration: line-through; text-decoration-thickness: 1px; opacity: .72; }
 .kanban .task-complete-toggle {

@@ -4,7 +4,14 @@
 .priority-definition label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--priority-label-ink)}
 .priority-definition .priority-color-cell{min-width:0}
 .priority-definition .priority-color-cell .madar-common-colors__details{position:relative}
-.priority-definition .priority-color-cell .madar-common-colors{width:210px;max-width:calc(100vw - 70px);padding:7px;border:1px solid var(--priority-row-border);border-radius:9px;background:var(--priority-row-bg);box-shadow:0 5px 14px #00000014}
+.priority-definition .priority-color-cell .madar-common-colors__details[open]{padding:0;border:0;background:transparent}
+.priority-definition .priority-color-cell .madar-common-colors__details[open]>.cover-picker{
+  position:absolute;z-index:40;inset-inline-start:auto;inset-inline-end:0;
+  top:calc(100% + 5px);width:min(275px,calc(100vw - 38px));max-width:none;
+  margin:0;padding:10px;border:1px solid var(--priority-row-border);
+  border-radius:10px;background:var(--priority-row-bg);
+  box-shadow:0 12px 32px #0003;
+}
 .priority-definition input:not([type=color]),.priority-definition select,.priority-new input{min-width:0;width:100%;border:1px solid var(--priority-field-border);color:var(--priority-field-text);background:var(--priority-field-bg);border-radius:8px;padding:8px;font:inherit}
 .priority-definition select option{background:var(--priority-field-bg);color:var(--priority-field-text)}
 .priority-definition input[type=color]{width:100%;height:36px;border-radius:8px;border:1px solid var(--priority-picker-border);padding:2px;background:transparent;cursor:pointer}

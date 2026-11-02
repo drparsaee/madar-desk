@@ -71,8 +71,6 @@ export default function AccountingPrintDesigner({value,onChange,context,disabled
       <label>فونت<select value={template.font} disabled={disabled}
         onChange={e=>change({font:e.target.value})}>
         <option>Vazirmatn</option><option>Tahoma</option><option>Arial</option></select></label>
-      <label>رنگ متن<input type="color" value={template.color} disabled={disabled}
-        onChange={e=>change({color:e.target.value})}/></label>
       <CommonColorOptions value={template.color} disabled={disabled} label="متن فاکتور" onChange={color=>change({color})}/>
       <label>لوگوی صادرکننده<input type="file" accept="image/png,image/jpeg" disabled={disabled}
         onChange={e=>{void imageSelected(e.target.files?.[0]);e.target.value='';}}/></label>

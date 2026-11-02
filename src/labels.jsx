@@ -134,9 +134,6 @@ export function LabelEditor({labels = [], colors = {}, onChange, disabled = fals
             if (event.key === 'Escape') {event.currentTarget.value = name; event.currentTarget.blur();}
           }}/>
       </div>
-      <input className="label-editor-color" type="color" disabled={disabled}
-        aria-label={`رنگ برچسب ${name}`} title={`رنگ برچسب ${name}`}
-        value={normalized.labelColors[name]} onChange={event => apply({action: 'color', index, color: event.target.value})}/>
       <button type="button" className="label-editor-remove" disabled={disabled} aria-label={`حذف برچسب ${name}`}
         title="حذف برچسب" onClick={() => apply({action: 'remove', index})}><X size={15}/></button>
       <CommonColorOptions disabled={disabled} label={'برچسب '+name} value={normalized.labelColors[name]}
@@ -146,8 +143,6 @@ export function LabelEditor({labels = [], colors = {}, onChange, disabled = fals
       <input type="text" aria-label="نام برچسب جدید" maxLength={MAX_NAME} value={newName}
         placeholder="نام برچسب جدید..." onChange={event => {setNewName(event.target.value); setError('');}}
         onKeyDown={event => {if (event.key === 'Enter') {event.preventDefault(); add();}}}/>
-      <input className="label-editor-color" aria-label="رنگ برچسب جدید" title="رنگ برچسب جدید"
-        type="color" value={newColor} onChange={event => setNewColor(event.target.value)}/>
       <button type="button" className="label-editor-add" aria-label="افزودن برچسب" title="افزودن برچسب"
         disabled={!newName.trim() || normalized.labels.length >= MAX_LABELS} onClick={add}><Plus size={17}/></button>
       <CommonColorOptions disabled={disabled} label="برچسب جدید" value={newColor} onChange={setNewColor}/>

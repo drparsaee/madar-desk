@@ -1,5 +1,5 @@
 .label-editor{display:grid;gap:8px;max-width:100%;}
-.label-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 34px;gap:8px;align-items:center;min-width:0;}
+.label-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:8px;align-items:center;min-width:0;}
 .label-editor-row > .madar-common-colors__details{grid-column:1/-1;grid-row:auto}
 .label-editor-row .madar-common-colors__swatch{width:23px;height:23px;min-height:23px;min-width:23px;padding:0;border-radius:7px}
 .label-editor-name-wrap{display:flex;align-items:center;gap:8px;min-width:0;}
