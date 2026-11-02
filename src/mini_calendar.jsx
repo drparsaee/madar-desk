@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {ChevronLeft,ChevronRight} from 'lucide-react';
 import {fromJalali,jalaliDigits} from './productivity.jsx';
+import {localTodayISO} from './calendar_today.js';
 
 const ISO_DATE=/^\d{4}-\d{2}-\d{2}$/;
 const pad=n=>String(n).padStart(2,'0');
@@ -16,7 +17,7 @@ const monthStart=(year,month,calendar)=>
 
 /** Small click-to-select month calendar. Outputs only validated Gregorian ISO dates. */
 export function MiniCalendar({id,value,calendar='jalali',onSelect,onClose,popupRef,popupStyle}) {
-  const today=isoUTC(new Date());
+  const today=localTodayISO();
   const initial=ISO_DATE.test(value||'')?value:today;
   const [visible,setVisible]=useState(()=>partsFromISO(initial,calendar).slice(0,2));
   useEffect(()=>setVisible(partsFromISO(initial,calendar).slice(0,2)),[calendar]);

@@ -41,3 +41,16 @@
 .card-cover-editor__preview-line{inline-size:66%;block-size:4px;border-radius:4px;background:currentColor;opacity:.16}
 .card-cover-editor__preview-line.short{inline-size:39%}
 .cardextras-error{color:#b23a50;font-size:12px;margin:0}
+/* The parent drawer doesn't expose global --text / --surface tokens in dark
+   mode. Use a local, readable palette for custom values and board settings. */
+:root[data-theme="dark"] .drawer .task-card-custom-fields .cardextras,
+:root[data-theme="dark"] .drawer .task-board-field-settings .cardextras{
+  --text:#ecf3fd;--surface:#1a2b40;--border:#4c6380;--accent:#a4c5ff;
+  color:var(--text);
+}
+:root[data-theme="dark"] .drawer .task-card-custom-fields .cardextras-muted{
+  color:#c0d1e5;opacity:1;
+}
+:root[data-theme="dark"] .drawer .task-board-field-settings .cardextras :is(.cardextras-grow,.cardextras-fieldrow){
+  color:#e4eefb;
+}

@@ -1,7 +1,6 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {Pipette} from 'lucide-react';
 import {CommonColorPalette} from './common_color_palette.jsx';
-import './cover_color_picker.css';
 
 const HEX=/^#[0-9A-F]{6}$/i;
 export function hsvToHex(h,s,v){
@@ -26,7 +25,7 @@ const clamp=(value)=>Math.max(0,Math.min(1,value));
  * Compact solid color picker. All color values applied to CSS or emitted to
  * callers are validated #RRGGBB; untrusted free-form text is never painted.
  */
-export function CoverColorPicker({value='#5672CA',onChange,disabled=false}){
+export function CoverColorPicker({value='#5672CA',onChange,disabled=false,label='کاور'}){
   const current=HEX.test(value)?value.toUpperCase():'#5672CA';
   const [hue,setHue]=useState(()=>Math.round(hexToHsv(current).h));
   const [draft,setDraft]=useState(current);
@@ -69,12 +68,12 @@ export function CoverColorPicker({value='#5672CA',onChange,disabled=false}){
     if(!disabled)fromSpectrum(s,v);
   };
   return <div className="cover-picker" dir="rtl">
-    <CommonColorPalette value={current} onChange={commit} disabled={disabled} label="کاور"/>
+    <CommonColorPalette value={current} onChange={commit} disabled={disabled} label={label}/>
     <details className="cover-picker__advanced">
       <summary><Pipette size={15} aria-hidden="true"/> ساخت رنگ دلخواه <span dir="ltr">{current}</span></summary>
       <div className="cover-picker__panel">
         <div className="cover-picker__spectrum" role="slider" tabIndex={disabled?-1:0}
-          aria-label="اشباع و روشنایی رنگ کاور" aria-disabled={disabled}
+          aria-label={'اشباع و روشنایی رنگ '+label} aria-disabled={disabled}
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(selected.s*100)}
           aria-valuetext={'اشباع '+Math.round(selected.s*100)+' درصد، روشنایی '+
             Math.round(selected.v*100)+' درصد، رنگ '+current}
@@ -99,14 +98,14 @@ export function CoverColorPicker({value='#5672CA',onChange,disabled=false}){
         </div>
         <label className="cover-picker__hue">طیف رنگ
           <input type="range" min="0" max="359" step="1" value={hue}
-            disabled={disabled} aria-label="طیف رنگ کاور" onChange={e=>{
+            disabled={disabled} aria-label={'طیف رنگ '+label} onChange={e=>{
               const next=Number(e.target.value);
               setHue(next);
               if(selected.s>0)commit(hsvToHex(next,selected.s,selected.v));
             }}/>
         </label>
         <div className="cover-picker__custom">
-          <input type="color" aria-label="انتخاب رنگ آزاد کاور" disabled={disabled}
+          <input type="color" aria-label={'رنگ '+label} disabled={disabled}
             value={HEX.test(draft)?draft:current} onChange={e=>commit(e.target.value)}/>
           <input type="text" aria-label="کد شش رقمی رنگ" dir="ltr" maxLength={7}
             value={draft} disabled={disabled} onChange={e=>setDraft(e.target.value)} placeholder="#RRGGBB"/>

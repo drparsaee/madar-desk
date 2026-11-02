@@ -539,8 +539,6 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
         role,avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto}}/>
         <span>نماد نشان‌دهنده انتخاب کاربر است، نه تشخیص خودکار ویژگی‌های شخصیتی.</span></div>
       <AvatarIconPicker value={userIcon} onChange={key=>{setUserIcon(key);setUserPhoto('');}}/>
-      <label className="member-color-field">رنگ آواتار
-        <input aria-label="رنگ آواتار کاربر" type="color" value={userColor} onChange={e=>setUserColor(e.target.value)}/></label>
       <CommonColorOptions value={userColor} onChange={setUserColor} label="آواتار کاربر"/>
     </div>
     </details>

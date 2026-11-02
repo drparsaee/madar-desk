@@ -1,4 +1,5 @@
 import React from 'react';
+import {CoverColorPicker} from './cover_color_picker.jsx';
 
 // Fixed, familiar sRGB choices complement (never replace) the freeform picker.
 export const COMMON_COLORS=Object.freeze([
@@ -28,8 +29,13 @@ export function CommonColorPalette({value,onChange,disabled=false,label='رنگ'
 }
 
 export function CommonColorOptions(props) {
+  const current=typeof props.value==='string'&&/^#[0-9a-f]{6}$/i.test(props.value)
+    ?props.value:'#5672CA';
   return <details className="madar-common-colors__details">
-    <summary>رنگ‌های آماده</summary>
-    <CommonColorPalette {...props}/>
+    <summary aria-label={'انتخاب رنگ '+(props.label||'')}>
+      <span className="madar-common-colors__preview" style={{backgroundColor:current}} aria-hidden="true"/>
+      <span>رنگ</span>
+    </summary>
+    <CoverColorPicker {...props}/>
   </details>;
 }
