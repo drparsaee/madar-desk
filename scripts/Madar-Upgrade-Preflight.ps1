@@ -49,8 +49,21 @@ AssertNoLinks $BackupRoot
 
 # The native desktop and LAN Host must not be writing while SQLite and WAL
 # files are copied. Never terminate a running customer application.
+# The versioned installer itself can be named Madar-Desk-1.0.4-Setup.exe.
+# Inno starts a second Madar-Desk-1.0.4-Setup.tmp process as well. An earlier
+# broad Madar-Desk* check incorrectly rejected both, so upgrades ALWAYS failed
+# while the user was looking at the installer. Exclude only that specific
+# versioned setup naming scheme; continue to fail closed for real writers.
+function Test-MadarWriterProcessName([string]$Name) {
+    if ($Name -eq 'MadarHost') {return $true}
+    if ($Name -notlike 'Madar-Desk*') {return $false}
+    if ($Name -match '^Madar-Desk-\d+\.\d+\.\d+-Setup(?:-[A-Za-z0-9.-]+)?(?:\.tmp)?$') {
+        return $false
+    }
+    return $true
+}
 $running=@(Get-Process -ErrorAction Stop | Where-Object {
-    $_.ProcessName -like 'Madar-Desk*' -or $_.ProcessName -eq 'MadarHost'
+    Test-MadarWriterProcessName $_.ProcessName
 })
 if ($running.Count -gt 0) {throw 'Close all Madar windows and MadarHost before updating.'}
 $service=Get-Service -Name 'MadarHost' -ErrorAction SilentlyContinue
