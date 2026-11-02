@@ -1,5 +1,6 @@
 """Synthetic failure-injection checks for LAN identity persistence and ACL."""
 
+from copy import deepcopy
 import tempfile
 import threading
 import unittest
@@ -12,9 +13,13 @@ from lan import LanService, verify_password
 class _Bridge:
     def __init__(self):
         self._lock = threading.RLock()
+        self.state = {"projects": [], "tasks": []}
 
     def getState(self):
-        return {"projects": [], "tasks": []}
+        return deepcopy(self.state)
+
+    def saveState(self, state):
+        self.state = deepcopy(state)
 
 
 class UserPersistenceFailureTests(unittest.TestCase):
@@ -66,6 +71,65 @@ class UserPersistenceFailureTests(unittest.TestCase):
                 self.service.update_profile(self.admin, {"displayName": "Uncommitted identity"})
         self.assertEqual(self.service.current_user(self.admin), before)
         self.assertEqual(self.service.users_path.read_bytes(), disk_before)
+
+    def test_failed_delete_preserves_user_session_and_assigned_cards(self):
+        bridge = self.service.bridge
+        bridge.state["tasks"] = [{"id": "card-qa", "assignees": ["editor", "admin"]}]
+        old_state = deepcopy(bridge.state)
+        before_registry = self.service.users_path.read_bytes()
+        editor_token = self.service.authenticate("editor", "synthetic-editor-password")["token"]
+        with patch.object(self.service, "_store_users", side_effect=OSError("synthetic disk failure")):
+            with self.assertRaisesRegex(OSError, "synthetic disk failure"):
+                self.service.delete_user(self.admin, "editor")
+        self.assertEqual(bridge.getState(), old_state)
+        self.assertIn("editor", self.service.users)
+        self.assertEqual(self.service.account_for(editor_token)["username"], "editor")
+        self.assertEqual(self.service.users_path.read_bytes(), before_registry)
+
+    def test_delete_rolls_back_registry_if_card_save_fails(self):
+        bridge = self.service.bridge
+        bridge.state["tasks"] = [{"id": "card-qa", "assignees": ["editor"]}]
+        old_state = deepcopy(bridge.state)
+        before_registry = self.service.users_path.read_bytes()
+        editor_token = self.service.authenticate("editor", "synthetic-editor-password")["token"]
+        with patch.object(bridge, "saveState", side_effect=OSError("synthetic card write failure")):
+            with self.assertRaisesRegex(OSError, "synthetic card write failure"):
+                self.service.delete_user(self.admin, "editor")
+        self.assertEqual(bridge.getState(), old_state)
+        self.assertIn("editor", self.service.users)
+        self.assertEqual(self.service.account_for(editor_token)["username"], "editor")
+        self.assertEqual(self.service.users_path.read_bytes(), before_registry)
+
+    def test_failed_delete_does_not_mutate_a_live_bridge_state_reference(self):
+        bridge = self.service.bridge
+        bridge.state["tasks"] = [{"id": "card-qa", "assignees": ["editor", "admin"]}]
+        original = deepcopy(bridge.state)
+        # Native state getters may expose an alias, not a detached copy.
+        with patch.object(bridge, "getState", side_effect=lambda: bridge.state):
+            with patch.object(self.service, "_store_users", side_effect=OSError("synthetic disk failure")):
+                with self.assertRaises(OSError):
+                    self.service.delete_user(self.admin, "editor")
+        self.assertEqual(bridge.state, original)
+
+    def test_delete_rejects_unhashable_username_without_side_effects(self):
+        before = self.service.users_path.read_bytes()
+        for invalid in ([], {}, ["editor"]):
+            with self.subTest(type=type(invalid).__name__):
+                with self.assertRaises(ValueError):
+                    self.service.delete_user(self.admin, invalid)
+        self.assertIn("editor", self.service.users)
+        self.assertEqual(self.service.users_path.read_bytes(), before)
+
+    def test_successful_delete_unassigns_cards_and_revokes_deleted_session(self):
+        bridge = self.service.bridge
+        bridge.state["tasks"] = [{"id": "card-qa", "assignees": ["editor", "admin"]}]
+        editor_token = self.service.authenticate("editor", "synthetic-editor-password")["token"]
+        self.assertTrue(self.service.delete_user(self.admin, "editor"))
+        self.assertEqual(bridge.getState()["tasks"][0]["assignees"], ["admin"])
+        self.assertNotIn("editor", self.service.users)
+        self.assertNotIn("editor", self.service._read_users())
+        with self.assertRaises(PermissionError):
+            self.service.account_for(editor_token)
 
 
 if __name__ == "__main__":

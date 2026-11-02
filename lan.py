@@ -685,26 +685,39 @@ class LanService:
             return self._public_user(account)
 
     def delete_user(self, token, username):
-        with self.lock:
+        with self.lock, self.bridge._lock:
             who = self.account_for(token)
             if who["role"] != "admin" or username == who["username"]:
                 raise PermissionError("حذف این حساب مجاز نیست.")
-            if username not in self.users:
+            if type(username) is not str or username not in self.users:
                 raise ValueError("کاربر پیدا نشد.")
-            with self.bridge._lock:
-                state = self.bridge.getState()
-                updated = False
-                for task in state["tasks"]:
-                    if username in task.get("assignees", []):
-                        task["assignees"] = [u for u in task["assignees"] if u != username]
-                        updated = True
-                if updated:
+            # Prepare a separate task snapshot; getState() may return a live
+            # object and must not expose uncommitted assignee removals.
+            state = deepcopy(self.bridge.getState())
+            changed = False
+            for task in state["tasks"]:
+                if username in task.get("assignees", []):
+                    task["assignees"] = [u for u in task["assignees"] if u != username]
+                    changed = True
+            updated_users = {name: account for name, account in self.users.items()
+                             if name != username}
+            # Persist identity first: if it fails, neither assignments nor
+            # active sessions may be changed. The bridge is saved only after
+            # a successful identity write and under the same lock order.
+            self._store_users(updated_users)
+            try:
+                if changed:
                     self.bridge.saveState(state)
-            self.users.pop(username)
+            except BaseException:
+                # Best-effort compensation for the second independent store.
+                # A process crash between both writes still needs a durable
+                # cross-store recovery protocol, not merely this exception path.
+                self._store_users(self.users)
+                raise
+            self.users = updated_users
             for key, record in list(self.sessions.items()):
                 if record[0] == username:
                     del self.sessions[key]
-            self._store_users()
         return True
 
     def read_state(self, token):
