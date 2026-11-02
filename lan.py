@@ -396,6 +396,37 @@ class LanService:
             raise ValueError("Required display roles are missing")
         return roles
 
+    def _publish_display_roles(self, updated):
+        """Compensate a catalog write that publishes before reporting failure."""
+        path = self.display_roles_path
+        previous = json.loads(path.read_text(encoding="utf8")) if path.exists() else None
+        candidate = {"version": 1, "roles": list(updated.values())}
+        try:
+            atomic_json(path, candidate)
+        except Exception:
+            try:
+                observed = json.loads(path.read_text(encoding="utf8")) if path.exists() else None
+            except Exception as inspection_error:
+                raise RuntimeError(
+                    "LAN display role save failed; persisted catalog could not be inspected"
+                ) from inspection_error
+            if observed == candidate:
+                try:
+                    if previous is None:
+                        path.unlink()
+                    else:
+                        atomic_json(path, previous)
+                except Exception as rollback_error:
+                    raise RuntimeError(
+                        "LAN display role save failed and catalog rollback failed"
+                    ) from rollback_error
+            elif observed != previous:
+                raise RuntimeError(
+                    "LAN display role save failed; unexpected catalog revision prevents rollback"
+                )
+            raise
+        self.display_roles = updated
+
     def _public_user(self, account):
         return public_user(account, self.display_roles)
 
@@ -417,8 +448,7 @@ class LanService:
             if role["id"] not in self.display_roles and len(self.display_roles) >= MAX_ROLES:
                 raise ValueError("Display role catalog limit reached")
             updated = {**self.display_roles, role["id"]: role}
-            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
-            self.display_roles = updated
+            self._publish_display_roles(updated)
             return public_role(role)
 
     def delete_display_role(self, token, role_id):
@@ -434,8 +464,7 @@ class LanService:
                    for account in self.users.values()):
                 raise ValueError("Display role is assigned to an account")
             updated = {k: v for k, v in self.display_roles.items() if k != role_id}
-            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
-            self.display_roles = updated
+            self._publish_display_roles(updated)
             return True
 
     def setup_owner(self, username, password):
