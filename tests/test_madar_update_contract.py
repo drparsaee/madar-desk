@@ -84,7 +84,8 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual((self.install / "previous-version.txt").read_text().strip(), "1.0.1")
         rollback = ps_file(ACTIVATE, "-InstallRoot", str(self.install),
                            "-Version", "1.0.1",
-                           "-ExpectedSHA256", digest(self.old.read_bytes()))
+                           "-ExpectedSHA256", digest(self.old.read_bytes()),
+                           "-AllowRollback")
         self.assertEqual(rollback.returncode, 0, rollback.stdout + rollback.stderr)
         self.assertEqual((self.install / "current-version.txt").read_text().strip(), "1.0.1")
         self.assertTrue(self.old.is_file() and self.new.is_file())
