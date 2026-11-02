@@ -295,6 +295,7 @@ class LanService:
         self.sessions = {}
         self.failed = {}
         self.failed_accounts = {}
+        self.failed_unknown_users = {}
         self.users = self._read_users()
         self.display_roles_path = self.users_path.with_name(self.users_path.stem + ".display-roles.json")
         self.display_roles = self._read_display_roles()
@@ -414,18 +415,25 @@ class LanService:
             if now - last >= 120:
                 failures = 0
             account = self.users.get(username)
+            # A valid login cannot erase the IP's budget for probing arbitrary
+            # nonexistent usernames. Keep one entry per IP, never per guess.
+            unknown_failures, unknown_last = self.failed_unknown_users.get(ip, (0, 0))
+            if now - unknown_last >= 120:
+                unknown_failures = 0
             # A different account's valid login must not reset this account's
             # failed guesses. Track only existing users to bound memory growth.
             key = (ip, username) if account else None
             account_failures, account_last = self.failed_accounts.get(key, (0, 0))
             if now - account_last >= 120:
                 account_failures = 0
-            if failures >= 6 or account_failures >= 6:
+            if failures >= 6 or account_failures >= 6 or unknown_failures >= 6:
                 raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
             if not account or not verify_password(password, account["passwordHash"]):
                 self.failed[ip] = (failures + 1, now)
                 if key is not None:
                     self.failed_accounts[key] = (account_failures + 1, now)
+                else:
+                    self.failed_unknown_users[ip] = (unknown_failures + 1, now)
                 raise PermissionError("نام کاربری یا رمز عبور نادرست است.")
             self.failed.pop(ip, None)
             self.failed_accounts.pop(key, None)

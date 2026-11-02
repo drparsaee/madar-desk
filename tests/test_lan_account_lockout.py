@@ -67,6 +67,23 @@ class LanAccountLockoutTests(unittest.TestCase):
                 "admin", "synthetic-admin-password", ip
             )["user"]["role"], "admin")
 
+    def test_unknown_username_budget_survives_valid_other_account_login(self):
+        ip = "192.0.2.14"
+        with patch("lan.time.time", return_value=1000.0):
+            for index in range(5):
+                with self.assertRaises(PermissionError):
+                    self.service.authenticate(f"nonexistent-{index}", "wrong", ip)
+            viewer = self.service.authenticate(
+                "viewer", "synthetic-viewer-password", ip)
+            self.assertEqual(self.service.account_for(viewer["token"])["role"], "viewer")
+            with self.assertRaises(PermissionError):
+                self.service.authenticate("nonexistent-sixth", "wrong", ip)
+            with self.assertRaisesRegex(PermissionError, "دو دقیقه"):
+                self.service.authenticate("admin", "synthetic-admin-password", ip)
+        with patch("lan.time.time", return_value=1121.0):
+            self.assertEqual(self.service.authenticate(
+                "admin", "synthetic-admin-password", ip)["user"]["role"], "admin")
+
 
 if __name__ == "__main__":
     unittest.main()
