@@ -584,26 +584,14 @@ class LanService:
         if not isinstance(payload, dict):
             raise ValueError("اطلاعات حساب معتبر نیست.")
         username, password = payload.get("username"), payload.get("password")
-        role, scope = payload.get("role", "viewer"), payload.get("projects")
-        if not isinstance(role, str) or role not in ROLES:
-            raise ValueError("سطح دسترسی معتبر نیست.")
         if (not isinstance(username, str) or
                 not 3 <= len(username) <= 40 or
                 any(not c.isascii() or (not c.isalnum() and c not in "._-")
                     for c in username)):
             raise ValueError("نام کاربری باید ۳ تا ۴۰ کاراکتر انگلیسی باشد.")
-        if (scope is not None and (
-                not isinstance(scope, list) or len(scope) > 500 or
-                any(not isinstance(p, str) for p in scope) or
-                len(scope) != len(set(scope)))):
-            raise ValueError("محدوده پروژه‌ها معتبر نیست.")
-        if role == "admin" and scope is not None:
-            raise ValueError("مدیر به تمام پروژه‌ها دسترسی دارد؛ محدوده انتخابی برای مدیر مجاز نیست.")
         for grant in ("financeView", "financeEdit"):
             if grant in payload and type(payload[grant]) is not bool:
                 raise ValueError("مجوز مالی باید مقدار درست یا نادرست داشته باشد.")
-        if role == "viewer" and payload.get("financeEdit") is True:
-            raise ValueError("کاربر مشاهده‌گر نمی‌تواند مجوز ویرایش مالی داشته باشد.")
         profile_fields = {key: payload[key] for key in
                           ("displayName", "avatarIcon", "avatarPhoto", "avatarColor")
                           if key in payload}
@@ -613,6 +601,24 @@ class LanService:
             if who["role"] != "admin":
                 raise PermissionError("فقط مدیر می‌تواند کاربران را تغییر دهد.")
             old = self.users.get(username)
+            # An omitted field is not an instruction to downgrade a role or
+            # silently widen a scoped account to all projects.
+            role = payload.get("role", old["role"] if old else "viewer")
+            scope = payload.get("projects", old["projects"] if old else None)
+            if role == "admin" and old and old["role"] != "admin" and "projects" not in payload:
+                # Explicit promotion to admin already implies unrestricted scope.
+                scope = None
+            if not isinstance(role, str) or role not in ROLES:
+                raise ValueError("سطح دسترسی معتبر نیست.")
+            if (scope is not None and (
+                    not isinstance(scope, list) or len(scope) > 500 or
+                    any(not isinstance(p, str) for p in scope) or
+                    len(scope) != len(set(scope)))):
+                raise ValueError("محدوده پروژه‌ها معتبر نیست.")
+            if role == "admin" and scope is not None:
+                raise ValueError("مدیر به تمام پروژه‌ها دسترسی دارد؛ محدوده انتخابی برای مدیر مجاز نیست.")
+            if role == "viewer" and payload.get("financeEdit") is True:
+                raise ValueError("کاربر مشاهده‌گر نمی‌تواند مجوز ویرایش مالی داشته باشد.")
             display_role = payload.get("displayRole", old.get("displayRole", LEGACY_DISPLAY_ROLE[role])
                                        if old else LEGACY_DISPLAY_ROLE[role])
             # A legacy ACL downgrade resets presentation defaults unless the
