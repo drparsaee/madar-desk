@@ -1,0 +1,7 @@
+# Accounting restore publication design
+
+The destination-side hidden staging folder contains an exclusive process-locked `lock`, verified `ledger.sqlite3`, any `users.json` and `templates.json`, and a durable `ready.json` with the exact source/destination names and SHA-256 fingerprints of source, completion manifest and staged members. Its fixed name prevents a second concurrent publisher from bypassing the transaction. No final member is linked until ready metadata is synced. Other processes are refused while the owner holds the lock.
+
+After a hard termination, a new invocation obtains the released lock, validates staged identity against the same source and fingerprint, validates all staged bytes and ownership of any already-linked destination members using `os.path.samefile`, then resumes. It links companions before the SQLite ledger, the final visibility boundary. A foreign file at any final name blocks publication. Ordinary exceptions remove only final names still hard-linked to the corresponding staged file; cleanup of the hidden staging folder follows. A completed transaction cleans staging after the final directory sync.
+
+The protected recovery directory is never treated as evidence that an unrelated file may be removed. An incomplete/unrecognized transaction fails closed; the operator can inspect it. Atomic hard links and OS-managed process locks are required. Filesystem power-loss barriers and external directory observers are separate constraints.

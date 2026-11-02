@@ -8,14 +8,14 @@ Operator confirmations are declarations, not checks that the app is stopped.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import sqlite3
 import stat
 import sys
-import tempfile
 
 from standalone_accounting import StandaloneAccountingError
 from standalone_accounting_backup import (
@@ -33,6 +33,113 @@ class StandaloneRestoreError(RuntimeError):
 
 
 _SIDECARS = ("-wal", "-shm", "-journal")
+_STAGE_NAME = ".standalone-accounting.sqlite3.restore-pending"
+_STAGE_FILES = {"sqlite": "ledger.sqlite3", "templates": "templates.json",
+                "users": "users.json"}
+_FINAL_FILES = {"sqlite": SOURCE_FILENAME, "templates": "invoice-templates.json",
+                "users": "local-users.json"}
+
+
+def _fingerprint(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+@contextmanager
+def _locked_restore_stage(stage: Path):
+    """One destination-side transaction, with a lock released on process death."""
+    created = False
+    try:
+        stage.mkdir(mode=0o700)
+        created = True
+    except FileExistsError:
+        if _is_link_or_junction(stage) or not stage.is_dir():
+            raise StandaloneRestoreError("Untrusted restore staging path")
+        if not (stage / "lock").is_file():
+            raise FileExistsError("Another restore is preparing this destination")
+    lock_path = stage / "lock"
+    if _is_link_or_junction(lock_path):
+        raise StandaloneRestoreError("Untrusted restore lock")
+    with lock_path.open("a+b" if created else "r+b") as stream:
+        stream.seek(0)
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, PermissionError) as exc:
+            raise FileExistsError("Another restore owns this destination") from exc
+        try:
+            yield created
+        finally:
+            stream.seek(0)
+            if sys.platform == "win32":
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _remove_owned_stage(stage: Path) -> None:
+    """Never recursively delete an unrecognized or foreign staging entry."""
+    known = {"lock", "ready.json", *_STAGE_FILES.values(),
+             *("ledger.sqlite3" + suffix for suffix in _SIDECARS)}
+    if set(p.name for p in stage.iterdir()) - known:
+        raise StandaloneRestoreError("Unknown restore staging members need manual review")
+    for name in known - {"lock"}:
+        (stage / name).unlink(missing_ok=True)
+    (stage / "lock").unlink(missing_ok=True)
+    stage.rmdir()
+
+
+def _check_stage_data(stage: Path, metadata: dict, source: Path,
+                      destination: Path, completion: bytes | None,
+                      original_head: tuple[int, str | None],
+                      templates: dict, identity: dict) -> None:
+    expected = {"sqlite"}
+    if templates["present"]:
+        expected.add("templates")
+    if identity["present"]:
+        expected.add("users")
+    if (type(metadata) is not dict or set(metadata) !=
+            {"format", "version", "source", "destination", "source_hash",
+             "completion_hash", "files"} or
+            metadata["format"] != "madar-accounting-restore" or
+            metadata["version"] != 1 or
+            metadata["source"] != str(source) or
+            metadata["destination"] != str(destination) or
+            type(metadata["files"]) is not dict or set(metadata["files"]) != expected or
+            metadata["completion_hash"] != (sha256(completion).hexdigest() if
+                                            completion is not None else None) or
+            metadata["source_hash"] != _fingerprint(source)):
+        raise StandaloneRestoreError("Restore transaction/source mismatch")
+    for kind in expected:
+        member = stage / _STAGE_FILES[kind]
+        _check_path_components(member)
+        if not member.is_file() or not stat.S_ISREG(member.lstat().st_mode):
+            raise StandaloneRestoreError("Missing staged restore member")
+        if metadata["files"][kind] != _fingerprint(member):
+            raise StandaloneRestoreError("Staged restore member checksum mismatch: " + kind)
+    for kind, companion in (("templates", templates), ("users", identity)):
+        if companion["present"] and sha256(companion["bytes"]).hexdigest() != metadata["files"][kind]:
+            raise StandaloneRestoreError("Backup companion changed since restore staging")
+    with closing(_readonly_sqlite(stage / _STAGE_FILES["sqlite"])) as reader:
+        if _checked_head(reader) != original_head:
+            raise StandaloneRestoreError("Staged restore ledger head mismatch")
+    # _validate_backup changes SQLite's journal mode, so running it *after*
+    # recording the staged SHA would invalidate our crash-recovery fingerprint.
+    # The initial copy passed that validator; recovery does immutable replay here.
+
+
+def _owned_link(member: Path, target: Path) -> bool:
+    if not os.path.lexists(target):
+        return False
+    _check_path_components(target)
+    return os.path.samefile(member, target)
 
 
 def preview_template_companion(source: Path, destination: Path | None = None) -> dict:
@@ -160,17 +267,6 @@ def _check_new_destination(source: Path, destination: Path) -> None:
     _refuse_sidecars(destination, destination=True)
 
 
-def _remove_our_temp(temporary: Path) -> list[OSError]:
-    """Only names created for this temporary file; never old backups or DBs."""
-    errors = []
-    for suffix in (*_SIDECARS, ""):
-        try:
-            Path(str(temporary) + suffix).unlink(missing_ok=True)
-        except OSError as exc:
-            errors.append(exc)
-    return errors
-
-
 def restore_standalone_accounting(
     source: Path, destination: Path, *,
     plaintext_acknowledged: bool,
@@ -187,128 +283,117 @@ def restore_standalone_accounting(
         raise PermissionError("Explicit OFFLINE operator acknowledgement required")
     source = _absolute_path(source, "backup source")
     destination = _absolute_path(destination, "restore destination")
-    _check_new_destination(source, destination)
+    if destination.name != SOURCE_FILENAME:
+        raise ValueError("Restore destination must be named standalone-accounting.sqlite3")
+    _check_path_components(destination)
+    if not destination.parent.is_dir():
+        raise FileNotFoundError("Restore destination directory must already exist")
+    if source == destination or source.resolve() == destination.resolve(strict=False):
+        raise ValueError("Backup source and destination must not be identical")
+    _refuse_sidecars(destination, destination=True)
+    stage = destination.parent / _STAGE_NAME
+    _check_path_components(stage)
+    if not os.path.lexists(stage):
+        _check_new_destination(source, destination)
     try:
         completion = verify_completion_manifest(source)
     except BackupManifestError as exc:
         raise StandaloneRestoreError(str(exc)) from exc
     original_head = _check_input(source)
-    template_companion = preview_template_companion(source, destination)
-    identity_companion = preview_identity_companion(source, destination)
-    temporary = None
-    published = False
-    companion_published = False
-    companion_temp = None
-    template_target = destination.parent / 'invoice-templates.json'
-    identity_published = False
-    identity_temp = None
-    identity_target = destination.parent / 'local-users.json'
-    prior_error = None
+    template_companion = preview_template_companion(source)
+    identity_companion = preview_identity_companion(source)
+    cleanup_stage = False
     try:
-        fd, name = tempfile.mkstemp(
-            dir=str(destination.parent), prefix="." + destination.name + ".restore-",
-            suffix=".sqlite3")
-        temporary = Path(name)
-        os.close(fd)
-        # Online backup into a private copy avoids copying an inconsistent
-        # database header or a partially checkpointed source backup.
-        _sqlite_backup(source, temporary)
-        snapshot_revision = _validate_backup(temporary)
-        with closing(_readonly_sqlite(temporary)) as reader:
-            restored_head = _checked_head(reader)
-        if restored_head != original_head or snapshot_revision != original_head[0]:
-            # Offline backup must be immutable across validation/copy; never
-            # silently accept a different head, even with SAME revision.
-            raise StandaloneRestoreError(
-                "Backup snapshot head changed during OFFLINE restore verification")
-        _sync_file(temporary)  # r+b on temp only: needed on Windows CRT.
-        _check_new_destination(source, destination)
-        _refuse_sidecars(source, destination=False)
-        current_companion = preview_template_companion(source, destination)
-        if current_companion['present'] != template_companion['present'] or (
-            current_companion['present'] and current_companion['bytes'] != template_companion['bytes']
-        ):
-            raise StandaloneRestoreError('Template backup companion changed during restore')
-        current_identity=preview_identity_companion(source,destination)
-        if (current_identity['present']!=identity_companion['present'] or
-            (current_identity['present'] and current_identity['bytes']!=identity_companion['bytes'])):
-            raise StandaloneRestoreError('User backup companion changed during restore')
-        try:
-            if verify_completion_manifest(source) != completion:
-                raise StandaloneRestoreError('Backup completion manifest changed during restore')
-        except BackupManifestError as exc:
-            raise StandaloneRestoreError(str(exc)) from exc
-        if template_companion['present']:
-            descriptor, companion_name = tempfile.mkstemp(
-                dir=str(destination.parent), prefix='.invoice-templates.restore-', suffix='.json')
-            companion_temp = Path(companion_name)
-            with os.fdopen(descriptor, 'wb') as stream:
-                stream.write(template_companion['bytes'])
-                stream.flush()
-                os.fsync(stream.fileno())
-        if identity_companion['present']:
-            descriptor,identity_name=tempfile.mkstemp(
-                dir=str(destination.parent),prefix='.local-users.restore-',suffix='.json')
-            identity_temp=Path(identity_name)
-            with os.fdopen(descriptor,'wb') as stream:
-                stream.write(identity_companion['bytes'])
-                stream.flush()
-                os.fsync(stream.fileno())
-        # os.link is an atomic CREATE-IF-ABSENT on the *destination filesystem*.
-        # os.replace would overwrite, and copyfile/exclusive open could publish
-        # a partially written DB; neither is allowed.
-        os.link(str(temporary), str(destination))
-        published = True
-        if companion_temp is not None:
-            os.link(str(companion_temp), str(template_target))
-            companion_published = True
-        if identity_temp is not None:
-            os.link(str(identity_temp),str(identity_target))
-            identity_published=True
-        _sync_directory(destination.parent)  # best-effort Windows directory fsync
-        return destination
-    except BaseException as exc:
-        prior_error = exc
-        if identity_published and identity_temp is not None:
-            try:
-                if os.path.samefile(identity_temp,identity_target):
-                    identity_target.unlink()
-            except OSError as cleanup_exc:
-                exc.add_note('Could not revoke restored user file: '+str(cleanup_exc))
-        if companion_published and companion_temp is not None:
-            try:
-                if os.path.samefile(companion_temp, template_target):
-                    template_target.unlink()
-            except OSError as cleanup_exc:
-                exc.add_note('Could not revoke restored template file: ' + str(cleanup_exc))
-        # If publication succeeded but subsequent steps failed, delete *only*
-        # the name we published AND only while it still points to our temp inode.
-        # Never delete an independently created file or a racing replacement.
-        if published and temporary is not None:
-            try:
-                if os.path.samefile(temporary, destination):
-                    destination.unlink()
-            except OSError as cleanup_exc:
-                exc.add_note("Could not revoke our incomplete restore publication: " +
-                             str(cleanup_exc))
-        raise
-    finally:
-        if identity_temp is not None:
-            identity_temp.unlink(missing_ok=True)
-        if companion_temp is not None:
-            companion_temp.unlink(missing_ok=True)
-        if temporary is not None:
-            cleanup_errors = _remove_our_temp(temporary)
-            if cleanup_errors:
-                explanation = "; ".join(str(error) for error in cleanup_errors)
-                if prior_error is not None:
-                    prior_error.add_note(
-                        "Manual removal of temporary plaintext files required: " +
-                        explanation)
-                else:
+        with _locked_restore_stage(stage) as created:
+            staged_files = stage / _STAGE_FILES["sqlite"]
+            if created:
+                cleanup_stage = True
+                _check_new_destination(source, destination)
+                preview_template_companion(source, destination)
+                preview_identity_companion(source, destination)
+                # Verify an offline snapshot before any visible destination link.
+                _sqlite_backup(source, staged_files)
+                snapshot_revision = _validate_backup(staged_files)
+                with closing(_readonly_sqlite(staged_files)) as reader:
+                    restored_head = _checked_head(reader)
+                if restored_head != original_head or snapshot_revision != original_head[0]:
                     raise StandaloneRestoreError(
-                        "Restore published but temporary plaintext cleanup failed: " +
-                        explanation)
+                        "Backup snapshot head changed during OFFLINE restore verification")
+                _sync_file(staged_files)
+                _check_new_destination(source, destination)
+                _refuse_sidecars(source, destination=False)
+                current_template = preview_template_companion(source, destination)
+                current_identity = preview_identity_companion(source, destination)
+                if (current_template['present'] != template_companion['present'] or
+                    current_template.get('bytes') != template_companion.get('bytes') or
+                    current_identity['present'] != identity_companion['present'] or
+                    current_identity.get('bytes') != identity_companion.get('bytes')):
+                    raise StandaloneRestoreError('Backup companion changed during restore')
+                try:
+                    if verify_completion_manifest(source) != completion:
+                        raise StandaloneRestoreError('Backup completion manifest changed during restore')
+                except BackupManifestError as exc:
+                    raise StandaloneRestoreError(str(exc)) from exc
+                files = {"sqlite": _fingerprint(staged_files)}
+                for kind, companion in (("templates", template_companion),
+                                        ("users", identity_companion)):
+                    if companion['present']:
+                        staged = stage / _STAGE_FILES[kind]
+                        with staged.open('xb') as stream:
+                            stream.write(companion['bytes'])
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                        files[kind] = _fingerprint(staged)
+                metadata = {
+                    "format": "madar-accounting-restore", "version": 1,
+                    "source": str(source), "destination": str(destination),
+                    "source_hash": _fingerprint(source),
+                    "completion_hash": (sha256(completion).hexdigest() if completion is not None else None),
+                    "files": files,
+                }
+                with (stage / "ready.json").open('xb') as stream:
+                    stream.write(json.dumps(metadata, sort_keys=True).encode('utf-8'))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            else:
+                ready = stage / "ready.json"
+                _check_path_components(ready)
+                if not ready.is_file() or ready.stat().st_size > 4096:
+                    raise StandaloneRestoreError("Interrupted restore has no valid ready record")
+                try:
+                    metadata = json.loads(ready.read_text(encoding='utf-8'))
+                except (OSError, ValueError, UnicodeDecodeError) as exc:
+                    raise StandaloneRestoreError("Interrupted restore ready record is damaged") from exc
+            _check_stage_data(stage, metadata, source, destination, completion,
+                              original_head, template_companion, identity_companion)
+            cleanup_stage = True
+            members = [kind for kind in ("templates", "users", "sqlite")
+                       if kind in metadata["files"]]
+            try:
+                for kind in members:
+                    staged = stage / _STAGE_FILES[kind]
+                    target = destination.parent / _FINAL_FILES[kind]
+                    if _owned_link(staged, target):
+                        continue  # The same transaction published this link before a crash.
+                    if os.path.lexists(target):
+                        raise FileExistsError("Restore destination member already exists: " + target.name)
+                    # Hard link is atomic no-clobber; SQLite is *always* the last link.
+                    os.link(str(staged), str(target))
+                _sync_directory(destination.parent)
+                return destination
+            except BaseException as exc:
+                for kind in reversed(members):
+                    target = destination.parent / _FINAL_FILES[kind]
+                    try:
+                        if _owned_link(stage / _STAGE_FILES[kind], target):
+                            target.unlink()
+                    except (OSError, ValueError) as cleanup_exc:
+                        exc.add_note("Could not revoke owned restore link: " + str(cleanup_exc))
+                        cleanup_stage = False
+                raise
+    finally:
+        if cleanup_stage and stage.is_dir():
+            _remove_owned_stage(stage)
 
 
 def main(argv: list[str] | None = None) -> int:
