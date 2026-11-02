@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {DEFAULT_PRINT_TEMPLATE,PRINT_FIELDS,templatePageSize,
   renderPrintTemplatePages,validatePrintTemplate} from './accounting_print_template.js';
 import './accounting_print_designer.css';
+import {CommonColorOptions} from './common_color_palette.jsx';
 
 /** Controlled per-company visual editor. It never writes accounting events. */
 export default function AccountingPrintDesigner({value,onChange,context,disabled=false}){
@@ -72,6 +73,7 @@ export default function AccountingPrintDesigner({value,onChange,context,disabled
         <option>Vazirmatn</option><option>Tahoma</option><option>Arial</option></select></label>
       <label>رنگ متن<input type="color" value={template.color} disabled={disabled}
         onChange={e=>change({color:e.target.value})}/></label>
+      <CommonColorOptions value={template.color} disabled={disabled} label="متن فاکتور" onChange={color=>change({color})}/>
       <label>لوگوی صادرکننده<input type="file" accept="image/png,image/jpeg" disabled={disabled}
         onChange={e=>{void imageSelected(e.target.files?.[0]);e.target.value='';}}/></label>
       {template.logo&&<button type="button" disabled={disabled} onClick={()=>change({logo:''})}>حذف لوگو</button>}

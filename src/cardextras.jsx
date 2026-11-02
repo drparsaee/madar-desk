@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Check, ChevronDown, ChevronUp, ListChecks, Plus, Trash2} from 'lucide-react';
 import {CalendarField} from './productivity.jsx';
+import {CommonColorOptions} from './common_color_palette.jsx';
 import './cardextras.css';
 
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -238,17 +239,18 @@ export function CardCover({task,onChange,disabled=false}) {
   const change=value=>{try{onChange({cover:normalizeCover(value)});setError('');}catch(e){setError(e.message||String(e));}};
   return <div className="cardextras" dir="rtl">
     <h3>کاور کارت</h3>
-    {cover&&<div className={'cardextras-cover cardextras-cover-'+cover.size} style={{backgroundColor:cover.color}}
+    {cover&&<div className="cardextras-cover cardextras-cover-strip" style={{backgroundColor:cover.color}}
       role="img" aria-label={'کاور رنگی '+cover.color}/>}
     <div className="cardextras-colors">{DEFAULT_COLORS.map(color=><button key={color} type="button" disabled={disabled}
       style={{backgroundColor:color}} aria-label={'کاور '+color} aria-pressed={cover?.color===color.toUpperCase()}
-      onClick={()=>change({type:'color',color,size:cover?.size||'strip'})}>{cover?.color===color.toUpperCase()&&<Check size={17}/>}</button>)}</div>
+      onClick={()=>change({type:'color',color,size:'strip'})}>{cover?.color===color.toUpperCase()&&<Check size={17}/>}</button>)}</div>
+    <CommonColorOptions value={cover?.color} disabled={disabled} label="کاور کارت"
+      onChange={color=>change({type:'color',color,size:'strip'})}/>
     <div className="cardextras-addrow">
       <label>رنگ دلخواه <input type="text" dir="ltr" maxLength={7} value={custom} disabled={disabled}
         onChange={e=>setCustom(e.target.value)} placeholder="#RRGGBB"/></label>
-      <button type="button" disabled={disabled||!COLOR_RE.test(custom)} onClick={()=>change({type:'color',color:custom,size:cover?.size||'strip'})}>اعمال رنگ</button>
-      <label>ارتفاع کاور <select disabled={disabled||!cover} value={cover?.size||'strip'}
-        onChange={e=>change({...cover,size:e.target.value})}><option value="strip">نواری</option><option value="full">بلند</option></select></label>
+      <button type="button" disabled={disabled||!COLOR_RE.test(custom)} onClick={()=>change({type:'color',color:custom,size:'strip'})}>اعمال رنگ</button>
+      <small>کاور روی کارت همیشه نواری و زیر عنوان نمایش داده می‌شود.</small>
       <button type="button" disabled={disabled||!cover} onClick={()=>change(null)}>حذف کاور</button>
     </div><ActionError message={error}/>
   </div>;

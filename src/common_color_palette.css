@@ -1,0 +1,9 @@
+.madar-common-colors{display:flex;gap:5px;flex-wrap:wrap;align-items:center;max-width:100%;margin:5px 0}
+.madar-common-colors__swatch{width:23px;height:23px;min-width:23px;border-radius:7px;border:1px solid #7c8da48c;box-shadow:0 0 0 1px #0000000c;display:inline-grid;place-items:center;padding:0;color:#ffffff}
+.madar-common-colors__swatch:hover,.madar-common-colors__swatch:focus-visible{outline:2px solid #5194d6;outline-offset:1px}
+.madar-common-colors__swatch[aria-pressed="true"]{outline:2px solid #3562b8;outline-offset:2px}
+.madar-common-colors__mark{font-size:11px;font-weight:900;line-height:1;color:inherit;text-shadow:0 1px 2px #111,0 -1px 2px #111}
+.madar-common-colors__details{display:block;min-width:0;max-width:100%;font-size:11px}
+.madar-common-colors__details > summary{cursor:pointer;user-select:none;color:var(--text,#39516c);padding:4px 0}
+.madar-common-colors__details[open] > summary{font-weight:700}
+:root[data-theme="dark"] .madar-common-colors__details > summary{color:#bdd2ed}

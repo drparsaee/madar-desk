@@ -1,5 +1,7 @@
 /* Estedad is bundled by Vite from the OFL Fontsource package, fully offline. */
 @import '@fontsource-variable/estedad/wght.css';
+@import './mini_calendar.css';
+@import './common_color_palette.css';
 @font-face{font-family:Vazirmatn;src:url('/fonts/Vazirmatn.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 :root{--madar-ui-font:"Estedad Variable",Vazirmatn,Tahoma,"Segoe UI",Arial,sans-serif;font-family:var(--madar-ui-font);color:#233149;background:#f7f8fa;font-synthesis:none;font-size:14px;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}

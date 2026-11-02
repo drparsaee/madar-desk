@@ -13,7 +13,6 @@ const parseInteger=(input,{allowNull=false,zero=false,max=1000000000000000}={})=
   if(!Number.isSafeInteger(n)||n>(max)||(!zero&&n<=0))throw Error('مبلغ یا تعداد خارج از محدوده است.');
   return n;
 };
-const rialView=value=>String(BigInt(value||0)*10n);
 
 export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage}){
   const [parties,setParties]=useState([]);
@@ -48,7 +47,9 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
     return()=>{live=false;};
   },[api,canManage,task.saleQuantity,task.saleUnitPrice,task.saleCurrency]);
   if(!canManage)return null;
-  const legacySale=task.saleCurrency!=='RIAL';
+  // A historical Toman amount is never silently reinterpreted as Rials.
+  // Newly empty cards have no historical amount and may start in Rials.
+  const legacySale=task.saleCurrency!=='RIAL'&&Number(task.saleUnitPrice||0)>0;
   return <div className="edit-section"><h3>سفارش فروش / انتقال به حسابداری مستقل</h3>
     <div className="time-inputs">
       <label>نام سفارش‌دهنده (قابل نمایش به کارکنان)
@@ -69,18 +70,14 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
             const v=Number(e.target.value);
             if(Number.isSafeInteger(v)&&v>=1&&v<=1000000)onUpdate({saleQuantity:v});
           }}/></label>
-      <label>قیمت واحد (ریال صحیح)
-        <input inputMode="numeric" dir="ltr" value={legacySale?rialView(task.saleUnitPrice):String(task.saleUnitPrice??0)}
-          disabled={!canEdit} onChange={e=>{
+      <label>{legacySale?'قیمت تاریخی (تومان، فقط خواندنی)':'قیمت واحد (ریال صحیح)'}
+        <input inputMode="numeric" dir="ltr" value={String(task.saleUnitPrice??0)}
+          disabled={!canEdit||legacySale} onChange={e=>{
             try{onUpdate({saleUnitPrice:parseInteger(e.target.value,{zero:true}),saleCurrency:'RIAL'});setNotice('');}
             catch(err){setNotice(err.message);}
           }}/></label>
-      {legacySale&&<button type="button" disabled={!canEdit}
-        onClick={()=>{try{onUpdate({saleCurrency:'RIAL',saleUnitPrice:parseInteger(rialView(task.saleUnitPrice),{zero:true})});setNotice('واحد سفارش با تبدیل دقیق به ریال ذخیره شد.');}
-          catch(err){setNotice('قیمت قدیمی از سقف امن ریالی بزرگ‌تر است؛ تغییر ذخیره نشد.');}}}>
-        تبدیل مبلغ قدیمی تومان به ریال</button>}
     </div>
-    <small>واحد سفارش‌های جدید ریال است. تبدیل سفارش قدیمی تومان به ریال دقیق و با ضریب ۱۰ انجام می‌شود؛ مشخصات تولید وارد حسابداری نمی‌شود.</small>
+    <small>{legacySale?'مبلغ این سفارش تاریخی به تومان محفوظ است و در کارت به ریال تبدیل نمی‌شود.':'واحد سفارش‌های جدید ریال است؛ مشخصات تولید وارد حسابداری نمی‌شود.'}</small>
     {!!quote&&<p role="status">جمع محاسبه‌شده توسط موتور حسابداری: <strong>
       {BigInt(quote.amount).toLocaleString('fa-IR')} {quote.currency==='RIAL'?'ریال':'تومان'}
       </strong> (پیش‌نمایش، هنوز فاکتوری صادر نشده است)</p>}

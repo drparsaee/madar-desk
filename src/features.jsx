@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {Check, Cloud, Download, Layers3, LockKeyhole, Moon, Plus, Settings2, ShieldCheck, Sun, Trash2, Users, Wallet, X, ArrowUp, ArrowDown, RefreshCw, RotateCcw} from 'lucide-react';
 import {Avatar, AvatarIconPicker, RoleBadge, DEFAULT_AVATAR_COLOR} from './members.jsx';
 import {PrioritySettings} from './priorities.jsx';
+import {CommonColorOptions} from './common_color_palette.jsx';
 import {INTERFACE_FEATURE_TIERS, INTERFACE_MODE_OPTIONS} from './interface_mode.js';
 import {deleteSettingsStage} from './stage_delete_safe.js';
 import './settings_density.css';
@@ -534,6 +535,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
       <AvatarIconPicker value={userIcon} onChange={key=>{setUserIcon(key);setUserPhoto('');}}/>
       <label className="member-color-field">رنگ آواتار
         <input aria-label="رنگ آواتار کاربر" type="color" value={userColor} onChange={e=>setUserColor(e.target.value)}/></label>
+      <CommonColorOptions value={userColor} onChange={setUserColor} label="آواتار کاربر"/>
     </div>
     </details>
     <div className="lan-actions lan-density__actions"><button type="button" className="btn primary"

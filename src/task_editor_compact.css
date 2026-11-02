@@ -20,9 +20,9 @@
   line-height:1.45;
 }
 .drawer .task-quick-actions{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  align-items:stretch;
   gap:6px;
   position:sticky;
   top:-14px;
@@ -33,7 +33,9 @@
   background:var(--surface,#fff);
 }
 .drawer .task-quick-actions button{
-  min-height:34px;
+  min-height:36px;
+  min-width:0;
+  width:100%;
   display:inline-flex;
   align-items:center;
   gap:6px;
@@ -44,6 +46,8 @@
   background:var(--surface-soft,#f6f8fc);
   color:var(--text,#344b69);
   white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
   font-size:11px;
   font-weight:680;
   transition:background .15s, border-color .15s;
@@ -82,10 +86,13 @@
   font-variant-numeric:tabular-nums;
 }
 .drawer .edit-grid{
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:9px 12px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:7px 8px;
   margin-top:2px;
 }
+.drawer .edit-grid > label,.drawer .edit-grid > .calendar-field{min-width:0}
+.drawer .edit-grid .calendar-field__input-wrap{gap:3px}
+.drawer .edit-grid .calendar-field__open{width:30px;min-width:30px;min-height:32px}
 .drawer .edit-grid label,
 .drawer .time-inputs label{
   gap:4px;
@@ -95,9 +102,23 @@
 .drawer .edit-grid input,
 .drawer .time-inputs input,
 .drawer .calendar-field input{
-  min-height:36px;
-  padding:7px 9px;
+  min-height:33px;
+  padding:5px 7px;
+  font-size:11px;
 }
+.drawer .task-shared-disclosure{scroll-margin-top:80px}
+.drawer .task-shared-disclosure > summary{display:flex;align-items:center;gap:7px}
+.drawer .task-shared-disclosure > summary::marker{content:''}
+.drawer .task-shared-disclosure > summary::-webkit-details-marker{display:none}
+.drawer .task-shared-disclosure > summary::after{content:'⌄';margin-inline-start:auto;font-size:17px;line-height:1;transition:transform .15s}
+.drawer .task-shared-disclosure[open] > summary::after{transform:rotate(180deg)}
+.drawer .task-shared-disclosure > .edit-section{border-top:0}
+.drawer .task-shared-disclosure > .edit-section > h3{display:none}
+.drawer .task-shared-disclosure .task-section-heading > h3{display:none}
+.drawer .task-shared-disclosure > section.edit-section{margin:0;border:0}
+.drawer .task-shared-disclosure > section.edit-section h3{display:none}
+.drawer .task-archive-link{color:#3e77a2!important}
+.drawer .drawer-danger{display:grid;gap:8px}
 .drawer .task-created-date{
   display:inline-flex;
   margin:9px 10px 0 0;
@@ -275,15 +296,16 @@
 :root[data-theme="dark"] .drawer .task-direct-cost-fields :is(input,.money-input){background:#152236;color:#e0ecfb;border-color:#39506b}
 @media(max-width:720px){
   .drawer{width:min(100%,620px)}
-  .drawer .edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .drawer .edit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .drawer .task-quick-actions{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 @media(max-width:480px){
   .drawer{width:100%}
   .drawer .drawer-top{padding:7px 13px;min-height:43px}
   .drawer .drawer-scroll{padding:12px 13px 19px}
   .drawer .task-edit-title{font-size:19px}
-  .drawer .task-quick-actions{top:-12px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin-inline:-4px;padding-inline:4px;scroll-snap-type:x proximity}
-  .drawer .task-quick-actions button{flex:none;scroll-snap-align:start}
+  .drawer .task-quick-actions{top:-12px;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible;margin-inline:-4px;padding-inline:4px}
+  .drawer .task-quick-actions button{white-space:normal;line-height:1.2}
   .drawer .edit-grid{gap:7px}
   .drawer .edit-grid :is(input,select){font-size:12px}
   .drawer .assignee-picker{grid-template-columns:1fr}
@@ -295,7 +317,8 @@
   .drawer .task-compact-step .step-cost-fields .calendar-field{grid-column:1/-1}
 }
 @media(max-width:359px){
-  .drawer .edit-grid{grid-template-columns:minmax(0,1fr)}
+  .drawer .edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .drawer .task-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
   .drawer .step-check{min-width:34px;min-height:34px}
 }
 @media(prefers-reduced-motion:reduce){

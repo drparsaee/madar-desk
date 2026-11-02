@@ -8,7 +8,7 @@ import {
   LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
   MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Tag,
   Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
-  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon
+  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon, Palette
 } from 'lucide-react';
 import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
@@ -28,6 +28,8 @@ import {AccountingWorkspace} from './accounting_workspace.jsx';
 import {RialJournalPanel} from './rial_journal_panel.jsx';
 import {filterTasks} from './searchplus.js';
 import {SearchPlus} from './searchplus.jsx';
+import {searchTaskLocations} from './task_search_results.js';
+import {SearchResultsPanel} from './task_search_results.jsx';
 import {LabelEditor} from './labels.jsx';
 import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
@@ -46,6 +48,7 @@ import {archiveCardState,restoreArchivedCardState} from './cardarchive.js';
 import {CardContextMenu} from './card_context_menu.jsx';
 import {themeScope,readTheme,writeTheme} from './theme_preference.js';
 import {hostBackupHealth} from './host_backup_health.js';
+import {readCardSectionPreferences,saveCardSectionPreferences,CARD_SECTIONS} from './card_section_preferences.js';
 import {syncHealth} from './sync_health.js';
 import {createBoardPerformanceIndex} from './board_performance.js';
 import {PortableExportPanel} from './portable_export_panel.jsx';
@@ -171,9 +174,10 @@ function TaskCard({task,project,users,onOpen,onContextRequest,onDrag,onToggleSte
   const report=task.reports[task.reports.length-1];
   const priority=priorityById(priorities,task.priority);
   return <div role="button" tabIndex={0} className={'task-card priority-effect-'+priority.effect+(task.completed===true?' task-card--completed':'')} style={{'--priority-color':priority.color}} draggable={canEdit} onContextMenu={e=>{e.preventDefault();e.stopPropagation();onContextRequest?.(task,e);}} onDragStart={e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.setData('application/x-madar-card',task.id);e.dataTransfer.effectAllowed='move';onDrag?.(task.id);}} onDragOver={e=>{if(canEdit&&onCardDrop&&Array.from(e.dataTransfer.types||[]).includes('application/x-madar-card')){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{if(!canEdit||!onCardDrop)return;const id=e.dataTransfer.getData('application/x-madar-card');if(!id)return;e.preventDefault();e.stopPropagation();const bounds=e.currentTarget.getBoundingClientRect();onCardDrop(id,task.id,e.clientY<bounds.top+bounds.height/2?'before':'after');}} onClick={()=>onOpen(task.id)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();onContextRequest?.(task,{clientX:rect.left+20,clientY:rect.top+20});}else if(canEdit&&onKeyboardReorder&&e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();onKeyboardReorder(task.id,e.key==='ArrowUp'?-1:1);}else if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(task.id);}}} aria-keyshortcuts={onKeyboardReorder?'Alt+ArrowUp Alt+ArrowDown Shift+F10':'Shift+F10'} aria-label={'جزئیات '+task.title}>
-    {task.cover?.type==='color'&&/^#[0-9a-f]{6}$/i.test(task.cover.color)&&<div className={'task-card-cover task-card-cover-'+(task.cover.size==='full'?'full':'strip')} style={{backgroundColor:task.cover.color}}/>}
     <div className="task-card-top"><span className="project-tiny"><i style={{background:project?.color||'#7790aa'}}></i>{project?.name||'پروژه'}</span><button type="button" disabled={!canEdit} className="task-complete-toggle" aria-label={(task.completed===true?'برگرداندن از تکمیل ':'تکمیل کارت ')+task.title} title={task.completed===true?'برگرداندن از تکمیل':'تکمیل کارت'} aria-pressed={task.completed===true} onClick={e=>{e.preventDefault();e.stopPropagation();onToggleComplete?.(task.id);}} onKeyDown={e=>e.stopPropagation()}><Check size={15}/></button></div>
     <div className="task-title">{task.title}</div>
+    {task.cover?.type==='color'&&/^#[0-9a-f]{6}$/i.test(task.cover.color)&&
+      <div className="task-card-cover task-card-cover-strip" role="img" aria-label="کاور نواری کارت" style={{backgroundColor:task.cover.color}}/>}
     {task.description&&<div className="task-description">{task.description}</div>}
     {!!task.labels?.length&&<div className="tags">{task.labels.map((l,i)=><LabelChip key={i} label={task.labelColors?.[l]?{name:l,color:task.labelColors[l]}:l}/>)}</div>}
     {task.checklist.length>0&&<div className="progress-block"><div className="progress-caption"><span><ListChecks size={13}/> {done} از {task.checklist.length} مرحله</span><b>{percent}٪</b></div><div className="progress-track"><i style={{width:percent+'%'}}/></div></div>}
@@ -219,7 +223,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
   const [customFieldsOpen,setCustomFieldsOpen]=useState(()=>Boolean(boards.find(board=>board.id===task.boardId)?.customFields?.length));
   const [automationButtonsOpen,setAutomationButtonsOpen]=useState(false);
@@ -262,6 +266,17 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   const [summary,setSummary]=useState('');
   const [reportComposerOpen,setReportComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [confirmArchive,setConfirmArchive]=useState(false);
+  const [sectionOpen,setSectionOpen]=useState(()=>readCardSectionPreferences(localStorage,username));
+  useEffect(()=>setSectionOpen(readCardSectionPreferences(localStorage,username)),[username]);
+  const onSectionToggle=(section,event)=>{
+    if(event.target!==event.currentTarget)return;
+    const open=event.currentTarget.open;
+    setSectionOpen(previous=>{
+      if(previous[section]===open)return previous;
+      return saveCardSectionPreferences(localStorage,username,{...previous,[section]:open});
+    });
+  };
   const update=changes=>{if(canEdit)onUpdate(task.id,changes);};
   const addStep=()=>{if(!newStep.trim())return;update({checklist:[...task.checklist,{id:uid(),text:newStep.trim(),done:false}]});setNewStep('');};
   const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');setReportComposerOpen(false);};
@@ -270,23 +285,33 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   const taskBoard=boards.find(b=>b.id===task.boardId);
   const suggestedTasks=useMemo(()=>similarTasks(task.title,allTasks,task.id),[task.title,task.id,allTasks]);
   const jumpToSection=section=>{
+    if(CARD_SECTIONS.includes(section))setSectionOpen(previous=>{
+      if(previous[section])return previous;
+      return saveCardSectionPreferences(localStorage,username,{...previous,[section]:true});
+    });
     const target=document.getElementById('task-section-'+section);
     if(!target)return;
-    target.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'instant':'smooth',block:'start'});
-    target.focus({preventScroll:true});
+    // A disclosure opened by the toolbar becomes scrollable after the render.
+    requestAnimationFrame(()=>{
+      target.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'instant':'smooth',block:'start'});
+      target.focus({preventScroll:true});
+    });
   };
   return <div className="drawer-overlay" onMouseDown={onClose}><aside ref={drawerRef} tabIndex={-1} className="drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
     <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div>
     <div className="drawer-scroll">
       <input className="task-edit-title" aria-label="عنوان کار" value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
       <nav className="task-quick-actions" aria-label="دسترسی سریع به بخش‌های کارت">
-        <button type="button" onClick={()=>jumpToSection('description')} aria-controls="task-section-description"><FileText size={15}/> توضیحات</button>
-        <button type="button" onClick={()=>jumpToSection('checklist')} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
+        <button type="button" onClick={()=>jumpToSection('metadata')} aria-controls="task-section-metadata"><CalendarDays size={15}/> مشخصات</button>
         <button type="button" onClick={()=>jumpToSection('assignees')} aria-controls="task-section-assignees"><Users size={15}/> مسئولان</button>
-        <button type="button" onClick={()=>jumpToSection('metadata')} aria-controls="task-section-metadata"><CalendarDays size={15}/> موعد</button>
+        {showOperations&&<button type="button" onClick={()=>jumpToSection('time')} aria-controls="task-section-time"><Clock3 size={15}/> زمان</button>}
+        {showOperations&&<button type="button" onClick={()=>jumpToSection('dependencies')} aria-controls="task-section-dependencies"><ShieldCheck size={15}/> پیش‌نیازها</button>}
+        <button type="button" onClick={()=>jumpToSection('description')} aria-controls="task-section-description"><FileText size={15}/> توضیحات</button>
+        <button type="button" onClick={()=>jumpToSection('cover')} aria-controls="task-section-cover"><Palette size={15}/> کاور</button>
         <button type="button" onClick={()=>jumpToSection('tags')} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
-        <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
+        <button type="button" onClick={()=>jumpToSection('checklist')} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
         <button type="button" onClick={()=>{setReportComposerOpen(true);jumpToSection('reports');}} aria-controls="task-section-reports"><MessageCircle size={15}/> گزارش</button>
+        <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
         <AutomationButtonsLauncher scope="card" onClick={()=>setAutomationButtonsOpen(open=>!open)} disabled={!task.boardId}/>
       </nav>
       {task.boardId&&typeof api?.automationButtonsList==='function'&&
@@ -306,18 +331,31 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           </select></label>}
         <label>مرحله<select disabled={!canEdit} value={task.listId||task.status} onChange={e=>update({listId:e.target.value})}>{stages.map(s=><option key={s.id} value={s.id} disabled={s.archived===true&&s.id!==(task.listId||task.status)}>{s.label}{s.archived===true?' (بایگانی‌شده)':''}</option>)}</select></label>
         <label>اولویت<select disabled={!canEdit} value={task.priority} onChange={e=>update({priority:e.target.value})}>{priorities.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
-        <CalendarField value={task.dueDate||''} calendar={calendar} disabled={!canEdit} label="موعد انجام" onChange={dueDate=>update({dueDate})}/>
+        <CalendarField value={task.dueDate||''} calendar={calendar} disabled={!canEdit} label="موعد انجام"
+          popupOnClick onChange={dueDate=>update({dueDate})}/>
       </div>
       <div className="task-created-date"><CalendarDays size={15}/> تاریخ ثبت: {displayDate(task.createdAt,calendar,true)}</div>
       {!!task.orderCustomerName&&<div className="task-created-date">سفارش‌دهنده: {task.orderCustomerName}</div>}
       <OrderSaleFields task={task} api={api} onUpdate={update}
         onPrepare={onOpenSale} canEdit={canEdit} canManage={canManage}/>
-      <div className="edit-section" id="task-section-assignees" tabIndex={-1}><h3><Users size={17}/> مسئولان کار</h3><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>
+      <details className="task-optional-block task-shared-disclosure" id="task-section-assignees" tabIndex={-1}
+        open={sectionOpen.assignees} onToggle={event=>onSectionToggle('assignees',event)}>
+        <summary><Users size={16}/> مسئولان کار <small>{(task.assignees||[]).length.toLocaleString('fa-IR')} نفر</small></summary>
+        <div className="edit-section"><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>
+      </details>
       {canManage&&showCosts&&<div className="edit-section"><h3>تنظیمات هزینه همین کارت</h3><label className="setting-toggle"><input type="checkbox" disabled={!canEdit} checked={priceEnabled} onChange={e=>update({costEnabled:e.target.checked})}/><span><strong>فعال‌کردن فیلد هزینه</strong><small>فقط همین کارت؛ تنظیم کلی پروژه را تغییر نمی‌دهد.</small></span></label>{task.costEnabled!==null&&task.costEnabled!==undefined&&canEdit&&<button className="subtle-action" onClick={()=>update({costEnabled:null})}>بازگشت به تنظیم پیش‌فرض پروژه</button>}</div>}
-      {showOperations&&<div className="edit-section"><h3><Clock3 size={17}/> مدیریت زمان</h3><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>}
-      {showOperations&&<CardDependencyPanel task={task} allTasks={allTasks} canEdit={canEdit} onChange={dependencies=>update({dependencies})}/>}
+      {showOperations&&<details className="task-optional-block task-shared-disclosure" id="task-section-time" tabIndex={-1}
+        open={sectionOpen.time} onToggle={event=>onSectionToggle('time',event)}>
+        <summary><Clock3 size={16}/> مدیریت زمان</summary>
+        <div className="edit-section"><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>
+      </details>}
+      {showOperations&&<details className="task-optional-block task-shared-disclosure" id="task-section-dependencies" tabIndex={-1}
+        open={sectionOpen.dependencies} onToggle={event=>onSectionToggle('dependencies',event)}>
+        <summary><ShieldCheck size={16}/> پیش‌نیازها و موانع انجام <small>{(task.dependencies||[]).length.toLocaleString('fa-IR')} مورد</small></summary>
+        <CardDependencyPanel task={task} allTasks={allTasks} canEdit={canEdit} onChange={dependencies=>update({dependencies})}/>
+      </details>}
       <div className="edit-section" id="task-section-description" tabIndex={-1}><h3><FileText size={17}/> توضیحات و جهت متن</h3><RichDescription disabled={!canEdit} value={task.description||''} direction={task.textDirection||'auto'} onChange={description=>update({description})} onDirection={textDirection=>update({textDirection})}/></div>
-      <details className="task-optional-block" defaultOpen={Boolean(task.cover)}>
+      <details className="task-optional-block" id="task-section-cover" tabIndex={-1} defaultOpen={Boolean(task.cover)}>
         <summary><span>کاور کارت</span>{task.cover&&<small>فعال</small>}</summary>
         <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
       </details>
@@ -363,13 +401,17 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <summary>چک‌لیست‌های بیشتر</summary>
         <div className="edit-section"><CardChecklists task={task} hideLegacy disabled={!canEdit} onChange={update}/></div>
       </details>
-      <div className="edit-section" id="task-section-reports" tabIndex={-1}>
+      <details className="task-optional-block task-shared-disclosure" id="task-section-reports" tabIndex={-1}
+        open={sectionOpen.reports} onToggle={event=>onSectionToggle('reports',event)}>
+        <summary><MessageCircle size={16}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')} گزارش</small></summary>
+        <div className="edit-section">
         <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت</h3>
           {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
         </div>
         <div className="report-list">{task.reports.length?task.reports.slice().reverse().map(r=><div className="report-entry" key={r.id}><div className="report-entry-top"><span className="agent-avatar"><Zap size={12}/></span><strong>{r.agent}</strong><small>{shortDate(r.createdAt)}</small></div><p>{r.summary}</p></div>):<div className="empty-reports">هنوز گزارشی ثبت نشده است.</div>}</div>
         {canEdit&&reportComposerOpen&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام ایجنت یا مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="یک خط درباره آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
-      </div>
+        </div>
+      </details>
       {showOperations&&<div className="edit-section"><CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/></div>}
       <details className="task-optional-block" defaultOpen={!!task.fileLinks?.length}>
         <summary><span>لینک فایل‌های اشتراکی</span>{!!task.fileLinks?.length&&<small>{task.fileLinks.length} لینک</small>}</summary>
@@ -377,7 +419,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       </details>
       <div className="edit-section" id="task-section-attachments" tabIndex={-1}><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
       {!!suggestedTasks.length&&<div className="edit-section"><h3><Copy size={17}/> پیشنهاد کارهای مشابه</h3>{suggestedTasks.map(({task:t,score})=><div className="similar-row" key={t.id}><span>{t.title}<small>{Math.round(score*100)}٪ شباهت</small></span><button disabled={!canEdit} onClick={()=>onDuplicate(t)}>ساخت مشابه</button></div>)}</div>}
-      {canEdit&&<div className="drawer-danger">{confirmDelete?<div className="delete-confirm"><span>کارت به زباله‌دان منتقل شود؟ تمام هزینه‌ها، فایل‌ها و گزارش‌ها حفظ می‌شوند.</span><button onClick={onDelete}>انتقال به زباله‌دان</button><button onClick={()=>setConfirmDelete(false)}>انصراف</button></div>:<button className="danger-link" onClick={()=>setConfirmDelete(true)}><Trash2 size={16}/> انتقال به زباله‌دان</button>}</div>}
+      {canEdit&&<div className="drawer-danger">
+        {confirmArchive?<div className="delete-confirm"><span>کارت بایگانی شود؟ اطلاعات و فایل‌ها محفوظ می‌مانند و بعداً قابل بازیابی هستند.</span>
+          <button onClick={onArchive}>انتقال به آرشیو</button><button onClick={()=>setConfirmArchive(false)}>انصراف</button></div>
+          :<button className="danger-link task-archive-link" onClick={()=>{setConfirmArchive(true);setConfirmDelete(false);}}><Archive size={16}/> انتقال به آرشیو</button>}
+        {confirmDelete?<div className="delete-confirm"><span>کارت به زباله‌دان منتقل شود؟ تمام هزینه‌ها، فایل‌ها و گزارش‌ها حفظ می‌شوند.</span><button onClick={onDelete}>انتقال به زباله‌دان</button><button onClick={()=>setConfirmDelete(false)}>انصراف</button></div>:<button className="danger-link" onClick={()=>{setConfirmDelete(true);setConfirmArchive(false);}}><Trash2 size={16}/> انتقال به زباله‌دان</button>}
+      </div>}
     </div>
   </aside></div>;
 }
@@ -868,6 +915,22 @@ export default function App(){
     const found=search.trim()?new Set(filterTasks(candidates,{query:search,projects,users,stages:viewStages}).map(t=>t.id)):null;
     return candidates.filter(t=>(!found||found.has(t.id))&&matchAdvanced(t,advanced,activeBoard?.id));
   },[boardIndex,activeWorkspaceId,projects,users,viewStages,selected,activeBoard?.id,search,filter,advanced]);
+  // Never infer a search grant from a task. Intersect the host's authenticated
+  // profile grants with the already redacted project snapshot.
+  const permittedSearchProjects=useMemo(()=>{
+    const grants=lanStatus.user?.projects;
+    if(lanStatus.mode==='solo'||lanStatus.user?.role==='admin'||grants===null)
+      return projects.map(project=>project.id);
+    if(!Array.isArray(grants))return [];
+    const allow=new Set(grants);
+    return projects.filter(project=>allow.has(project.id)).map(project=>project.id);
+  },[lanStatus.mode,lanStatus.user?.role,lanStatus.user?.projects,projects]);
+  const globalSearch=useMemo(()=>{
+    if(!data||!search.trim())return {results:[],error:null};
+    try{return {results:searchTaskLocations(data,{query:search,
+      permittedProjectIds:permittedSearchProjects,users}),error:null};}
+    catch(error){return {results:[],error:'جست‌وجوی ایمن انجام نشد: '+error.message};}
+  },[data,search,permittedSearchProjects,users]);
   const boardGroups=useMemo(()=>boardIndex?boardIndex.groupActiveCards({
     workspaceId:activeWorkspaceId||'workspace-legacy',
     projectId:selected==='all'?undefined:selected,
@@ -906,6 +969,21 @@ export default function App(){
     if(destination){setSelected(destination.projectId);setBoardId(destination.id);}
     else if(selected==='all'&&visibleProjects[0])setSelected(visibleProjects[0].id);
     setMode('board');setFilter('all');
+  };
+  const navigateSearchLocation=result=>{
+    const board=boards.find(item=>item.id===result.boardId);
+    const space=workspaces.find(item=>item.id===board?.workspaceId);
+    if(!board||board.archived||space?.archived){
+      setToast('محل این کارت بایگانی شده است. ابتدا برد یا فضای کاری را بازیابی کنید.');
+      return;
+    }
+    setWorkspaceId(board.workspaceId);
+    setSelected(board.projectId);
+    setBoardId(board.id);
+    setMode('board');
+    setFilter('all');
+    setAdvanced(a=>({...a,status:'all'}));
+    setSearch('');
   };
   const reorderCard=(cardId,toListId,anchorCardId=null,placement='end')=>{
     if(!canEdit||!activeBoard)return;
@@ -1514,7 +1592,7 @@ export default function App(){
         <button className="mobile-nav-toggle" type="button" aria-controls="madar-sidebar"
           aria-expanded={mobileNavOpen} aria-label="بازکردن فهرست پیمایش"
           onClick={()=>setMobileNavOpen(true)}><Menu size={20}/></button>
-        <SearchPlus query={search} onQueryChange={setSearch} resultCount={filtered.length}
+        <SearchPlus query={search} onQueryChange={setSearch} resultCount={search.trim()?globalSearch.results.length:filtered.length}
           totalCount={tasks.length}
           placeholder="جست‌وجوی کامل در عنوان، توضیحات، برچسب و اعضا..."/>
         <div className="breadcrumb"><span>فضای کار من</span><ChevronLeft size={16}/>
@@ -1524,6 +1602,13 @@ export default function App(){
       <div className="vitrea-header-clock"><ClockWidget calendar={calendar}/></div>
       </div>
       <div className="workspace-scroll">
+        {search.trim()&&<>{globalSearch.error&&<p role="alert" className="warning">{globalSearch.error}</p>}
+          <SearchResultsPanel query={search} results={globalSearch.results} canEdit={canEdit}
+            onOpenTask={(id)=>{setSearch('');setEditorId(id);}}
+            onRestoreArchived={(id)=>restoreArchivedTask(id)}
+            onRestoreTrashed={(id)=>restoreTrashedCard(id)}
+            onGoToLocation={navigateSearchLocation} onClose={()=>setSearch('')}/>
+        </>}
 
         <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
@@ -1691,7 +1776,7 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>setEditorId(null)} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
 
     {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}

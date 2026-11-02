@@ -2,6 +2,9 @@
 .priority-definition-list{display:grid;gap:9px}
 .priority-definition{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.2fr) 64px minmax(145px,1fr) auto;align-items:end;gap:10px;padding:12px;border:1px solid var(--priority-row-border);border-radius:11px;background:var(--priority-row-bg)}
 .priority-definition label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--priority-label-ink)}
+.priority-definition .priority-color-cell{min-width:0}
+.priority-definition .priority-color-cell .madar-common-colors__details{position:relative}
+.priority-definition .priority-color-cell .madar-common-colors{width:210px;max-width:calc(100vw - 70px);padding:7px;border:1px solid var(--priority-row-border);border-radius:9px;background:var(--priority-row-bg);box-shadow:0 5px 14px #00000014}
 .priority-definition input:not([type=color]),.priority-definition select,.priority-new input{min-width:0;width:100%;border:1px solid var(--priority-field-border);color:var(--priority-field-text);background:var(--priority-field-bg);border-radius:8px;padding:8px;font:inherit}
 .priority-definition select option{background:var(--priority-field-bg);color:var(--priority-field-text)}
 .priority-definition input[type=color]{width:100%;height:36px;border-radius:8px;border:1px solid var(--priority-picker-border);padding:2px;background:transparent;cursor:pointer}
@@ -28,8 +31,9 @@
 @keyframes priority-shimmer{50%{box-shadow:0 0 13px var(--priority-color)}}
 @keyframes priority-pulse{50%{opacity:.56;transform:scale(.98)}}
 .task-card{position:relative}
-.task-card-cover{width:calc(100% + 28px);height:12px;margin:-14px -14px 12px;border-radius:11px 11px 0 0;pointer-events:none}
-.task-card-cover-full{height:54px}
+.task-card-cover{width:100%;height:8px;margin:8px 0 5px;border-radius:6px;pointer-events:none}
+/* Older saved full-sized covers are also shown as a small strip below title. */
+.task-card-cover-full{height:8px}
 .task-card.priority-effect-neon{border:2px solid transparent;background:linear-gradient(var(--surface,#fff),var(--surface,#fff)) padding-box,conic-gradient(from var(--glow-angle,0deg),transparent,var(--priority-color),transparent,var(--priority-color),transparent) border-box;animation:priority-turn 2.4s linear infinite;box-shadow:0 0 10px color-mix(in srgb,var(--priority-color) 38%,transparent)}
 .task-card.priority-effect-shimmer{border-color:var(--priority-color);animation:priority-shimmer 2.5s ease-in-out infinite}
 .task-card.priority-effect-pulse{animation:priority-pulse 1.75s ease-in-out infinite}

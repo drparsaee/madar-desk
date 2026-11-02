@@ -1,6 +1,7 @@
 import React,{useState} from 'react';
 import {Flag,Plus,Trash2} from 'lucide-react';
 import {DEFAULT_PRIORITIES,PRIORITY_EFFECTS,priorityDefs} from './priorities.js';
+import {CommonColorOptions} from './common_color_palette.jsx';
 import './priorities.css';
 
 export function PrioritySettings({settings,usedIds=[],onChange,canManage=true}){
@@ -30,7 +31,10 @@ export function PrioritySettings({settings,usedIds=[],onChange,canManage=true}){
       {definitions.map(p=><div key={p.id} className="priority-definition" style={{'--priority-color':p.color}}>
         <div className={'priority-demo priority-effect-'+p.effect}><Flag size={16}/><span>{p.label}</span></div>
         <label>نام<input aria-label={'نام اولویت '+p.label} maxLength={60} disabled={!canManage} value={draftNames[p.id]??p.label} onChange={e=>setDraftNames(current=>({...current,[p.id]:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.currentTarget.blur();}}} onBlur={e=>{const label=e.target.value.trim();if(label&&label!==p.label)update(p.id,{label});setDraftNames(current=>{const next={...current};delete next[p.id];return next;});}}/></label>
-        <label>رنگ<input type="color" aria-label={'رنگ اولویت '+p.label} disabled={!canManage} value={p.color} onChange={e=>update(p.id,{color:e.target.value})}/></label>
+        <div className="priority-color-cell">
+          <label>رنگ<input type="color" aria-label={'رنگ اولویت '+p.label} disabled={!canManage} value={p.color} onChange={e=>update(p.id,{color:e.target.value})}/></label>
+          <CommonColorOptions value={p.color} disabled={!canManage} label={'اولویت '+p.label} onChange={color=>update(p.id,{color})}/>
+        </div>
         <label>موشن<select aria-label={'جلوه اولویت '+p.label} disabled={!canManage} value={p.effect} onChange={e=>update(p.id,{effect:e.target.value})}>{PRIORITY_EFFECTS.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         {!DEFAULT_PRIORITIES.some(item=>item.id===p.id)&&<button type="button" disabled={!canManage} aria-label={'حذف اولویت '+p.label} onClick={()=>remove(p.id)}><Trash2 size={16}/></button>}
       </div>)}

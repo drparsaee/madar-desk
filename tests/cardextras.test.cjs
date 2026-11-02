@@ -173,7 +173,10 @@ test('SSR components expose expected controls and escape hostile text',()=>{
   assert.match(hidden,/چک‌لیست جدید/);
   const cover=renderToStaticMarkup(React.createElement(CardCover,{task,onChange:()=>{}}));
   assert.match(cover,/background-color:#ABCDEF/i);
-  assert.match(cover,/cardextras-cover-full/);
+  // Historical "full" cover persists in stored data, but is now deliberately
+  // visualized as a narrow strip to keep the task title unobstructed.
+  assert.match(cover,/cardextras-cover-strip/);
+  assert.doesNotMatch(cover,/cardextras-cover-full/);
   const custom=renderToStaticMarkup(React.createElement(CardCustomFields,{task,board,calendar:'jalali',onChange:()=>{}}));
   assert.match(custom,/&lt;script&gt;evil\(\)&lt;\/script&gt;/);
   assert(!custom.includes('<script>'));

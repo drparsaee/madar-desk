@@ -1,5 +1,6 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {CalendarDays, Clock3, Copy, ExternalLink, FileText, FolderOpen, Link2, Plus, Search, Trash2, X, BarChart3} from 'lucide-react';
+import {MiniCalendar} from './mini_calendar.jsx';
 
 export const durationText=v=>{
  const minutes=Number(v)||0;
@@ -35,10 +36,18 @@ export function fromJalali(input){
  }
  return null;
 }
-export function CalendarField({value,onChange,calendar='jalali',disabled=false,label='تاریخ'}){
+export function CalendarField({value,onChange,calendar='jalali',disabled=false,label='تاریخ',popupOnClick=false}){
  const [text,setText]=useState('');
  const [error,setError]=useState(false);
+ const [pickerOpen,setPickerOpen]=useState(false);
+ const container=useRef(null);
  useEffect(()=>{setText(value?calendar==='jalali'?jalaliDigits(new Date(value+'T12:00:00Z')):value.replace(/-/g,'/'):'');setError(false);},[value,calendar]);
+ useEffect(()=>{
+   if(!pickerOpen)return;
+   const outside=event=>{if(!container.current?.contains(event.target))setPickerOpen(false);};
+   document.addEventListener('pointerdown',outside,true);
+   return()=>document.removeEventListener('pointerdown',outside,true);
+ },[pickerOpen]);
  const save=()=>{
    if(!text.trim()){onChange('');setError(false);return;}
    const iso=calendar==='jalali'?fromJalali(text):(/^(\d{4})[/-](\d\d?)[/-](\d\d?)$/.test(toLatin(text))?(()=>{
@@ -50,9 +59,19 @@ export function CalendarField({value,onChange,calendar='jalali',disabled=false,l
    })():null);
    if(iso){onChange(iso);setError(false);}else setError(true);
  };
- return <div className="calendar-field"><label>{label} <small>{calendar==='jalali'?'شمسی':'میلادی'}</small></label>
+ return <div ref={container} className="calendar-field" onKeyDown={event=>{
+   if(event.key==='Escape'&&pickerOpen){event.preventDefault();event.stopPropagation();setPickerOpen(false);}
+ }}><label>{label} <small>{calendar==='jalali'?'شمسی':'میلادی'}</small></label>
+ <div className="calendar-field__input-wrap">
  <input dir="ltr" disabled={disabled} aria-label={label} placeholder={calendar==='jalali'?'1405/07/28':'2026/10/20'}
- value={text} onChange={e=>{setText(e.target.value);setError(false);}} onKeyDown={e=>e.key==='Enter'&&save()} onBlur={save}/>
+ value={text} onClick={()=>{if(!disabled&&popupOnClick)setPickerOpen(true);}}
+ onChange={e=>{setText(e.target.value);setError(false);}} onKeyDown={e=>e.key==='Enter'&&save()} onBlur={save}/>
+ <button type="button" className="calendar-field__open" disabled={disabled}
+   title={'بازکردن تقویم '+label} aria-label={'انتخاب تاریخ '+label} aria-expanded={pickerOpen}
+   onClick={()=>setPickerOpen(open=>!open)}><CalendarDays size={16}/></button>
+ </div>
+ {pickerOpen&&!disabled&&<MiniCalendar value={value} calendar={calendar} onSelect={date=>{onChange(date);setError(false);}}
+   onClose={()=>setPickerOpen(false)}/>}
  {error&&<small className="field-error">تاریخ معتبر نیست؛ مانند {calendar==='jalali'?'1405/07/28':'2026/10/20'} وارد کنید.</small>}
  </div>;
 }

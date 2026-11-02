@@ -3,6 +3,7 @@ import {Check,Camera,Code2,UserRound,Palette,Wrench,BriefcaseBusiness,ChartNoAxe
  Sparkles,Folder,Star,Rocket,ClipboardCheck,LockKeyhole,Save,X,Calculator,
  Building2,Headset,Factory,ClipboardList,Handshake,ShieldCheck,Megaphone} from 'lucide-react';
 import './members.css';
+import {CommonColorOptions} from './common_color_palette.jsx';
 
 export const AVATARS={
  user:[UserRound,'کاربر'],briefcase:[BriefcaseBusiness,'کسب‌وکار'],code:[Code2,'توسعه‌دهنده'],
@@ -103,6 +104,7 @@ export function ProfilePanel({user,api,onClose,onUpdated}){
      <label className="member-field">نام نمایشی<input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
      <h3>حوزه فعالیت یا نماد دلخواه</h3><AvatarIconPicker value={icon} onChange={value=>{setIcon(value);setPhoto('');}}/>
      <label className="member-color-field">رنگ آواتار<input type="color" value={color} aria-label="رنگ آواتار من" onChange={e=>setColor(e.target.value)}/></label>
+     <CommonColorOptions value={color} onChange={setColor} label="آواتار من"/>
      <div className="profile-photo-actions"><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={upload}/><button className="btn secondary" onClick={()=>fileRef.current?.click()}><Camera size={16}/> بارگذاری تصویر شخصی</button>{photo&&<button className="btn secondary" onClick={()=>setPhoto('')}>حذف عکس</button>}</div>
      <button className="btn primary" disabled={busy} onClick={()=>run(async()=>{const updated=await api.lanMyProfile({displayName:name,avatarIcon:icon,avatarPhoto:photo,avatarColor:color});onUpdated?.(updated);setNotice('پروفایل ذخیره شد.');})}><Save size={16}/> ذخیره پروفایل</button>
      {user?.username!=='local'&&<div className="member-password"><h3><LockKeyhole size={17}/> تغییر رمز ورود</h3><label className="member-field">رمز فعلی<input type="password" autoComplete="current-password" value={oldPass} onChange={e=>setOldPass(e.target.value)}/></label><label className="member-field">رمز جدید (حداقل ۱۰ نویسه)<input type="password" autoComplete="new-password" value={newPass} onChange={e=>setNewPass(e.target.value)}/></label><button className="btn secondary" disabled={busy||newPass.length<10||!oldPass} onClick={()=>run(async()=>{await api.lanChangePassword(oldPass,newPass);setOldPass('');setNewPass('');setNotice('رمز تغییر کرد و نشست‌های قدیمی لغو شدند.');})}>تغییر رمز</button></div>}

@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Plus, X} from 'lucide-react';
 import {LabelChip, labelColor} from './boardplus.jsx';
+import {CommonColorOptions} from './common_color_palette.jsx';
 import './labels.css';
 
 const HEX_COLOR = /^#[\da-f]{6}$/i;
@@ -138,6 +139,8 @@ export function LabelEditor({labels = [], colors = {}, onChange, disabled = fals
         value={normalized.labelColors[name]} onChange={event => apply({action: 'color', index, color: event.target.value})}/>
       <button type="button" className="label-editor-remove" disabled={disabled} aria-label={`حذف برچسب ${name}`}
         title="حذف برچسب" onClick={() => apply({action: 'remove', index})}><X size={15}/></button>
+      <CommonColorOptions disabled={disabled} label={'برچسب '+name} value={normalized.labelColors[name]}
+        onChange={color=>apply({action:'color',index,color})}/>
     </div>)}
     {!disabled && <div className="label-editor-row label-editor-create">
       <input type="text" aria-label="نام برچسب جدید" maxLength={MAX_NAME} value={newName}
@@ -147,6 +150,7 @@ export function LabelEditor({labels = [], colors = {}, onChange, disabled = fals
         type="color" value={newColor} onChange={event => setNewColor(event.target.value)}/>
       <button type="button" className="label-editor-add" aria-label="افزودن برچسب" title="افزودن برچسب"
         disabled={!newName.trim() || normalized.labels.length >= MAX_LABELS} onClick={add}><Plus size={17}/></button>
+      <CommonColorOptions disabled={disabled} label="برچسب جدید" value={newColor} onChange={setNewColor}/>
     </div>}
     {!!error && <small role="alert" className="label-editor-error">{error}</small>}
   </div>;

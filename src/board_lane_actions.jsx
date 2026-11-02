@@ -1,6 +1,7 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Archive, ArrowLeft, ArrowRight, Check, ChevronsDownUp, ChevronsUpDown, Copy, Ellipsis, ListFilter, Palette, Plus, Settings2, X, Zap} from 'lucide-react';
+import {CommonColorOptions} from './common_color_palette.jsx';
 
 const inset = 8;
 export function lanePopupPosition(anchor, popup, width, height) {
@@ -171,6 +172,7 @@ export function LaneActionsMenu({
             <input type="color" aria-label={'رنگ ستون '+stage.label} disabled={!onSave} value={/^#[0-9a-f]{6}$/i.test(stage.color)?stage.color:'#64748b'}
               onChange={e=>onSave?.({color:e.target.value})}/>
           </label>
+          <CommonColorOptions value={stage.color} disabled={!onSave} label={'ستون '+stage.label} onChange={color=>onSave?.({color})}/>
           </details>
           <div className="lane-actions-popover__moves" role="group" aria-label="جابجایی ستون">
             <button type="button" disabled={!onMove||index===0} onClick={()=>{onMove?.(-1);closeMenu();}}><ArrowRight size={15}/> یک ستون به راست</button>

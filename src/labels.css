@@ -1,5 +1,7 @@
 .label-editor{display:grid;gap:8px;max-width:100%;}
 .label-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 34px;gap:8px;align-items:center;min-width:0;}
+.label-editor-row > .madar-common-colors__details{grid-column:1/-1;grid-row:auto}
+.label-editor-row .madar-common-colors__swatch{width:23px;height:23px;min-height:23px;min-width:23px;padding:0;border-radius:7px}
 .label-editor-name-wrap{display:flex;align-items:center;gap:8px;min-width:0;}
 .label-editor-dot{height:12px;width:12px;border-radius:4px;flex:0 0 12px;border:1px solid #52617424;}
 .label-editor-row input[type="text"]{width:100%;min-width:0;min-height:36px;border:1px solid #dfe7ef;border-radius:8px;padding:8px 10px;background:#fafcff;color:#354760;font:inherit;font-size:12px;outline:none;}
