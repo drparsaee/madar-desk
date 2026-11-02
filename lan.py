@@ -323,10 +323,11 @@ class LanService:
             raise ValueError("فایل کاربران شبکه معتبر نیست.")
         return data
 
-    def _store_users(self):
+    def _store_users(self, users=None):
         filename = self.users_path
         tmp = filename.with_name(filename.name + ".tmp")
-        tmp.write_text(json.dumps(self.users, ensure_ascii=False, indent=2), encoding="utf8")
+        tmp.write_text(json.dumps(self.users if users is None else users,
+                                  ensure_ascii=False, indent=2), encoding="utf8")
         tmp.replace(filename)
 
     def _read_display_roles(self):
@@ -399,8 +400,9 @@ class LanService:
                 raise ValueError("مدیر قبلاً تعریف شده است.")
             account = make_account(username, password, "admin")
             account["displayRole"] = "superadmin"
-            self.users[username] = account
-            self._store_users()
+            updated = {**self.users, username: account}
+            self._store_users(updated)
+            self.users = updated
             return self._public_user(account)
 
     def authenticate(self, username, password, ip="127.0.0.1"):
@@ -497,8 +499,10 @@ class LanService:
             who = self.account_for(token)
             if not isinstance(current, str) or not verify_password(current, who["passwordHash"]):
                 raise PermissionError("رمز فعلی درست نیست.")
-            who["passwordHash"] = password_hash(new_password)
-            self._store_users()
+            updated = {**self.users, who["username"]: {
+                **who, "passwordHash": password_hash(new_password)}}
+            self._store_users(updated)
+            self.users = updated
             # Other sessions are revoked, current session is kept.
             for key, item in list(self.sessions.items()):
                 if item[0] == who["username"] and key != token:
@@ -513,8 +517,10 @@ class LanService:
             target = self.users.get(username)
             if not target:
                 raise ValueError("کاربر پیدا نشد.")
-            target["passwordHash"] = password_hash(new_password)
-            self._store_users()
+            updated = {**self.users, username: {
+                **target, "passwordHash": password_hash(new_password)}}
+            self._store_users(updated)
+            self.users = updated
             for key, item in list(self.sessions.items()):
                 if item[0] == username:
                     del self.sessions[key]
@@ -659,8 +665,9 @@ class LanService:
                     for task in data["tasks"]
                 ):
                     raise ValueError("این کاربر هنوز مسئول کارهایی خارج از محدوده جدید است.")
-            self.users[username] = account
-            self._store_users()
+            updated = {**self.users, username: account}
+            self._store_users(updated)
+            self.users = updated
             if password and old:
                 for key, record in list(self.sessions.items()):
                     if record[0] == username:
