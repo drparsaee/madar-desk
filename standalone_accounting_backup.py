@@ -41,10 +41,10 @@ def _absolute_path(value, label: str) -> Path:
 
 
 def _refuse_symlinks(path: Path) -> None:
-    """Fail closed for source/target/ancestor symlinks, including broken links."""
+    """Fail closed for symlinks and Windows junctions in any path component."""
     for part in (path, *path.parents):
-        if part.is_symlink():
-            raise ValueError("Symlink paths are prohibited for accounting backups")
+        if part.is_symlink() or getattr(part, "is_junction", lambda: False)():
+            raise ValueError("Symlink/junction paths are prohibited for accounting backups")
 
 
 def _existing_source(source: Path) -> None:

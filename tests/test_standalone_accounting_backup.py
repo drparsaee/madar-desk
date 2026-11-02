@@ -182,6 +182,39 @@ class StandaloneAccountingBackupTests(unittest.TestCase):
             self.backup(destination=alias / "backup.sqlite3")
         self.assertFalse((directory / "backup.sqlite3").exists())
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows junction regression")
+    def test_windows_junction_source_and_destination_parents_rejected(self):
+        """Explicit paths cannot silently escape through a directory junction."""
+        if not hasattr(Path(self.root), "is_junction"):
+            self.skipTest("Path.is_junction unavailable")
+
+        def junction(alias, target):
+            result = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(alias), str(target)],
+                capture_output=True, text=True, check=False)
+            if result.returncode != 0 or not alias.is_junction():
+                self.skipTest("Creating synthetic junction is unavailable")
+            self.addCleanup(lambda: alias.rmdir() if alias.is_junction() else None)
+
+        real_source_dir = self.root / "real-source"
+        real_source_dir.mkdir()
+        real_source = real_source_dir / "standalone-accounting.sqlite3"
+        StandaloneAccountingStore(real_source)
+        source_alias = self.root / "source-junction"
+        junction(source_alias, real_source_dir)
+        with self.assertRaisesRegex(ValueError, "[Jj]unction|[Ss]ymlink"):
+            self.backup(source=source_alias / real_source.name)
+        self.assertFalse(self.destination.exists())
+
+        self.create_source()
+        real_dest_dir = self.root / "real-dest-junction"
+        real_dest_dir.mkdir()
+        dest_alias = self.root / "dest-junction"
+        junction(dest_alias, real_dest_dir)
+        with self.assertRaisesRegex(ValueError, "[Jj]unction|[Ss]ymlink"):
+            self.backup(destination=dest_alias / self.destination.name)
+        self.assertFalse((real_dest_dir / self.destination.name).exists())
+
     def test_destination_parent_must_exist_and_is_not_auto_created(self):
         self.create_source()
         missing = self.root / "uncreated" / "backup.sqlite3"
