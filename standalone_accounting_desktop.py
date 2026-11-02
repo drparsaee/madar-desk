@@ -24,6 +24,7 @@ JS_BRIDGE = """<script>
 window.__madarStandaloneOnly = true;
 window.madar = Object.fromEntries(
   ['standaloneAccountingRead', 'standaloneAccountingCommand',
+   'standaloneAccountingCsvChooseFile', 'standaloneAccountingCsvPreview',
    'standaloneAccountingParsianArchiveIndex', 'standaloneAccountingParsianArchiveRows',
    'standaloneAccountingTemplateList', 'standaloneAccountingTemplateSave',
    'standaloneAccountingTemplateDelete', 'standaloneAccountingTemplateDefault',
@@ -92,6 +93,28 @@ class AccountingDesktopAPI:
         self.company_name = company_name if isinstance(company_name,str) else ""
         self._switch_requested = False
         self._native_window = None
+        from provider_csv_bridge import ProviderCsvPreviewBridge
+        self._csv_preview = ProviderCsvPreviewBridge()
+
+    def standaloneAccountingCsvChooseFile(self, group, encoding, delimiter):
+        """Admin-selected local CSV header only; no ledger or disk writes."""
+        with self._lock:
+            self._require_authenticated('admin')
+            if self._native_window is None:
+                raise RuntimeError("Native accounting file chooser is unavailable")
+            from provider_csv_bridge import GROUPS
+            if group not in GROUPS or type(group) is not str:
+                raise ValueError("Unknown CSV group")
+            import webview
+            chosen = self._native_window.create_file_dialog(
+                webview.FileDialog.OPEN, file_types=("CSV files (*.csv)",))
+            return self._csv_preview.select(group, encoding, delimiter, chosen)
+
+    def standaloneAccountingCsvPreview(self, request):
+        """Preview chosen user-owned CSV files; never call accounting store."""
+        with self._lock:
+            self._require_authenticated('admin')
+            return self._csv_preview.preview(request)
 
     def _require_authenticated(self,required='viewer'):
         if self._identity_store is not None:

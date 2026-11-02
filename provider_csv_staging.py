@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 from datetime import date
 from hashlib import sha256
+from io import StringIO
 import json
 from pathlib import Path
 import re
@@ -122,6 +123,42 @@ def _spec(name, source):
                     v not in _ENUMS[name][key] for k, v in translation.items())):
             raise CsvStagingError("Invalid source enum translations")
     return declared, value_maps
+
+
+def inspect_csv_headers(path, *, encoding, delimiter):
+    """Return only exact CSV column names from an explicit bounded local file.
+
+    No rows are returned. A subsequent staging preview validates all rows.
+    """
+    if type(path) is not str or not Path(path).is_absolute():
+        raise CsvStagingError("Selected CSV path must be absolute")
+    if (type(encoding) is not str or encoding not in _ENCODINGS or
+            type(delimiter) is not str or delimiter not in _DELIMITERS):
+        raise CsvStagingError("Unsupported CSV encoding or delimiter")
+    source = Path(path)
+    if (source.is_symlink() or not source.is_file() or
+            not 0 < source.stat().st_size <= MAX_BYTES):
+        raise CsvStagingError("Expected regular non-symlink CSV under 5 MB")
+    raw = source.read_bytes()
+    if len(raw) > MAX_BYTES or b"\x00" in raw:
+        raise CsvStagingError("CSV bytes exceed bound or contain NUL")
+    try:
+        decoded = raw.decode(encoding, errors="strict")
+    except UnicodeError as exc:
+        raise CsvStagingError("CSV cannot decode using declared encoding") from exc
+    if "\ufeff" in decoded:
+        raise CsvStagingError("Unexpected BOM; use utf-8-sig for BOM input")
+    try:
+        header = next(csv.reader(StringIO(decoded, newline=""),
+                                 delimiter=delimiter, strict=True), None)
+    except csv.Error as exc:
+        raise CsvStagingError("Malformed CSV header") from exc
+    if (type(header) is not list or not 1 <= len(header) <= MAX_COLUMNS
+            or any(type(h) is not str or not h.strip() or len(h) > 128
+                   for h in header)
+            or len({h.casefold() for h in header}) != len(header)):
+        raise CsvStagingError("Invalid CSV header")
+    return header
 
 
 def _read_csv(name, source):
@@ -287,4 +324,5 @@ def stage_provider_csv(spec, *, previous_identity_fingerprints=()):
     }
 
 
-__all__ = ["CsvStagingError", "SCHEMA_VERSION", "stage_provider_csv"]
+__all__ = ["CsvStagingError", "SCHEMA_VERSION", "inspect_csv_headers",
+           "stage_provider_csv"]
