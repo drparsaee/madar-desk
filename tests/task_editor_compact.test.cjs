@@ -37,10 +37,12 @@ test('compact task layout reserves legible inputs and responsive columns',()=>{
   assert.match(css,/scroll-margin-top:80px/);
   assert.match(css,/data-theme="dark"/);
   assert.match(css,/prefers-reduced-motion:reduce/);
+  assert.match(css,/@media\(max-width:720px\)\{[\s\S]*?\.drawer \.task-quick-actions\{[\s\S]*?position:static;top:auto;z-index:auto;/);
 });
 
 test('less-used card features collapse safely while existing data opens them',()=>{
-  assert.match(app, /className="task-optional-block" id="task-section-cover" tabIndex=\{-1\} defaultOpen=\{Boolean\(task\.cover\)\}/);
+  // All detail panels, including cover, use the same per-user disclosure contract.
+  assert.match(app, /className="task-optional-block task-shared-disclosure" id="task-section-cover" tabIndex=\{-1\} open=\{sectionOpen\.cover\}/);
   for(const key of ['assignees','time','dependencies','reports']){
     assert.match(app,new RegExp('open=\\{sectionOpen\\.'+key+'\\}'));
   }

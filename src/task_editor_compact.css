@@ -320,7 +320,14 @@
 @media(max-width:720px){
   .drawer{width:min(100%,620px)}
   .drawer .edit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .drawer .task-quick-actions{grid-template-columns:repeat(4,minmax(0,1fr))}
+  /* Ten navigation buttons form a tall grid on narrow screens. A sticky
+     grid can cover the deadline input and intercept its calendar click.
+     Let the navigation scroll naturally on tablets and phones. */
+  .drawer .task-quick-actions{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    position:static;top:auto;z-index:auto;
+  }
+  .drawer [id^="task-section-"]{scroll-margin-top:14px}
 }
 @media(max-width:480px){
   .drawer{width:100%}
