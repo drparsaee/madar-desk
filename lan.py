@@ -294,6 +294,7 @@ class LanService:
         self.lock = threading.RLock()
         self.sessions = {}
         self.failed = {}
+        self.failed_accounts = {}
         self.users = self._read_users()
         self.display_roles_path = self.users_path.with_name(self.users_path.stem + ".display-roles.json")
         self.display_roles = self._read_display_roles()
@@ -406,16 +407,28 @@ class LanService:
         if not isinstance(username, str) or not isinstance(password, str):
             raise ValueError("نام کاربری و رمز عبور باید متن باشند.")
         with self.lock:
+            now = time.time()
             failures, last = self.failed.get(ip, (0, 0))
-            if failures >= 6 and time.time() - last < 120:
-                raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
+            if now - last >= 120:
+                failures = 0
             account = self.users.get(username)
+            # A different account's valid login must not reset this account's
+            # failed guesses. Track only existing users to bound memory growth.
+            key = (ip, username) if account else None
+            account_failures, account_last = self.failed_accounts.get(key, (0, 0))
+            if now - account_last >= 120:
+                account_failures = 0
+            if failures >= 6 or account_failures >= 6:
+                raise PermissionError("تلاش‌های ورود بیش از حد است. دو دقیقه بعد دوباره امتحان کنید.")
             if not account or not verify_password(password, account["passwordHash"]):
-                self.failed[ip] = (failures + 1, time.time())
+                self.failed[ip] = (failures + 1, now)
+                if key is not None:
+                    self.failed_accounts[key] = (account_failures + 1, now)
                 raise PermissionError("نام کاربری یا رمز عبور نادرست است.")
             self.failed.pop(ip, None)
+            self.failed_accounts.pop(key, None)
             token = secrets.token_urlsafe(32)
-            self.sessions[token] = (username, time.time() + 12 * 3600)
+            self.sessions[token] = (username, now + 12 * 3600)
             return {"token": token, "user": self._public_user(account)}
 
     def account_for(self, token):
