@@ -20,4 +20,4 @@ No ledger becomes visible before every declared companion. A crash after an earl
 - VERIFIED: pre-change adjacent suites `python -B -m unittest tests.test_standalone_accounting_restore tests.test_standalone_accounting_auto_backup tests.test_standalone_accounting_identity_backup tests.test_mohsen_r10_template_restore -q`: 63/63 passed.
 - VERIFIED: post-repair historical crash audit 1/1; new kill/retry suite 6/6; adjacent accounting backup/restore tests 69/69 total.
 - VERIFIED: `npm test` exit 0: 172/172 isolated Python modules (1,641 tests; 2 skipped, 2 expected failures, no unexpected failures/errors); Vite build; Node 530/530 tests (0 skipped/failures).
-- TODO: final diff inspection, commit, LocalForge fast-forward push and SHA comparison.
+- VERIFIED: staged `git diff --cached --check` exit 0, source commit `b04b8a7160cc759b29c5d579273adb56cadd84dc`, fast-forward push to private LocalForge `main`, and `git ls-remote origin refs/heads/main` exactly matched that commit. Only unrelated pre-existing untracked Trello research directories remained; no installed EXE or real profile was touched.
