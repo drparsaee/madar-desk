@@ -498,6 +498,10 @@ class LanService:
                     continue
                 # Profiles are directory entries for coworkers on shared projects,
                 # not a general user directory. A user with zero grants sees self.
+                # An unrestricted viewer still shares no project with a
+                # coworker whose explicit scope is empty.
+                if user["projects"] is not None and not user["projects"]:
+                    continue
                 if who["projects"] is not None and not who["projects"]:
                     continue
                 if who["projects"] is not None and user["projects"] is not None:
