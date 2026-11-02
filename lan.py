@@ -98,6 +98,8 @@ AVATAR_ICONS = {
 }
 AVATAR_COLOR_DEFAULT = "#5376b5"
 AVATAR_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
+MAX_LAN_PASSWORD_CHARS = 4096
+MAX_LAN_LOGIN_BODY_BYTES = 65_536
 
 
 def clean_profile(payload, old=None):
@@ -131,8 +133,8 @@ def clean_profile(payload, old=None):
 
 
 def password_hash(password, salt=None):
-    if not isinstance(password, str) or len(password) < 10:
-        raise ValueError("رمز باید دست‌کم ۱۰ نویسه باشد.")
+    if not isinstance(password, str) or not 10 <= len(password) <= MAX_LAN_PASSWORD_CHARS:
+        raise ValueError("رمز شبکه باید بین ۱۰ و ۴۰۹۶ نویسه باشد.")
     salt = salt or secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 250_000)
     return salt.hex() + ":" + digest.hex()
@@ -484,6 +486,10 @@ class LanService:
     def authenticate(self, username, password, ip="127.0.0.1"):
         if not isinstance(username, str) or not isinstance(password, str):
             raise ValueError("نام کاربری و رمز عبور باید متن باشند.")
+        # A malformed login must not consume a 16 MB JSON body and then run
+        # PBKDF2 on an attacker-controlled megabyte-scale credential.
+        if len(username) > 40 or len(password) > MAX_LAN_PASSWORD_CHARS:
+            raise ValueError("نام کاربری یا رمز شبکه بیش از حد طولانی است.")
         with self.lock:
             now = time.time()
             failures, last = self.failed.get(ip, (0, 0))
@@ -1352,6 +1358,8 @@ class LanService:
                         return self.reply(400, {"error": "ساختار JSON نامعتبر است."})
                     if length <= 0 or length > 16_000_000:
                         return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
+                    if endpoint == "/api/login" and length > MAX_LAN_LOGIN_BODY_BYTES:
+                        return self.reply(413, {"error": "حجم درخواست ورود بیش از حد مجاز است."})
                     content_type = self.headers.get("Content-Type", "")
                     if content_type.split(";", 1)[0].strip().lower() != "application/json":
                         # Read only an already bounded declared body so HTTP
