@@ -80,7 +80,9 @@ Source: "..\release\{#ExeFile}"; DestDir: "{app}\versions\{#MadarVersion}"; Dest
 Source: "Run-Madar.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Madar-Upgrade-Preflight.ps1"; Flags: dontcopy
 Source: "Madar-Activate-Version.ps1"; Flags: dontcopy
+#ifndef COMPACT
 Source: "..\release\.madar-inno-prereq\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"; Flags: dontcopy
+#endif
 
 #ifndef QA
 [Icons]
@@ -156,6 +158,10 @@ begin
     exit;
   end;
   if not WebViewInstalled() then begin
+#ifdef COMPACT
+    Result := 'Microsoft Edge WebView2 Runtime is required. Install WebView2 from Microsoft before running this compact update.';
+    exit;
+#else
 #ifdef QA
     { QA never installs a global prerequisite. }
     Result := '';
@@ -170,6 +176,7 @@ begin
       Result := 'Microsoft WebView2 Runtime prerequisite could not be installed. Setup stopped.';
       exit;
     end;
+#endif
 #endif
   end;
 end;
