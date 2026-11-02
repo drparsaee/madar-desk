@@ -308,19 +308,21 @@
   place-items:center;
   justify-self:end;
   flex:none;
-  width:44px;
-  min-width:44px;
-  height:44px;
-  min-height:44px;
-  padding:4px;
+  width:36px;
+  min-width:36px;
+  height:36px;
+  min-height:36px;
+  padding:3px;
   border-radius:50%;
   background:var(--vs-well,#f5f7fa);
   box-shadow:none;
 }
-.vitrea-header-main .vitrea-top-row > .vitrea-account-capsule :is(.profile-avatar,.mini-user) {
+.vitrea-header-main .vitrea-top-row > .vitrea-account-capsule .workplace-avatar {
   flex:none;
-  max-width:34px;
-  max-height:34px;
+  width:28px!important;
+  height:28px!important;
+  max-width:28px;
+  max-height:28px;
 }
 .app-shell.vitrea-layout > .workspace .vitrea-header-main .topbar {
   position:relative;

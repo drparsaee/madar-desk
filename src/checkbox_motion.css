@@ -1,0 +1,80 @@
+/* Main task-manager checks share a centered mark at every display density. */
+.app-shell input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  inline-size: 18px;
+  block-size: 18px;
+  min-inline-size: 18px;
+  min-block-size: 18px;
+  max-inline-size: 18px;
+  max-block-size: 18px;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+  border: 1.5px solid var(--vs-muted,#8799af);
+  border-radius: 5px;
+  background-color: var(--vs-well,#fff);
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: 13px 13px;
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.app-shell input[type="checkbox"]:checked {
+  border-color: var(--vs-accent,#4779c6);
+  background-color: var(--vs-accent,#4779c6);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3.5 9.2l3.7 3.6 7.3-7.5'/%3E%3C/svg%3E");
+  animation: madar-check-pop .3s cubic-bezier(.22,1.3,.52,1);
+}
+
+.app-shell input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .55; }
+.app-shell input[type="checkbox"]:focus-visible {
+  outline: 3px solid var(--vs-accent,#4779c6);
+  outline-offset: 3px;
+}
+
+.app-shell :is(.step-check,.task-complete-toggle) {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  line-height: 1;
+}
+.app-shell :is(.step-check,.task-complete-toggle) > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%);
+  flex: none;
+}
+.app-shell .step-check.checked,
+.app-shell .task-complete-toggle[aria-pressed="true"] {
+  animation: madar-check-pop .3s cubic-bezier(.22,1.3,.52,1);
+}
+.app-shell :is(.step-check.checked,.task-complete-toggle[aria-pressed="true"]) > svg {
+  animation: madar-check-draw .25s ease-out both;
+}
+
+@keyframes madar-check-pop {
+  0% { transform: scale(.83) rotate(-5deg); }
+  55% { transform: scale(1.1) rotate(2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes madar-check-draw {
+  from { opacity: .25; scale: .65; }
+  to { opacity: 1; scale: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell input[type="checkbox"],
+  .app-shell :is(.step-check,.task-complete-toggle),
+  .app-shell :is(.step-check,.task-complete-toggle) > svg {
+    animation: none !important;
+    transition: none !important;
+  }
+}
