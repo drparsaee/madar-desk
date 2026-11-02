@@ -99,10 +99,15 @@ $quote = [char]34
 $imagePath = $quote + $runner + $quote
 if ($entry) { $imagePath += ' ' + $quote + $entry + $quote }
 $imagePath += ' service --data-dir ' + $quote + $resolvedData + $quote + ' --port ' + $Port
+# Windows PowerShell 5.1 rebuilds native command-line arguments and removes
+# the literal quotes in a binPath value unless they are escaped for sc.exe.
+# Without this sc.exe prints its usage and exits 1639, so no service is made.
+# Escaping is for the Win32 command-line parser, NOT the persisted ImagePath.
+$scImagePath = $imagePath.Replace([string]$quote, ('\' + $quote))
 $created = $false
 try {
-    & sc.exe create $name 'type=' 'own' 'start=' 'demand' 'obj=' 'NT SERVICE\MadarHost' 'DisplayName=' 'Madar Desk Background Host' 'binPath=' $imagePath | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'SCM create failed.' }
+    & sc.exe create $name 'type=' 'own' 'start=' 'demand' 'obj=' 'NT SERVICE\MadarHost' 'DisplayName=' 'Madar Desk Background Host' 'binPath=' $scImagePath
+    if ($LASTEXITCODE -ne 0) { throw ('SCM create failed (sc.exe exit ' + $LASTEXITCODE + ').') }
     $created = $true
     & sc.exe sidtype $name unrestricted | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'SCM service SID configuration failed.' }
