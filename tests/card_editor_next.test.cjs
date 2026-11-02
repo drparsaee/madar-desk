@@ -62,12 +62,13 @@ test('all six native color-pickers expose named common presets',()=>{
   assert.match(html,/aria-label="انتخاب قرمز برای اولویت"/);
   assert.match(html,/aria-pressed="true"/);
 });
-test('historical tall cover is rendered as strip below task title',()=>{
+test('card cover renders at top for strip mode and across entire card for full mode',()=>{
   const app=text('src/App.jsx');
   const component=app.slice(app.indexOf('function TaskCard('),app.indexOf('function WalletIcon('));
-  assert.ok(component.indexOf('className="task-title"')<component.indexOf('className="task-card-cover'));
-  assert.doesNotMatch(component,/task-card-cover-full/);
-  assert.match(text('src/priorities.css'),/\.task-card-cover-full\{height:8px\}/);
+  assert.ok(component.indexOf('task-card-cover task-card-cover-strip')<component.indexOf('className="task-title"'));
+  assert.match(component,/task-card--cover-full/);
+  assert.match(text('src/kanban_compact.css'),/\.task-card--cover-full/);
+  assert.match(text('src/kanban_compact.css'),/background: var\(--card-cover-color\)/);
 });
 test('small Jalali calendar renders 42 selectable ISO days and month navigation',()=>{
   const {MiniCalendar}=load('src/mini_calendar.jsx');

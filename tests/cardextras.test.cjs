@@ -17,7 +17,7 @@ compiled.filename = path.join(root,'cardextras.bundle.cjs');
 compiled.paths = Module._nodeModulePaths(root);
 compiled._compile(bundle, compiled.filename);
 const {
-  cardChecklistGroups,editCardChecklists,normalizeCover,editCardFieldValues,
+  cardChecklistGroups,editCardChecklists,normalizeCover,coverTextColor,editCardFieldValues,
   editBoardFields,CardChecklists,CardCover,CardCustomFields,BoardFieldEditor
 } = compiled.exports;
 
@@ -119,6 +119,9 @@ test('covers accept only solid HEX colors with fixed size, no URLs or arbitrary 
     {type:'color',color:'#ABCDEF',size:'weird'},
     {type:'color',color:'url(data:image/svg+xml,<svg onload=alert(1)>)',size:'strip'}
   ])assert.throws(()=>normalizeCover(cover));
+  assert.equal(coverTextColor('#102D67'),'#FFFFFF');
+  assert.equal(coverTextColor('#FFFFFF'),'#142236');
+  assert.equal(coverTextColor('url(https://evil)'), '#152238');
 });
 
 test('typed field editing preserves values and rejects invalid numbers/dates/options',()=>{
@@ -172,11 +175,11 @@ test('SSR components expose expected controls and escape hostile text',()=>{
   assert(!hidden.includes('&lt;img'));
   assert.match(hidden,/چک‌لیست جدید/);
   const cover=renderToStaticMarkup(React.createElement(CardCover,{task,onChange:()=>{}}));
-  assert.match(cover,/background-color:#ABCDEF/i);
-  // Historical "full" cover persists in stored data, but is now deliberately
-  // visualized as a narrow strip to keep the task title unobstructed.
-  assert.match(cover,/cardextras-cover-strip/);
-  assert.doesNotMatch(cover,/cardextras-cover-full/);
+  assert.match(cover,/--cover-preview-color:#ABCDEF/i);
+  assert.match(cover,/card-cover-editor__preview--full/);
+  assert.match(cover,/رنگ تمام کارت/);
+  assert.match(cover,/نوار بالای کارت/);
+  assert.match(cover,/ساخت رنگ دلخواه/);
   const custom=renderToStaticMarkup(React.createElement(CardCustomFields,{task,board,calendar:'jalali',onChange:()=>{}}));
   assert.match(custom,/&lt;script&gt;evil\(\)&lt;\/script&gt;/);
   assert(!custom.includes('<script>'));

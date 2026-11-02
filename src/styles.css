@@ -13,6 +13,8 @@ body{overflow:hidden}
 .madar-card-context-menu button{display:flex;gap:8px;align-items:center;text-align:right;width:100%;border-radius:7px;padding:9px;background:transparent;color:inherit}
 .madar-card-context-menu button:hover,.madar-card-context-menu button:focus-visible{background:#6384ae28}
 .madar-card-context-menu__head button{flex:none;width:28px;height:28px;justify-content:center;padding:4px}
+.madar-card-context-menu__group{border-top:1px solid #8796ae44;padding-top:4px;margin-top:4px}
+.madar-card-context-menu__danger button:last-child{color:#c44857}
 .backup-easy-limitation--error{border:1px solid #d78a71!important;background:#fff2ec!important;color:#7b2416!important}
 [data-theme="dark"] .backup-easy-limitation--error{background:#4d241e!important;color:#ffcdc2!important}
 [data-theme="dark"] .madar-card-context-menu{background:#1e293b;color:#edf2fa;border-color:#52637e}

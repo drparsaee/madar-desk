@@ -31,7 +31,7 @@ async function safePort(){
   }
   throw new Error('No browser safe port');
 }
-test('full App reuses disclosure preference, offers Jalali popup, shows cover below title and archives',
+test('full App reuses disclosure preference, offers Jalali popup, keeps full-cover text readable and archives',
   {skip:!available,timeout:90000},async()=>{
     const {createServer}=await import('vite');
     const {chromium}=require(playwrightHome);
@@ -74,10 +74,12 @@ test('full App reuses disclosure preference, offers Jalali popup, shows cover be
       const coverCard=page.locator('.task-card').filter({hasText:'کارت دوم آزمایشی'});
       const bounds=await coverCard.evaluate(card=>{
         const title=card.querySelector('.task-title').getBoundingClientRect();
-        const cover=card.querySelector('.task-card-cover').getBoundingClientRect();
-        return {afterTitle:cover.top>=title.bottom,height:cover.height};
+        const background=getComputedStyle(card).backgroundColor;
+        return {background,textVisible:title.height>0,hasStripe:!!card.querySelector('.task-card-cover')};
       });
-      assert.equal(bounds.afterTitle,true);assert.equal(bounds.height,8);
+      assert.equal(bounds.background,'rgb(170, 17, 119)');
+      assert.equal(bounds.textVisible,true);
+      assert.equal(bounds.hasStripe,false);
       await coverCard.locator('.task-title').click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.getByRole('button',{name:'انتقال به آرشیو'}).click();

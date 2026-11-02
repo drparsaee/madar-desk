@@ -25,7 +25,10 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       "function App(){const [request,setRequest]=useState(null);const [canEdit,setCanEdit]=useState(true);",
       "window.setEdit=setCanEdit;return <><div id='card' role='button' onContextMenu={e=>{e.preventDefault();setRequest({id:Date.now(),cardId:'synthetic-1',title:'کارت آزمایشی',x:e.clientX,y:e.clientY});}}>Card</div>",
       "<CardContextMenu request={request} canEdit={canEdit} onClose={()=>setRequest(null)}",
-      "onOpen={id=>window.events.push('open:'+id)} onArchive={id=>window.events.push('archive:'+id)}/></>;}",
+      "onOpen={id=>window.events.push('open:'+id)} onArchive={id=>window.events.push('archive:'+id)}",
+      "onDelete={id=>window.events.push('delete:'+id)} onDuplicate={id=>window.events.push('copy:'+id)}",
+      "onToggleComplete={id=>window.events.push('complete:'+id)}",
+      "onOpenSection={(id,section)=>window.events.push('section:'+section+':'+id)}/></>;}",
       "createRoot(document.getElementById('root')).render(<App/>);"
     ].join('\n');
     const js=esbuild.buildSync({stdin:{contents:source,resolveDir:root,sourcefile:'card-context-test.jsx',loader:'jsx'},
@@ -40,17 +43,25 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       await page.mouse.click(80,45,{button:'right'});
       const menu=page.getByRole('menu',{name:'عملیات کارت کارت آزمایشی'});
       await menu.waitFor({state:'visible'});
+      await menu.getByRole('menuitem',{name:'ویرایش برچسب‌ها'}).click();
+      assert.deepEqual(await page.evaluate(()=>window.events),['section:tags:synthetic-1']);
+      await page.mouse.click(80,45,{button:'right'});
+      await menu.getByRole('menuitem',{name:'کپی کارت'}).click();
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');
+      await page.mouse.click(80,45,{button:'right'});
       await menu.getByRole('menuitem',{name:'بایگانی کارت'}).click();
-      assert.deepEqual(await page.evaluate(()=>window.events),['archive:synthetic-1']);
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'archive:synthetic-1');
       await page.evaluate(()=>window.setEdit(false));
       await page.mouse.click(100,50,{button:'right'});
       await menu.waitFor({state:'visible'});
       assert.equal(await menu.getByRole('menuitem',{name:'بایگانی کارت'}).count(),0);
+      assert.equal(await menu.getByRole('menuitem',{name:'حذف کارت'}).count(),0);
+      assert.equal(await menu.getByRole('menuitem',{name:'کپی کارت'}).count(),0);
       await page.keyboard.press('Escape');
       await menu.waitFor({state:'hidden'});
       await page.mouse.click(110,55,{button:'right'});
       await menu.getByRole('menuitem',{name:'بازکردن کارت'}).click();
-      assert.deepEqual(await page.evaluate(()=>window.events),['archive:synthetic-1','open:synthetic-1']);
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'open:synthetic-1');
       assert.deepEqual(errors,[]);
     } finally {await browser.close();}
   });

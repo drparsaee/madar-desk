@@ -1,10 +1,11 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Archive, ExternalLink, X} from 'lucide-react';
+import {Archive, CheckCircle2, Copy, ExternalLink, Image, Move, Tag, Trash2, Users, CalendarDays, X} from 'lucide-react';
 import {laneContextPopupPosition} from './board_lane_actions.jsx';
 
 /** Context actions on an individual card. Caller owns permission checks. */
-export function CardContextMenu({request,onClose,onOpen,onArchive,canEdit=false}) {
+export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicate,onArchive,onDelete,
+  onToggleComplete,canEdit=false}) {
   const panel=useRef(null);
   const [position,setPosition]=useState(null);
   useLayoutEffect(()=>{
@@ -40,7 +41,30 @@ export function CardContextMenu({request,onClose,onOpen,onArchive,canEdit=false}
       <button type="button" aria-label="بستن منوی کارت" onClick={onClose}><X size={15}/></button></div>
     <button type="button" role="menuitem" onClick={()=>{onClose();onOpen(request.cardId);}}>
       <ExternalLink size={16}/> بازکردن کارت</button>
-    {canEdit&&<button type="button" role="menuitem" onClick={()=>{onClose();onArchive(request.cardId);}}>
-      <Archive size={16}/> بایگانی کارت</button>}
+    {canEdit&&<>
+      <div className="madar-card-context-menu__group" aria-label="ویرایش کارت">
+        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'tags');}}>
+          <Tag size={16}/> ویرایش برچسب‌ها</button>
+        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'assignees');}}>
+          <Users size={16}/> تغییر مسئولان</button>
+        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'cover');}}>
+          <Image size={16}/> تغییر کاور</button>
+        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'metadata');}}>
+          <CalendarDays size={16}/> تغییر تاریخ و مشخصات</button>
+        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'metadata');}}>
+          <Move size={16}/> انتقال به ستون یا برد دیگر</button>
+      </div>
+      {onToggleComplete&&<button type="button" role="menuitem"
+        onClick={()=>{onClose();onToggleComplete(request.cardId);}}>
+        <CheckCircle2 size={16}/> {request.completed?'لغو تکمیل کارت':'تکمیل کارت'}</button>}
+      {onDuplicate&&<button type="button" role="menuitem" onClick={()=>{onClose();onDuplicate(request.cardId);}}>
+        <Copy size={16}/> کپی کارت</button>}
+      <div className="madar-card-context-menu__group madar-card-context-menu__danger" aria-label="آرشیو و حذف">
+        {onArchive&&<button type="button" role="menuitem" onClick={()=>{onClose();onArchive(request.cardId);}}>
+          <Archive size={16}/> بایگانی کارت</button>}
+        {onDelete&&<button type="button" role="menuitem" onClick={()=>{onClose();onDelete(request.cardId);}}>
+          <Trash2 size={16}/> حذف کارت</button>}
+      </div>
+    </>}
   </div>,document.body);
 }

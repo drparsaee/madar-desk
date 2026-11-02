@@ -82,7 +82,7 @@
   scrollbar-width: thin;
   scrollbar-color: #bbc8d9 transparent;
 }
-.kanban .lane-cards { gap: 6px; }
+.kanban .lane-cards { gap: 5px; }
 .kanban .progressive-lane-card { min-inline-size: 0; }
 .kanban .task-card {
   padding: 8px 9px;
@@ -91,7 +91,21 @@
   box-shadow: 0 1px 2px #2131490a;
 }
 .kanban .task-card:hover { transform: translateY(-1px); }
-.kanban .task-card-top { margin-block-end: 4px; }
+.kanban .task-card-top { justify-content: flex-end; margin-block-end: 1px; }
+.kanban .task-card--cover-strip { padding-block-start: 0; overflow: hidden; }
+.kanban .task-card--cover-strip .task-card-cover {
+  block-size: 20px; inline-size: calc(100% + 18px); margin: 0 -9px 6px;
+  border-radius: 7px 7px 0 0; background: var(--card-cover-color);
+}
+.kanban .task-card--cover-full {
+  background: var(--card-cover-color);
+  border-color: color-mix(in srgb, var(--card-cover-color), #000 15%);
+}
+.kanban .task-card--cover-full :is(.task-title,.task-description,.progress-caption,.priority,.task-footer,.agent-line) {
+  color: var(--card-cover-contrast,#152238);
+}
+.kanban .task-card--cover-full .task-footer { border-top-color: #0000002c; }
+.kanban .task-card--cover-full .task-description { opacity: .82; }
 .kanban .task-card--completed { border-color: #69a998; }
 .kanban .task-card--completed .task-title { text-decoration: line-through; text-decoration-thickness: 1px; opacity: .72; }
 .kanban .task-complete-toggle {
@@ -146,15 +160,20 @@
 
 /* Inter-card insertion controls share the existing inline composer. A quiet
    hover target stays in the DOM for keyboard and pointer access. */
-.kanban .lane-insert-slot { min-block-size: 8px; position: relative; margin-block: -1px; }
+.kanban .lane-insert-slot { block-size: 0; min-block-size: 0; position: relative; margin: 0; z-index: 3; }
 .kanban .lane-insert-before {
+  position: absolute; inset-inline: 7px; inset-block-start: -4px;
   display: flex; align-items: center; justify-content: center; gap: 5px;
-  inline-size: 100%; min-block-size: 18px; border: 0; border-radius: 5px;
-  background: transparent; color: #376cb1; font-size: 10px;
-  opacity: 0; transition: opacity 120ms ease;
+  inline-size: calc(100% - 14px); block-size: 10px; min-block-size: 10px;
+  padding: 0; border: 0; border-radius: 5px;
+  background: transparent; color: transparent; font-size: 10px;
+  opacity: 0; transition: opacity 120ms ease, block-size 120ms ease;
 }
 .kanban .lane-insert-slot:is(:hover, :focus-within) .lane-insert-before,
-.kanban .lane-insert-before:focus-visible { opacity: 1; background: #d6e9fb; }
+.kanban .lane-insert-before:focus-visible {
+  opacity: 1; block-size: 21px; inset-block-start: -11px;
+  background: #d6e9fb; color: #295d9e;
+}
 .kanban .lane-insert-slot:has(.lane-quick-add) { margin-block: 5px; }
 .kanban .lane-insert-slot .lane-quick-add { margin-inline: 0; }
 

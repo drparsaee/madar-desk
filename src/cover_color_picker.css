@@ -1,0 +1,19 @@
+.cover-picker{display:grid;gap:8px;min-width:0}
+.cover-picker .madar-common-colors{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;margin:0}
+.cover-picker .madar-common-colors__swatch{width:100%;height:32px;min-width:0;border-radius:7px;position:relative}
+.cover-picker .madar-common-colors__swatch[aria-pressed="true"]{outline:2px solid var(--accent,#668ff2);outline-offset:1px}
+.cover-picker__advanced{min-width:0;border:1px solid var(--border,#b3bfce4d);border-radius:9px}
+.cover-picker__advanced>summary{padding:8px 10px;display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}
+.cover-picker__advanced>summary span{margin-inline-start:auto;opacity:.8;font-size:11px}
+.cover-picker__panel{display:grid;gap:9px;padding:10px;border-top:1px solid var(--border,#b3bfce4d)}
+.cover-picker__grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));direction:ltr;overflow:hidden;border-radius:7px;border:1px solid #8a9bb354}
+.cardextras .cover-picker__cell{display:grid;place-items:center;padding:0;min-height:22px;border-radius:0;border:0;background:transparent;color:#fff;text-shadow:0 1px 3px #000}
+.cover-picker__cell[aria-pressed="true"]{outline:2px solid #fff;outline-offset:-3px;z-index:1}
+.cover-picker__hue{display:grid;gap:4px;font-size:11px}
+.cover-picker__hue input{width:100%;appearance:none;height:13px;border-radius:10px;border:1px solid #ffffff44;padding:0!important;background:linear-gradient(to right,red,#ff0,lime,cyan,blue,magenta,red)!important;direction:ltr}
+.cover-picker__hue input::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border:2px solid white;border-radius:50%;box-shadow:0 0 0 1px #15223888;background:transparent}
+.cover-picker__custom{display:flex;gap:6px;align-items:center}
+.cover-picker__custom input[type=color]{padding:0!important;width:34px;height:34px;min-width:34px;border:0;background:transparent;cursor:pointer}
+.cover-picker__custom input[type=text]{flex:1;min-width:0;text-align:center}
+.cover-picker__panel small{opacity:.68}
+@media(max-width:440px){.cover-picker .madar-common-colors{grid-template-columns:repeat(8,minmax(0,1fr))}.cover-picker .madar-common-colors__swatch{height:29px}}

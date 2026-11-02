@@ -1,12 +1,11 @@
 import React, {useState} from 'react';
-import {Check, ChevronDown, ChevronUp, ListChecks, Plus, Trash2} from 'lucide-react';
+import {ChevronDown, ChevronUp, ListChecks, Plus, Trash2} from 'lucide-react';
 import {CalendarField} from './productivity.jsx';
-import {CommonColorOptions} from './common_color_palette.jsx';
+import {CoverColorPicker} from './cover_color_picker.jsx';
 import './cardextras.css';
 
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const ID_RE = /^[a-zA-Z0-9_-]{1,100}$/;
-const DEFAULT_COLORS = ['#3D977E', '#5672CA', '#A37BE1', '#C89141', '#D26074', '#64748B'];
 const CUSTOM_TYPES = ['text', 'number', 'date', 'checkbox', 'select'];
 const TYPE_TITLES = {text:'متن', number:'عدد', date:'تاریخ', checkbox:'تأیید', select:'انتخابی'};
 
@@ -102,6 +101,16 @@ export function normalizeCover(cover) {
       cover.type !== 'color' || typeof cover.color !== 'string' || !COLOR_RE.test(cover.color) ||
       !['strip','full'].includes(cover.size)) throw new Error('کاور باید فقط یک رنگ HEX معتبر داشته باشد');
   return {type:'color', color:cover.color.toUpperCase(), size:cover.size};
+}
+/** White/near-black foreground selection for full-card solid color covers. */
+export function coverTextColor(hex){
+  if(typeof hex!=='string'||!COLOR_RE.test(hex))return '#152238';
+  const [r,g,b]=[1,3,5].map(i=>{
+    const channel=parseInt(hex.slice(i,i+2),16)/255;
+    return channel<=.04045?channel/12.92:Math.pow((channel+.055)/1.055,2.4);
+  });
+  const lum=.2126*r+.7152*g+.0722*b;
+  return lum>.24?'#142236':'#FFFFFF';
 }
 
 export function editCardFieldValues(task, field, value) {
@@ -233,26 +242,31 @@ export function CardChecklists({task,onChange,disabled=false,hideLegacy=false}) 
 
 export function CardCover({task,onChange,disabled=false}) {
   const [error,setError] = useState('');
-  const [custom,setCustom] = useState('#5672CA');
   let cover = null;
   try {cover=normalizeCover(task?.cover);} catch { /* corrupt old cover is never painted */ }
   const change=value=>{try{onChange({cover:normalizeCover(value)});setError('');}catch(e){setError(e.message||String(e));}};
-  return <div className="cardextras" dir="rtl">
-    <h3>کاور کارت</h3>
-    {cover&&<div className="cardextras-cover cardextras-cover-strip" style={{backgroundColor:cover.color}}
-      role="img" aria-label={'کاور رنگی '+cover.color}/>}
-    <div className="cardextras-colors">{DEFAULT_COLORS.map(color=><button key={color} type="button" disabled={disabled}
-      style={{backgroundColor:color}} aria-label={'کاور '+color} aria-pressed={cover?.color===color.toUpperCase()}
-      onClick={()=>change({type:'color',color,size:'strip'})}>{cover?.color===color.toUpperCase()&&<Check size={17}/>}</button>)}</div>
-    <CommonColorOptions value={cover?.color} disabled={disabled} label="کاور کارت"
-      onChange={color=>change({type:'color',color,size:'strip'})}/>
-    <div className="cardextras-addrow">
-      <label>رنگ دلخواه <input type="text" dir="ltr" maxLength={7} value={custom} disabled={disabled}
-        onChange={e=>setCustom(e.target.value)} placeholder="#RRGGBB"/></label>
-      <button type="button" disabled={disabled||!COLOR_RE.test(custom)} onClick={()=>change({type:'color',color:custom,size:'strip'})}>اعمال رنگ</button>
-      <small>کاور روی کارت همیشه نواری و زیر عنوان نمایش داده می‌شود.</small>
-      <button type="button" disabled={disabled||!cover} onClick={()=>change(null)}>حذف کاور</button>
-    </div><ActionError message={error}/>
+  const size=cover?.size||'strip', color=cover?.color||'#5672CA';
+  return <div className="cardextras card-cover-editor" dir="rtl">
+    <div className="card-cover-editor__header"><h3>کاور کارت</h3>
+      {cover&&<button type="button" disabled={disabled} onClick={()=>change(null)}>حذف کاور</button>}
+    </div>
+    <div className="card-cover-editor__modes" role="group" aria-label="شیوه نمایش کاور">
+      <button type="button" disabled={disabled} aria-pressed={size==='strip'}
+        onClick={()=>change({type:'color',color,size:'strip'})}>نوار بالای کارت</button>
+      <button type="button" disabled={disabled} aria-pressed={size==='full'}
+        onClick={()=>change({type:'color',color,size:'full'})}>رنگ تمام کارت</button>
+    </div>
+    <div className={'card-cover-editor__preview card-cover-editor__preview--'+size}
+      style={{'--cover-preview-color':color,'--cover-preview-contrast':coverTextColor(color)}}
+      role="img" aria-label={'نمایش کاور '+(size==='full'?'تمام کارت':'نواری')+' با رنگ '+color}>
+      {size==='strip'&&<span className="card-cover-editor__preview-band"/>}
+      <span className="card-cover-editor__preview-title">{task?.title||'عنوان کارت'}</span>
+      <span className="card-cover-editor__preview-line"/>
+      <span className="card-cover-editor__preview-line short"/>
+    </div>
+    <CoverColorPicker value={color} disabled={disabled}
+      onChange={next=>change({type:'color',color:next,size})}/>
+    <ActionError message={error}/>
   </div>;
 }
 
