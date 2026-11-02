@@ -1,4 +1,6 @@
 /* Task-side commercial fields remain separate from the standalone finance UI. */
+.order-sale-fields .order-sale-fields__quantity{justify-items:start}
+.order-sale-fields .order-sale-fields__quantity input{width:min(100%,96px);max-width:96px;min-width:0;text-align:center;font-variant-numeric:tabular-nums}
 .order-expense-list {
   display: grid;
   gap: .75rem;

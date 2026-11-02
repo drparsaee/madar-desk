@@ -15,7 +15,7 @@ const monthStart=(year,month,calendar)=>
   year+'-'+pad(month)+'-01';
 
 /** Small click-to-select month calendar. Outputs only validated Gregorian ISO dates. */
-export function MiniCalendar({value,calendar='jalali',onSelect,onClose}) {
+export function MiniCalendar({id,value,calendar='jalali',onSelect,onClose,popupRef,popupStyle}) {
   const today=isoUTC(new Date());
   const initial=ISO_DATE.test(value||'')?value:today;
   const [visible,setVisible]=useState(()=>partsFromISO(initial,calendar).slice(0,2));
@@ -43,7 +43,7 @@ export function MiniCalendar({value,calendar='jalali',onSelect,onClose}) {
     calendar==='jalali'?'fa-IR-u-ca-persian':'fa-IR-u-ca-gregory',
     {month:'long',year:'numeric',timeZone:'UTC'}
   ).format(dateUTC(first)):'';
-  return <div className="madar-mini-calendar" role="group" aria-label="تقویم انتخاب تاریخ" dir="rtl">
+  return <div id={id} ref={popupRef} style={popupStyle} className="madar-mini-calendar" role="group" aria-label="تقویم انتخاب تاریخ" dir="rtl">
     <div className="madar-mini-calendar__head">
       <button type="button" aria-label="ماه قبل" onClick={()=>changeMonth(-1)}><ChevronRight size={16}/></button>
       <strong>{monthLabel}</strong>

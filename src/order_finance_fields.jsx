@@ -50,7 +50,7 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
   // A historical Toman amount is never silently reinterpreted as Rials.
   // Newly empty cards have no historical amount and may start in Rials.
   const legacySale=task.saleCurrency!=='RIAL'&&Number(task.saleUnitPrice||0)>0;
-  return <div className="edit-section"><h3>سفارش فروش / انتقال به حسابداری مستقل</h3>
+  return <div className="edit-section order-sale-fields"><h3>سفارش فروش / انتقال به حسابداری مستقل</h3>
     <div className="time-inputs">
       <label>نام سفارش‌دهنده (قابل نمایش به کارکنان)
         <input maxLength={300} value={task.orderCustomerName||''} disabled={!canEdit}
@@ -64,7 +64,7 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
           <option value="">انتخاب مشتری ثبت‌شده</option>
           {parties.map(p=><option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
         </select></label>
-      <label>تعداد سفارش
+      <label className="order-sale-fields__quantity">تعداد سفارش
         <input type="number" min="1" max="1000000" value={task.saleQuantity??1}
           disabled={!canEdit} onChange={e=>{
             const v=Number(e.target.value);
@@ -77,15 +77,16 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
             catch(err){setNotice(err.message);}
           }}/></label>
     </div>
-    <small>{legacySale?'مبلغ این سفارش تاریخی به تومان محفوظ است و در کارت به ریال تبدیل نمی‌شود.':'واحد سفارش‌های جدید ریال است؛ مشخصات تولید وارد حسابداری نمی‌شود.'}</small>
+    {legacySale&&<small>مبلغ این سفارش تاریخی به تومان محفوظ است و در کارت به ریال تبدیل نمی‌شود.</small>}
     {!!quote&&<p role="status">جمع محاسبه‌شده توسط موتور حسابداری: <strong>
       {BigInt(quote.amount).toLocaleString('fa-IR')} {quote.currency==='RIAL'?'ریال':'تومان'}
       </strong> (پیش‌نمایش، هنوز فاکتوری صادر نشده است)</p>}
     {!!quoteError&&<p role="alert">{quoteError}</p>}
     <div className="form-footer">
       <button type="button" className="btn secondary" disabled={!task.salePartyId}
-        onClick={()=>void onPrepare(task)} >آماده‌سازی فاکتور در حسابداری مستقل</button>
+        onClick={()=>void onPrepare(task)}>ثبت فاکتور</button>
     </div>
+    <small>صدور نهایی پس از بررسی و تأیید در حسابداری مستقل انجام می‌شود.</small>
     {!!notice&&<p role="alert">{notice}</p>}
   </div>;
 }
