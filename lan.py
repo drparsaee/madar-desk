@@ -486,9 +486,11 @@ class LanService:
             raise PermissionError("تغییر نقش، حساب یا دسترسی از پروفایل شخصی مجاز نیست.")
         with self.lock:
             who = self.account_for(token)
-            who.update(clean_profile(payload, who))
-            self._store_users()
-            return self._public_user(who)
+            account = {**who, **clean_profile(payload, who)}
+            updated = {**self.users, who["username"]: account}
+            self._store_users(updated)
+            self.users = updated
+            return self._public_user(account)
 
     def current_user(self, token):
         with self.lock:

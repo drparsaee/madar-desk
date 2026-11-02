@@ -58,6 +58,15 @@ class UserPersistenceFailureTests(unittest.TestCase):
         self.assertTrue(verify_password("synthetic-editor-password", stored_hash))
         self.assertFalse(verify_password("synthetic-new-password", stored_hash))
 
+    def test_failed_profile_write_keeps_previous_identity_in_memory_and_on_disk(self):
+        before = self.service.current_user(self.admin)
+        disk_before = self.service.users_path.read_bytes()
+        with patch.object(self.service, "_store_users", side_effect=OSError("synthetic disk failure")):
+            with self.assertRaises(OSError):
+                self.service.update_profile(self.admin, {"displayName": "Uncommitted identity"})
+        self.assertEqual(self.service.current_user(self.admin), before)
+        self.assertEqual(self.service.users_path.read_bytes(), disk_before)
+
 
 if __name__ == "__main__":
     unittest.main()
