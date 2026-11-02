@@ -343,6 +343,37 @@ class LanService:
         # follow a planted link. Reuse the unique, fsynced atomic JSON writer.
         atomic_json(self.users_path, self.users if users is None else users)
 
+    def _publish_users(self, updated):
+        """Keep live identities consistent with an existing on-disk registry.
+
+        Atomic publication may succeed before a writer reports a later error.
+        Only compensate an exact copy of our candidate; never replace an
+        unexpected registry revision after a failed write.
+        """
+        previous = self.users
+        try:
+            self._store_users(updated)
+        except Exception:
+            try:
+                observed = self._read_users()
+            except Exception as inspection_error:
+                raise RuntimeError(
+                    "LAN identity save failed; persisted registry could not be inspected"
+                ) from inspection_error
+            if observed == updated:
+                try:
+                    self._store_users(previous)
+                except Exception as rollback_error:
+                    raise RuntimeError(
+                        "LAN identity save failed and registry rollback failed"
+                    ) from rollback_error
+            elif observed != previous:
+                raise RuntimeError(
+                    "LAN identity save failed; unexpected registry revision prevents rollback"
+                )
+            raise
+        self.users = updated
+
     def _read_display_roles(self):
         defaults = default_roles()
         if not self.display_roles_path.exists():
@@ -527,8 +558,7 @@ class LanService:
             who = self.account_for(token)
             account = {**who, **clean_profile(payload, who)}
             updated = {**self.users, who["username"]: account}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             return self._public_user(account)
 
     def current_user(self, token):
@@ -542,8 +572,7 @@ class LanService:
                 raise PermissionError("رمز فعلی درست نیست.")
             updated = {**self.users, who["username"]: {
                 **who, "passwordHash": password_hash(new_password)}}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             # Other sessions are revoked, current session is kept.
             for key, item in list(self.sessions.items()):
                 if item[0] == who["username"] and key != token:
@@ -560,8 +589,7 @@ class LanService:
                 raise ValueError("کاربر پیدا نشد.")
             updated = {**self.users, username: {
                 **target, "passwordHash": password_hash(new_password)}}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             for key, item in list(self.sessions.items()):
                 if item[0] == username:
                     del self.sessions[key]
@@ -713,8 +741,7 @@ class LanService:
                 ):
                     raise ValueError("این کاربر هنوز مسئول کارهایی خارج از محدوده جدید است.")
             updated = {**self.users, username: account}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             if password and old:
                 for key, record in list(self.sessions.items()):
                     if record[0] == username:
