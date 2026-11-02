@@ -23,6 +23,9 @@ from standalone_accounting_backup import (
     _readonly_sqlite, _sqlite_backup, _sync_directory, _sync_file,
     _validate_backup,
 )
+from standalone_accounting_backup_manifest import (
+    BackupManifestError, verify_completion_manifest,
+)
 
 
 class StandaloneRestoreError(RuntimeError):
@@ -185,6 +188,10 @@ def restore_standalone_accounting(
     source = _absolute_path(source, "backup source")
     destination = _absolute_path(destination, "restore destination")
     _check_new_destination(source, destination)
+    try:
+        completion = verify_completion_manifest(source)
+    except BackupManifestError as exc:
+        raise StandaloneRestoreError(str(exc)) from exc
     original_head = _check_input(source)
     template_companion = preview_template_companion(source, destination)
     identity_companion = preview_identity_companion(source, destination)
@@ -226,6 +233,11 @@ def restore_standalone_accounting(
         if (current_identity['present']!=identity_companion['present'] or
             (current_identity['present'] and current_identity['bytes']!=identity_companion['bytes'])):
             raise StandaloneRestoreError('User backup companion changed during restore')
+        try:
+            if verify_completion_manifest(source) != completion:
+                raise StandaloneRestoreError('Backup completion manifest changed during restore')
+        except BackupManifestError as exc:
+            raise StandaloneRestoreError(str(exc)) from exc
         if template_companion['present']:
             descriptor, companion_name = tempfile.mkstemp(
                 dir=str(destination.parent), prefix='.invoice-templates.restore-', suffix='.json')

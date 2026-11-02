@@ -1,0 +1,3 @@
+# MD-O15 design
+
+Format `madar-standalone-accounting-auto-completion`, `version: 1`. Each manifest lists the snapshot and zero or more `users` / `templates` records with exact sibling filenames, byte sizes and SHA-256 digests; missing keys mean the corresponding companion was intentionally absent at snapshot time. Unknown keys, versions, wrong filenames or undeclared companion files are rejected. Manifest is linked into place only after the component files are flushed and verified; incomplete candidate files without it remain ineligible for automatic restore. Legacy manual one-file snapshots with nonautomatic names are accepted as before. This integrity check is not a signature or protection against an attacker who can rewrite every file.

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import json
 import sqlite3
 import tempfile
 import threading
@@ -14,7 +15,8 @@ from standalone_accounting import StandaloneAccountingStore
 from standalone_accounting_identity import LocalCompanyIdentity
 from standalone_accounting_template_store import StandaloneAccountingTemplateStore
 import standalone_accounting_auto_backup as auto
-from standalone_accounting_restore import restore_standalone_accounting
+import standalone_accounting_backup_manifest as manifest_module
+from standalone_accounting_restore import restore_standalone_accounting, StandaloneRestoreError
 
 
 ACTOR = "owner"
@@ -237,6 +239,103 @@ class AutomaticBackupTests(unittest.TestCase):
         self.assertTrue(all(0 <= revision <= 8 for revision in revisions))
         self.assertEqual(self.store.read(
             actor=ACTOR, accounts=ACCOUNTS)["revision"], 8)
+
+    def test_completion_manifest_is_last_published_and_versioned(self):
+        LocalCompanyIdentity(self.root).add_user(
+            "synthetic-owner", "SyntheticPasswordForBackupTest", "admin")
+        StandaloneAccountingTemplateStore(self.root).save(
+            "issuer", "Synthetic issuer", {"format": "madar-issuer-profile-v1",
+            "profile": {"legalName": "Synthetic Company"}})
+        source = self.manager.backup_now()
+        manifest = source.with_suffix('.manifest.json')
+        self.assertTrue(manifest.is_file())
+        document = json.loads(manifest.read_text(encoding='utf-8'))
+        self.assertEqual(document['version'], 1)
+        self.assertEqual(set(document['files']), {'sqlite', 'users', 'templates'})
+        target = self.root / 'verified-restore'
+        target.mkdir()
+        restored = restore_standalone_accounting(source, target / 'standalone-accounting.sqlite3',
+                                                 plaintext_acknowledged=True, offline_acknowledged=True)
+        self.assertTrue(restored.is_file())
+        self.assertTrue((target / 'local-users.json').is_file())
+        self.assertTrue((target / 'invoice-templates.json').is_file())
+
+    def test_missing_declared_identity_companion_refuses_partial_transfer(self):
+        LocalCompanyIdentity(self.root).add_user(
+            "synthetic-owner", "SyntheticPasswordForBackupTest", "admin")
+        source = self.manager.backup_now()
+        source.with_suffix('.users.json').unlink()
+        target = self.root / 'partial-restore'
+        target.mkdir()
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, target / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_missing_template_or_changed_companion_refuses_partial_transfer(self):
+        StandaloneAccountingTemplateStore(self.root).save(
+            "issuer", "Synthetic issuer", {"format": "madar-issuer-profile-v1",
+            "profile": {"legalName": "Synthetic Company"}})
+        source = self.manager.backup_now()
+        companion = source.with_suffix('.templates.json')
+        original = companion.read_bytes()
+        destination = self.root / 'missing-template-restore'
+        destination.mkdir()
+        companion.unlink()
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, destination / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+        self.assertEqual(list(destination.iterdir()), [])
+        companion.write_bytes(original + b' ')
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, destination / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+
+    def test_unpublished_or_unknown_manifest_refuses_automatic_restore(self):
+        source = self.manager.backup_now()
+        manifest = source.with_suffix('.manifest.json')
+        destination = self.root / 'unpublished-restore'
+        destination.mkdir()
+        manifest.unlink()
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, destination / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+        manifest.write_text('{"version":999}', encoding='utf-8')
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, destination / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+        self.assertEqual(list(destination.iterdir()), [])
+
+    def test_manifest_publication_interruption_retains_previous_complete_copy(self):
+        LocalCompanyIdentity(self.root).add_user(
+            'synthetic-owner', 'SyntheticPasswordForBackupTest', 'admin')
+        original = self.manager.backup_now()
+        original_names = [original, original.with_suffix('.users.json'),
+                          original.with_suffix('.manifest.json')]
+        original_bytes = [p.read_bytes() for p in original_names]
+        link = manifest_module.os.link
+
+        def fail_only_final_marker(source, destination, *args, **kwargs):
+            if str(destination).endswith('.manifest.json'):
+                raise OSError('synthetic interruption before final completion')
+            return link(source, destination, *args, **kwargs)
+
+        with patch.object(manifest_module.os, 'link', side_effect=fail_only_final_marker):
+            with self.assertRaisesRegex(OSError, 'synthetic interruption'):
+                self.manager.backup_now()
+        self.assertEqual(self.files(), [original])
+        self.assertEqual([p.read_bytes() for p in original_names], original_bytes)
+        self.assertFalse(list(self.manager.folder.glob('*.tmp')))
+
+    def test_undeclared_companion_rejected_even_when_sqlite_is_valid(self):
+        source = self.manager.backup_now()
+        source.with_suffix('.users.json').write_bytes(b'{}')
+        destination = self.root / 'undeclared-restore'
+        destination.mkdir()
+        with self.assertRaises(StandaloneRestoreError):
+            restore_standalone_accounting(source, destination / 'standalone-accounting.sqlite3',
+                                          plaintext_acknowledged=True, offline_acknowledged=True)
+        self.assertEqual(list(destination.iterdir()), [])
 
 
 if __name__ == "__main__":

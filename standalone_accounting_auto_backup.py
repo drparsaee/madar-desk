@@ -24,6 +24,7 @@ from standalone_accounting_backup import (
     backup_standalone_accounting,
 )
 from standalone_accounting_restore import _check_input
+from standalone_accounting_backup_manifest import publish_completion_manifest
 
 
 BACKUP_FOLDER = "standalone-accounting-backups"
@@ -194,6 +195,16 @@ class AutomaticStandaloneBackups:
                         user_companion.unlink(missing_ok=True)
                         created.unlink(missing_ok=True)
                         raise
+                    # The manifest is the completion gate. An interrupted
+                    # automatic snapshot must never pass as SQLite-only legacy.
+                    try:
+                        publish_completion_manifest(created)
+                    except BaseException:
+                        created.with_suffix('.manifest.json').unlink(missing_ok=True)
+                        companion.unlink(missing_ok=True)
+                        user_companion.unlink(missing_ok=True)
+                        created.unlink(missing_ok=True)
+                        raise
                     candidates = self._managed_files()
                     if created not in candidates:
                         raise AutomaticBackupError("Published backup disappeared before rotation")
@@ -208,6 +219,7 @@ class AutomaticStandaloneBackups:
                         # Orphan companions after a later failure are safer
                         # than stripping a still-restorable SQLite snapshot.
                         obsolete.unlink()
+                        obsolete.with_suffix('.manifest.json').unlink(missing_ok=True)
                         obsolete.with_suffix('.templates.json').unlink(missing_ok=True)
                         obsolete.with_suffix('.users.json').unlink(missing_ok=True)
                 self.last_success = created
