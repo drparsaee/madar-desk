@@ -693,7 +693,8 @@ class LanService:
                 # getState may return the bridge's live in-memory state. Build
                 # the unassignment on a detached copy: a failed save must not
                 # silently change what the running host currently exposes.
-                state = deepcopy(self.bridge.getState())
+                previous_state = deepcopy(self.bridge.getState())
+                state = deepcopy(previous_state)
                 updated = False
                 for task in state["tasks"]:
                     if username in task.get("assignees", []):
@@ -701,12 +702,23 @@ class LanService:
                         updated = True
                 if updated:
                     self.bridge.saveState(state)
+                # If registry persistence fails after task unassignment was
+                # saved, compensate while holding the same user/state locks.
+                # This handles ordinary errors, not a crash between files.
+                remaining_users = {key: value for key, value in self.users.items()
+                                   if key != username}
+                try:
+                    self._store_users(remaining_users)
+                except Exception:
+                    if updated:
+                        try:
+                            self.bridge.saveState(previous_state)
+                        except Exception as rollback_error:
+                            raise RuntimeError(
+                                "LAN deletion failed and task-state rollback failed"
+                            ) from rollback_error
+                    raise
             # Do not revoke a live identity until its deletion is durable.
-            # A failed registry write must not leave the running host with a
-            # different ACL from the account registry on disk.
-            remaining_users = {key: value for key, value in self.users.items()
-                               if key != username}
-            self._store_users(remaining_users)
             self.users = remaining_users
             for key, record in list(self.sessions.items()):
                 if record[0] == username:
