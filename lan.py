@@ -351,6 +351,7 @@ class LanService:
         unexpected registry revision after a failed write.
         """
         previous = self.users
+        existed = self.users_path.exists()
         try:
             self._store_users(updated)
         except Exception:
@@ -362,7 +363,10 @@ class LanService:
                 ) from inspection_error
             if observed == updated:
                 try:
-                    self._store_users(previous)
+                    if existed:
+                        self._store_users(previous)
+                    else:
+                        self.users_path.unlink()
                 except Exception as rollback_error:
                     raise RuntimeError(
                         "LAN identity save failed and registry rollback failed"
@@ -474,8 +478,7 @@ class LanService:
             account = make_account(username, password, "admin")
             account["displayRole"] = "superadmin"
             updated = {**self.users, username: account}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             return self._public_user(account)
 
     def authenticate(self, username, password, ip="127.0.0.1"):
