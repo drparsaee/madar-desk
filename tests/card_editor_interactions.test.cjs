@@ -55,7 +55,7 @@ test('full App reuses disclosure preference, offers Jalali popup, shows cover be
       const assignees=drawer.locator('#task-section-assignees');
       assert.equal(await assignees.getAttribute('open'),null);
       await assignees.locator('summary').click();
-      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')).assignees===true);
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')||'{}').assignees===true);
       await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
       await page.locator('.task-card .task-title').nth(1).click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
