@@ -1,4 +1,5 @@
-import React,{useEffect,useMemo,useRef,useState} from 'react';
+import React,{useEffect,useId,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {CalendarDays, Clock3, Copy, ExternalLink, FileText, FolderOpen, Link2, Plus, Search, Trash2, X, BarChart3} from 'lucide-react';
 import {MiniCalendar} from './mini_calendar.jsx';
 
@@ -40,14 +41,74 @@ export function CalendarField({value,onChange,calendar='jalali',disabled=false,l
  const [text,setText]=useState('');
  const [error,setError]=useState(false);
  const [pickerOpen,setPickerOpen]=useState(false);
+ const [popupStyle,setPopupStyle]=useState({top:0,left:0,visibility:'hidden'});
+ const popupId=useId();
  const container=useRef(null);
+ const popup=useRef(null);
+ const trigger=useRef(null);
+ const focusPicker=useRef(false);
  useEffect(()=>{setText(value?calendar==='jalali'?jalaliDigits(new Date(value+'T12:00:00Z')):value.replace(/-/g,'/'):'');setError(false);},[value,calendar]);
  useEffect(()=>{
    if(!pickerOpen)return;
-   const outside=event=>{if(!container.current?.contains(event.target))setPickerOpen(false);};
+   const outside=event=>{
+     if(!container.current?.contains(event.target)&&!popup.current?.contains(event.target))setPickerOpen(false);
+   };
+   const escape=event=>{
+     if(event.key==='Escape'){
+       event.preventDefault();event.stopPropagation();setPickerOpen(false);trigger.current?.focus();
+     }
+   };
    document.addEventListener('pointerdown',outside,true);
-   return()=>document.removeEventListener('pointerdown',outside,true);
+   document.addEventListener('keydown',escape,true);
+   return()=>{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};
  },[pickerOpen]);
+ useLayoutEffect(()=>{
+   if(!pickerOpen||disabled||!container.current||!popup.current)return;
+   const anchor=container.current;
+   const menu=popup.current;
+   const place=()=>{
+     const viewport=window.visualViewport;
+     const leftEdge=(viewport?.offsetLeft||0)+8;
+     const topEdge=(viewport?.offsetTop||0)+8;
+     const rightEdge=leftEdge+(viewport?.width||window.innerWidth)-16;
+     const bottomEdge=topEdge+(viewport?.height||window.innerHeight)-16;
+     const width=Math.max(0,Math.min(280,rightEdge-leftEdge));
+     const height=Math.max(0,bottomEdge-topEdge);
+     menu.style.width=width+'px';
+     menu.style.maxHeight=height+'px';
+     const rect=anchor.getBoundingClientRect();
+     const menuHeight=menu.getBoundingClientRect().height;
+     const below=bottomEdge-rect.bottom-5;
+     const above=rect.top-topEdge-5;
+     const openAbove=below<menuHeight&&above>below;
+     const desiredTop=openAbove?rect.top-menuHeight-5:rect.bottom+5;
+     const top=Math.max(topEdge,Math.min(desiredTop,bottomEdge-menuHeight));
+     const left=Math.max(leftEdge,Math.min(rect.right-width,rightEdge-width));
+     setPopupStyle(previous=>previous.top===top&&previous.left===left&&
+       previous.width===width&&previous.maxHeight===height&&previous.visibility==='visible'?previous:
+       {top,left,width,maxHeight:height,visibility:'visible'});
+   };
+   place();
+   if(focusPicker.current){
+     menu.querySelector('.madar-mini-calendar__selected, .madar-mini-calendar__today, .madar-mini-calendar__days button')?.focus();
+     focusPicker.current=false;
+   }
+   // Capture scrolling on nested drawers and panels, not just the page.
+   window.addEventListener('scroll',place,true);
+   window.addEventListener('resize',place);
+   window.visualViewport?.addEventListener('resize',place);
+   window.visualViewport?.addEventListener('scroll',place);
+   const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(place):null;
+   resizeObserver?.observe(anchor);
+   resizeObserver?.observe(menu);
+   return()=>{
+     window.removeEventListener('scroll',place,true);
+     window.removeEventListener('resize',place);
+     window.visualViewport?.removeEventListener('resize',place);
+     window.visualViewport?.removeEventListener('scroll',place);
+     resizeObserver?.disconnect();
+   };
+ },[pickerOpen,disabled,calendar]);
  const save=()=>{
    if(!text.trim()){onChange('');setError(false);return;}
    const iso=calendar==='jalali'?fromJalali(text):(/^(\d{4})[/-](\d\d?)[/-](\d\d?)$/.test(toLatin(text))?(()=>{
@@ -64,14 +125,15 @@ export function CalendarField({value,onChange,calendar='jalali',disabled=false,l
  }}><label>{label} <small>{calendar==='jalali'?'شمسی':'میلادی'}</small></label>
  <div className="calendar-field__input-wrap">
  <input dir="ltr" disabled={disabled} aria-label={label} placeholder={calendar==='jalali'?'1405/07/28':'2026/10/20'}
- value={text} onClick={()=>{if(!disabled&&popupOnClick)setPickerOpen(true);}}
+ value={text} onClick={()=>{if(!disabled&&popupOnClick){focusPicker.current=false;setPickerOpen(true);}}}
  onChange={e=>{setText(e.target.value);setError(false);}} onKeyDown={e=>e.key==='Enter'&&save()} onBlur={save}/>
- <button type="button" className="calendar-field__open" disabled={disabled}
-   title={'بازکردن تقویم '+label} aria-label={'انتخاب تاریخ '+label} aria-expanded={pickerOpen}
-   onClick={()=>setPickerOpen(open=>!open)}><CalendarDays size={16}/></button>
+ <button ref={trigger} type="button" className="calendar-field__open" disabled={disabled}
+   title={'بازکردن تقویم '+label} aria-label={'انتخاب تاریخ '+label} aria-expanded={pickerOpen} aria-controls={popupId}
+   onClick={()=>{focusPicker.current=true;setPickerOpen(open=>!open);}}><CalendarDays size={16}/></button>
  </div>
- {pickerOpen&&!disabled&&<MiniCalendar value={value} calendar={calendar} onSelect={date=>{onChange(date);setError(false);}}
-   onClose={()=>setPickerOpen(false)}/>}
+ {pickerOpen&&!disabled&&createPortal(<MiniCalendar id={popupId} popupRef={popup} popupStyle={popupStyle}
+   value={value} calendar={calendar} onSelect={date=>{onChange(date);setError(false);}}
+   onClose={()=>{setPickerOpen(false);trigger.current?.focus();}}/>,document.body)}
  {error&&<small className="field-error">تاریخ معتبر نیست؛ مانند {calendar==='jalali'?'1405/07/28':'2026/10/20'} وارد کنید.</small>}
  </div>;
 }
