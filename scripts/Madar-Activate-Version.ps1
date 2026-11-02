@@ -3,7 +3,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$InstallRoot,
     [Parameter(Mandatory=$true)][string]$Version,
-    [Parameter(Mandatory=$true)][string]$ExpectedSHA256
+    [Parameter(Mandatory=$true)][string]$ExpectedSHA256,
+    [switch]$AllowRollback
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -45,7 +46,9 @@ if ($actual -ine $ExpectedSHA256) {throw 'Target program integrity verification 
 if (Test-Path -LiteralPath $pointer) {
     $previous=(Get-Content -LiteralPath $pointer -Raw).Trim()
     if ($previous -cnotmatch '^\d+\.\d+\.\d+$') {throw 'Existing version pointer is malformed.'}
-    if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot ('versions\'+$previous+'\Madar-Desk.exe')) -PathType Leaf)) {
+    $previousExe=Join-Path $InstallRoot ('versions\'+$previous+'\Madar-Desk.exe')
+    AssertNoReparsePoints $previousExe
+    if (-not (Test-Path -LiteralPath $previousExe -PathType Leaf)) {
         throw 'Current installed version missing; refusing unsafe switch.'
     }
     if ($previous -ceq $Version) {
@@ -53,6 +56,12 @@ if (Test-Path -LiteralPath $pointer) {
         # older version stored in previous-version.txt.
         Write-Output ('VERSION_ALREADY_ACTIVE: '+$Version)
         exit 0
+    }
+    # A normal installer must not silently take users from 1.0.9 to an older
+    # program. Operator-directed recovery can use -AllowRollback after
+    # independently verifying the rollback EXE digest supplied above.
+    if (([Version]$Version -lt [Version]$previous) -and -not $AllowRollback) {
+        throw ('Downgrade from '+$previous+' to '+$Version+' requires explicit rollback.')
     }
 }
 $tmp=Join-Path $InstallRoot ('current-version-'+[guid]::NewGuid().ToString('N')+'.tmp')

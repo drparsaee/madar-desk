@@ -76,7 +76,9 @@ CreateUninstallRegKey=no
 
 [Files]
 ; Immutable side-by-side binary. Old installed versions and all APPDATA remain.
-Source: "..\release\{#ExeFile}"; DestDir: "{app}\versions\{#MadarVersion}"; DestName: "Madar-Desk.exe"; Flags: ignoreversion
+; A same-version reinstall must never overwrite an existing binary. The
+; activation helper checks its SHA256 and refuses a mismatched preexisting EXE.
+Source: "..\release\{#ExeFile}"; DestDir: "{app}\versions\{#MadarVersion}"; DestName: "Madar-Desk.exe"; Flags: onlyifdoesntexist
 Source: "Run-Madar.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Madar-Upgrade-Preflight.ps1"; Flags: dontcopy
 Source: "Madar-Activate-Version.ps1"; Flags: dontcopy
