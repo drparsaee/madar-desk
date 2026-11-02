@@ -1423,6 +1423,15 @@ class LanService:
                 token = self.headers.get("Authorization", "").removeprefix("Bearer ")
                 payload = {}
                 if self.command == "POST":
+                    # Do not spend up to 16 MB decoding anonymous JSON before
+                    # the destination's normal token/ACL check. Close this
+                    # connection because the denied request body is unread.
+                    if endpoint != "/api/login":
+                        try:
+                            service.account_for(token)
+                        except PermissionError as error:
+                            self.close_connection = True
+                            return self.reply(403, {"error": str(error)})
                     # Always validate the byte limit before reading POST bodies.
                     # Returning 415 with an unread body can cause Windows TCP
                     # to reset the connection before the client receives JSON.

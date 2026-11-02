@@ -62,6 +62,43 @@ class LanLoginResourceLimits(unittest.TestCase):
         self.assertEqual(status, 413)
         self.assertFalse(self.service.sessions)
 
+    def test_unauthenticated_nonlogin_post_is_rejected_before_json_parse(self):
+        port = self.service.start()
+        self.addCleanup(self.service.stop)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        # The body is deliberately malformed and larger than the login budget.
+        # Authorization must fail before a non-login endpoint parses it.
+        body = b"{" + b"x" * 70000
+        try:
+            conn.request("POST", "/api/state", body=body,
+                         headers={"Content-Type": "application/json",
+                                  "Authorization": "Bearer invalid-synthetic-token"})
+            response = conn.getresponse()
+            status = response.status
+            response.read()
+        finally:
+            conn.close()
+        self.assertEqual(status, 403)
+        self.assertFalse(self.service.sessions)
+
+    def test_authenticated_post_still_decodes_json_and_applies_profile(self):
+        token = self.service.authenticate("synthetic-owner", "synthetic-password-2026")["token"]
+        port = self.service.start()
+        self.addCleanup(self.service.stop)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            conn.request("POST", "/api/profile",
+                         body=json.dumps({"displayName": "Synthetic Owner"}).encode(),
+                         headers={"Content-Type": "application/json",
+                                  "Authorization": "Bearer " + token})
+            response = conn.getresponse()
+            status = response.status
+            result = json.loads(response.read())
+        finally:
+            conn.close()
+        self.assertEqual(status, 200)
+        self.assertEqual(result["user"]["displayName"], "Synthetic Owner")
+
 
 if __name__ == "__main__":
     unittest.main()
