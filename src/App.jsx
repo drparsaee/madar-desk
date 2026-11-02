@@ -370,7 +370,11 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       <div className="edit-section"><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
         <div className="step-list">{task.checklist.map(c=><div className="task-compact-step" key={c.id}>
           <div className="step-row">
-            <button disabled={!canEdit} className={'step-check '+(c.done?'checked':'')} aria-label={'تغییر وضعیت '+c.text} onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>{c.done&&<Check size={14}/>}</button>
+            <button type="button" disabled={!canEdit} className={'step-check '+(c.done?'checked':'')}
+              aria-label={'تغییر وضعیت '+c.text} aria-pressed={Boolean(c.done)}
+              onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>
+              {c.done&&<Check size={14}/>}
+            </button>
             <span className={c.done?'completed':''}>{c.text}</span>
             <button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button>
           </div>
