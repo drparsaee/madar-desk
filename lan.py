@@ -395,6 +395,37 @@ class LanService:
             marker.unlink()
             self._delete_recovery_required = False
 
+    def _publish_users(self, updated):
+        """Keep live identities consistent with an existing on-disk registry.
+
+        Atomic publication may succeed before a writer reports a later error.
+        Only compensate an exact copy of our candidate; never replace an
+        unexpected registry revision after a failed write.
+        """
+        previous = self.users
+        try:
+            self._store_users(updated)
+        except Exception:
+            try:
+                observed = self._read_users()
+            except Exception as inspection_error:
+                raise RuntimeError(
+                    "LAN identity save failed; persisted registry could not be inspected"
+                ) from inspection_error
+            if observed == updated:
+                try:
+                    self._store_users(previous)
+                except Exception as rollback_error:
+                    raise RuntimeError(
+                        "LAN identity save failed and registry rollback failed"
+                    ) from rollback_error
+            elif observed != previous:
+                raise RuntimeError(
+                    "LAN identity save failed; unexpected registry revision prevents rollback"
+                )
+            raise
+        self.users = updated
+
     def _read_display_roles(self):
         defaults = default_roles()
         if not self.display_roles_path.exists():
@@ -417,6 +448,37 @@ class LanService:
             raise ValueError("Required display roles are missing")
         return roles
 
+    def _publish_display_roles(self, updated):
+        """Compensate a catalog write that publishes before reporting failure."""
+        path = self.display_roles_path
+        previous = json.loads(path.read_text(encoding="utf8")) if path.exists() else None
+        candidate = {"version": 1, "roles": list(updated.values())}
+        try:
+            atomic_json(path, candidate)
+        except Exception:
+            try:
+                observed = json.loads(path.read_text(encoding="utf8")) if path.exists() else None
+            except Exception as inspection_error:
+                raise RuntimeError(
+                    "LAN display role save failed; persisted catalog could not be inspected"
+                ) from inspection_error
+            if observed == candidate:
+                try:
+                    if previous is None:
+                        path.unlink()
+                    else:
+                        atomic_json(path, previous)
+                except Exception as rollback_error:
+                    raise RuntimeError(
+                        "LAN display role save failed and catalog rollback failed"
+                    ) from rollback_error
+            elif observed != previous:
+                raise RuntimeError(
+                    "LAN display role save failed; unexpected catalog revision prevents rollback"
+                )
+            raise
+        self.display_roles = updated
+
     def _public_user(self, account):
         return public_user(account, self.display_roles)
 
@@ -438,8 +500,7 @@ class LanService:
             if role["id"] not in self.display_roles and len(self.display_roles) >= MAX_ROLES:
                 raise ValueError("Display role catalog limit reached")
             updated = {**self.display_roles, role["id"]: role}
-            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
-            self.display_roles = updated
+            self._publish_display_roles(updated)
             return public_role(role)
 
     def delete_display_role(self, token, role_id):
@@ -455,8 +516,7 @@ class LanService:
                    for account in self.users.values()):
                 raise ValueError("Display role is assigned to an account")
             updated = {k: v for k, v in self.display_roles.items() if k != role_id}
-            atomic_json(self.display_roles_path, {"version": 1, "roles": list(updated.values())})
-            self.display_roles = updated
+            self._publish_display_roles(updated)
             return True
 
     def setup_owner(self, username, password):
@@ -583,8 +643,7 @@ class LanService:
             who = self.account_for(token)
             account = {**who, **clean_profile(payload, who)}
             updated = {**self.users, who["username"]: account}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             return self._public_user(account)
 
     def current_user(self, token):
@@ -598,8 +657,7 @@ class LanService:
                 raise PermissionError("رمز فعلی درست نیست.")
             updated = {**self.users, who["username"]: {
                 **who, "passwordHash": password_hash(new_password)}}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             # Other sessions are revoked, current session is kept.
             for key, item in list(self.sessions.items()):
                 if item[0] == who["username"] and key != token:
@@ -616,8 +674,7 @@ class LanService:
                 raise ValueError("کاربر پیدا نشد.")
             updated = {**self.users, username: {
                 **target, "passwordHash": password_hash(new_password)}}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             for key, item in list(self.sessions.items()):
                 if item[0] == username:
                     del self.sessions[key]
@@ -769,8 +826,7 @@ class LanService:
                 ):
                     raise ValueError("این کاربر هنوز مسئول کارهایی خارج از محدوده جدید است.")
             updated = {**self.users, username: account}
-            self._store_users(updated)
-            self.users = updated
+            self._publish_users(updated)
             if password and old:
                 for key, record in list(self.sessions.items()):
                     if record[0] == username:

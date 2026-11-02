@@ -105,6 +105,13 @@ async function probe(page,lane,selector,stageLabel=laneName) {
     await page.keyboard.press('Escape');
     await page.locator('.lane-actions-popover').first().waitFor({state:'hidden'});
   }
+  // A right-click on a card correctly opens its own menu. Dismiss that portal
+  // before probing a different target; the larger Trello-like menu may overlap
+  // the next button and should not be treated as an underlying hit target.
+  if(await page.locator('.madar-card-context-menu').count()) {
+    await page.keyboard.press('Escape');
+    await page.locator('.madar-card-context-menu').first().waitFor({state:'hidden'});
+  }
   await page.evaluate(()=>{window.__contextHits=[];});
   await lane.locator(selector).click({button:'right',position:{x:3,y:3}});
   await page.waitForTimeout(75);

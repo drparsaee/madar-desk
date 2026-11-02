@@ -1,7 +1,7 @@
 {
   "name": "madar-desk",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Personal offline task management for Windows",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

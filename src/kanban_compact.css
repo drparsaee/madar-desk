@@ -162,7 +162,9 @@
    hover target stays in the DOM for keyboard and pointer access. */
 .kanban .lane-insert-slot { block-size: 0; min-block-size: 0; position: relative; margin: 0; z-index: 3; }
 .kanban .lane-insert-before {
-  position: absolute; inset-inline: 7px; inset-block-start: -4px;
+  /* Do not overlap the preceding lane subtitle: the first insert target must
+     remain pointer-accessible even when the list has no leading spacer. */
+  position: absolute; inset-inline: 7px; inset-block-start: 1px;
   display: flex; align-items: center; justify-content: center; gap: 5px;
   inline-size: calc(100% - 14px); block-size: 10px; min-block-size: 10px;
   padding: 0; border: 0; border-radius: 5px;
@@ -171,7 +173,7 @@
 }
 .kanban .lane-insert-slot:is(:hover, :focus-within) .lane-insert-before,
 .kanban .lane-insert-before:focus-visible {
-  opacity: 1; block-size: 21px; inset-block-start: -11px;
+  opacity: 1; block-size: 21px; inset-block-start: 0;
   background: #d6e9fb; color: #295d9e;
 }
 .kanban .lane-insert-slot:has(.lane-quick-add) { margin-block: 5px; }
