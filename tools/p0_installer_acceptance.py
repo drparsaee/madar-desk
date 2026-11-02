@@ -74,12 +74,26 @@ def main():
         require({name: zipped.read(name) for name in before} == before,
                 "snapshot contents differ from original profile bytes")
     activate = ROOT / "scripts" / "Madar-Activate-Version.ps1"
-    for target, expected_hash in (("1.0.2", sha(old_exe)), (VER, sha(new_exe))):
-        run = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive",
-            "-ExecutionPolicy", "Bypass", "-File", str(activate),
-            "-InstallRoot", str(install), "-Version", target,
-            "-ExpectedSHA256", expected_hash], cwd=ROOT,
-            capture_output=True, text=True, timeout=30)
+    def switch(target, expected_hash, *, allow_rollback=False):
+        args = ["powershell.exe", "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", str(activate),
+                "-InstallRoot", str(install), "-Version", target,
+                "-ExpectedSHA256", expected_hash]
+        if allow_rollback:
+            args.append("-AllowRollback")
+        return subprocess.run(args, cwd=ROOT, capture_output=True,
+                              text=True, timeout=30)
+
+    # A normal updater must refuse implicit downgrade. The test's intentional
+    # rollback is an explicitly authorized, hash-verified recovery operation.
+    denied = switch("1.0.2", sha(old_exe))
+    require(denied.returncode != 0 and "requires explicit rollback" in denied.stderr,
+            "silent downgrade was not rejected")
+    require((install / "current-version.txt").read_text().strip() == VER,
+            "denied downgrade modified the active version pointer")
+    for target, expected_hash, rollback in (("1.0.2", sha(old_exe), True),
+                                            (VER, sha(new_exe), False)):
+        run = switch(target, expected_hash, allow_rollback=rollback)
         require(run.returncode == 0, "pointer rollback/forward failed: " + run.stderr)
         require((install / "current-version.txt").read_text().strip() == target,
                 "pointer does not match selected safe version")

@@ -55,9 +55,9 @@ test('calendar floats above a narrow drawer, tracks scrolling and scaled card co
       const drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
       const deadline=drawer.getByRole('textbox',{name:'موعد انجام'});
-      // The compact app's fixed quick dock can cover the input at 320px.
-      // Trigger its native click so this test isolates calendar placement.
-      await deadline.evaluate(node=>node.click());
+      // Use a real pointer click. A formerly sticky quick-actions dock could
+      // intercept this field on narrow screens even when DOM click worked.
+      await deadline.click();
       const calendar=page.getByRole('group',{name:'تقویم انتخاب تاریخ'});
       await calendar.waitFor();
       assert.equal(await calendar.locator('.madar-mini-calendar__days button').count(),42);
