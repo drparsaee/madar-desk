@@ -17,7 +17,7 @@ import json
 import mimetypes
 import msvcrt
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import secrets
 import shutil
 import re
@@ -311,6 +311,56 @@ def valid_share_path(value):
             and all(part not in (".", "..") for part in parts)
             and not any(ord(char) < 32 or char in '<>:"|?*' for char in normalized[2:])
             and not normalized.endswith("\\"))
+
+
+def windows_downloads_directory():
+    """Resolve the Windows Downloads known folder, including redirected folders."""
+    from uuid import UUID
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+    known_id = GUID.from_buffer_copy(UUID("374de290-123f-4565-9164-39c4925e467b").bytes_le)
+    folder_ptr = ctypes.c_void_p()
+    getter = ctypes.windll.shell32.SHGetKnownFolderPath
+    getter.argtypes = [ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE,
+                       ctypes.POINTER(ctypes.c_void_p)]
+    getter.restype = ctypes.c_long
+    result = getter(ctypes.byref(known_id), 0, None, ctypes.byref(folder_ptr))
+    if result != 0 or not folder_ptr.value:
+        raise OSError("پوشه دانلودهای ویندوز پیدا نشد.")
+    try:
+        return Path(ctypes.wstring_at(folder_ptr))
+    finally:
+        free = ctypes.windll.ole32.CoTaskMemFree
+        free.argtypes = [ctypes.c_void_p]
+        free.restype = None
+        free(folder_ptr)
+
+
+def copy_shared_file_to_directory(source_path, downloads_dir):
+    """Copy SMB file to Downloads without executing or overwriting existing files."""
+    filename = PureWindowsPath(source_path).name
+    if not filename or filename in (".", ".."):
+        raise ValueError("نام فایل اشتراکی معتبر نیست.")
+    directory = Path(downloads_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    suffix = PureWindowsPath(filename).suffix
+    stem = filename[:-len(suffix)] if suffix else filename
+    with open(source_path, "rb") as source:
+        for counter in range(10000):
+            candidate = directory / (filename if counter == 0 else f"{stem} ({counter}){suffix}")
+            try:
+                destination = candidate.open("xb")
+            except FileExistsError:
+                continue
+            try:
+                with destination:
+                    shutil.copyfileobj(source, destination)
+            except BaseException:
+                candidate.unlink(missing_ok=True)
+                raise
+            return {"downloaded": True, "name": candidate.name, "path": str(candidate)}
+    raise FileExistsError("نام آزاد برای ذخیره فایل در Downloads پیدا نشد.")
 
 
 def validate_links(links):
@@ -806,6 +856,13 @@ class Bridge:
                                     "widgetSettings": widget}), encoding="utf8")
         temp.replace(self.preferences_path)
         return self.getPreferences()
+
+    def downloadSharedFile(self, path):
+        if not valid_share_path(path):
+            raise ValueError('مسیر فایل اشتراکی معتبر نیست.')
+        if sys.platform != 'win32':
+            raise RuntimeError('دانلود فایل اشتراکی فقط در ویندوز فعال است.')
+        return copy_shared_file_to_directory(path.replace('/', '\\'), windows_downloads_directory())
 
     def openSharedFile(self, path):
         if not valid_share_path(path):
@@ -2768,7 +2825,7 @@ window.madar = Object.fromEntries(
   'lanStatus','lanDiscover','hostServiceStatus','lanHost','lanJoin','lanLeave','lanUsers','lanSaveUser','lanDeleteUser',
   'lanDisplayRoles','lanSaveDisplayRole','lanDeleteDisplayRole',
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
-  'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','chooseSharedFile','attachmentSave','releaseCheck','releaseDownload','releaseInstall','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
+  'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','downloadSharedFile','chooseSharedFile','attachmentSave','releaseCheck','releaseDownload','releaseInstall','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
   .concat(['collabRead','collabCommand','automationButtonsList',
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',

@@ -77,11 +77,20 @@ export function similarTasks(title,tasks,exclude=''){
  }).filter(x=>x.score>=0.25).sort((a,b)=>b.score-a.score).slice(0,4);
 }
 const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
-export const pathValid=path=>/^\\\\[^\\/:*?"<>|\s]+\\[^\\/:*?"<>|\s]+\\[^\x00-\x1f]+$/.test(path)&&!path.split('\\').some(x=>x==='..'||x==='.')&&!path.endsWith('\\');
+export const pathValid=path=>{
+ if(typeof path!=='string'||path.length>2048)return false;
+ const normalized=path.replace(/\//g,'\\');
+ if(!normalized.startsWith('\\\\')||normalized.startsWith('\\\\?\\')||normalized.startsWith('\\\\.\\'))return false;
+ const parts=normalized.slice(2).split('\\');
+ return parts.length>=3&&parts.slice(0,3).every(Boolean)&&
+   !parts.some(part=>part==='.'||part==='..')&&
+   !/[<>:"|?*\x00-\x1f]/.test(normalized.slice(2))&&!normalized.endsWith('\\');
+};
 
 export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
  const [name,setName]=useState(''),[path,setPath]=useState(''),[message,setMessage]=useState('');
  const open=async p=>{setMessage('');try{await api.openSharedFile(p);}catch(e){setMessage('بازکردن فایل ممکن نشد: '+e.message);}};
+ const download=async p=>{setMessage('');try{const result=await api.downloadSharedFile(p);setMessage('فایل در پوشه دانلودهای این سیستم ذخیره شد: '+result.name);}catch(e){setMessage('دانلود فایل ممکن نشد: '+e.message);}};
  const choose=async()=>{setMessage('');try{const file=await api.chooseSharedFile();if(!file.canceled){setPath(file.path);setName(file.name);}}catch(e){setMessage('انتخاب فایل ممکن نشد: '+e.message);}};
  const add=()=>{if(!pathValid(path)){setMessage('مسیر معتبر نمونه: \\\\OFFICE-PC\\Projects\\file.pdf');return;}
    if(!name.trim()){setMessage('عنوان فایل را وارد کنید.');return;}
@@ -89,7 +98,8 @@ export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
  };
  return <div className="shared-links">
  {links.map(item=><div className="shared-item" key={item.id}><FileText size={16}/>
-   <button className="shared-open" onClick={()=>open(item.path)} title={item.path}><strong>{item.name}</strong><small dir="ltr">{item.path}</small></button>
+   <button className="shared-open" onClick={()=>download(item.path)} title={'دانلود فایل: '+item.path}><strong>{item.name}</strong><small dir="ltr">{item.path}</small></button>
+   <button title="دانلود روی این سیستم" onClick={()=>download(item.path)}>دانلود</button>
    <button title="نمایش در File Explorer" onClick={()=>open(item.path)}><FolderOpen size={16}/></button>
    {canEdit&&<button title="حذف لینک" onClick={()=>onChange(links.filter(x=>x.id!==item.id))}><X size={15}/></button>}
  </div>)}
