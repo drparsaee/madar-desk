@@ -57,6 +57,21 @@ test('card editor all native disclosures and exact user-specified toolbar and DO
   assert.match(body,/id="task-section-settings"/);
   assert.match(app,/onArchive=\{\(\)=>archiveTask\(activeTask\.id\)\}/);
 });
+test('board automation buttons live in Settings and remain readable for viewers',()=>{
+  const {SettingsPanel}=load('src/features.jsx');
+  const data={tasks:[],stages:[{id:'todo',label:'انجام‌دادنی',color:'#64748B'}],
+    settings:{theme:'dark',costDefault:false}};
+  const html=renderToStaticMarkup(React.createElement(SettingsPanel,{
+    data,boardId:'board-synthetic',priorityUsedIds:[],canManage:false,
+    onCalendarChange:()=>{},onChange:()=>{},onClose:()=>{},onOpenBoardButtons:()=>{}
+  }));
+  assert.match(html,/تنظیمات مدار/);
+  assert.match(html,/دکمه‌های برد/);
+  assert.match(html,/<button[^>]*>دکمه‌های برد<\/button>/);
+  const app=text('src/App.jsx');
+  assert.match(app,/onOpenBoardButtons=\{\(\)=>\{setSettingsOpen\(false\);setAutomationButtonsScope\('board'\);\}\}/);
+  assert.doesNotMatch(app,/<div className="page-controls"[^<]*<AutomationButtonsLauncher scope="board"/);
+});
 test('legacy Toman conversion control is gone, old nonzero money is not silently rewritten',()=>{
   const source=text('src/order_finance_fields.jsx');
   assert.doesNotMatch(source,/تبدیل مبلغ قدیمی تومان به ریال/);
