@@ -199,7 +199,7 @@ class UpgradeTests(unittest.TestCase):
     def test_real_writer_still_blocks_even_when_installer_processes_exist(self):
         # Do not solve the false positive by disabling the protection.
         for writer in ("Madar-Desk", "Madar-Desk-v1.0.4-RC",
-                       "Madar-Desk-live", "MadarHost"):
+                       "Madar-Desk-live"):
             with self.subTest(writer=writer):
                 backup = self.base / ("Reject_" + writer)
                 command = (
@@ -217,6 +217,22 @@ class UpgradeTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn("Close all Madar", result.stderr)
                 self.assertFalse(backup.exists())
+
+    def test_dedicated_madarhost_is_not_interrupted_by_desktop_only_update(self):
+        backup = self.base / "HostStaysOnline"
+        command = (
+            "function Get-Process { @([pscustomobject]@{ProcessName='MadarHost'}) }; "
+            f"& '{PREFLIGHT}' -DataRoot '{self.data}' "
+            f"-BackupRoot '{backup}' -TargetVersion '1.0.5'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=35)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BACKUP_VERIFIED", result.stdout)
+        archive, = list(backup.glob("Madar-Before-1.0.5-*.zip"))
+        with ZipFile(archive) as zipped:
+            self.assertEqual({name: zipped.read(name) for name in self.before}, self.before)
 
     def test_volume_root_paths_fail_closed_even_after_normalization(self):
         # Never pass a mounted drive's root to the old implementation: use an

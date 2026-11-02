@@ -136,6 +136,11 @@ const mockBridge={
   getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
+  chooseSharedFile:async()=>{throw Error('انتخاب مسیر SMB فقط در EXE ویندوز فعال است.');},
+  attachmentSave:async()=>{throw Error('ذخیره پیوست فقط در EXE ویندوز فعال است.');},
+  releaseCheck:async()=>({available:false,current:packageInfo.version}),
+  releaseDownload:async()=>{throw Error('آپدیت اینترنتی فقط در EXE ویندوز فعال است.');},
+  releaseInstall:async()=>{throw Error('نصب اینترنتی فقط در EXE ویندوز فعال است.');},
   createLocalBackup:async()=>{throw Error('نسخه پشتیبان داخلی فقط در EXE فعال است.');},
   listLocalBackups:async()=>[],
   automaticBackupStatus:async()=>({running:false,intervalSeconds:30,complete:false,scope:null}),
@@ -675,6 +680,26 @@ export default function App(){
   const [calendar,setCalendar]=useState('jalali');
   const [widgetSettings,setWidgetSettings]=useState(DEFAULT_WIDGET_SETTINGS);
   const [toast,setToast]=useState('');
+  const [updateInfo,setUpdateInfo]=useState(null);
+  const [updateBusy,setUpdateBusy]=useState(false);
+  const [updateDownloaded,setUpdateDownloaded]=useState(false);
+  useEffect(()=>{
+    if(!isDesktop)return;
+    let mounted=true;
+    const check=()=>api.releaseCheck().then(info=>{if(mounted){setUpdateInfo(info?.available?info:null);setUpdateDownloaded(false);}}).catch(()=>{});
+    check();
+    const timer=setInterval(check,6*60*60*1000);
+    return()=>{mounted=false;clearInterval(timer);};
+  },[]);
+  const actOnUpdate=async()=>{
+    if(updateBusy)return;
+    setUpdateBusy(true);
+    try{
+      if(!updateDownloaded){await api.releaseDownload();setUpdateDownloaded(true);setToast('نسخه جدید با بررسی SHA-256 دانلود شد.');}
+      else {await api.releaseInstall();setToast('آپدیت پس از خروج کامل از مدار نصب می‌شود. برنامه را ببندید.');}
+    }catch(error){setToast('خطای آپدیت: '+(error?.message||String(error)));}
+    finally{setUpdateBusy(false);}
+  };
   const [savingError,setSavingError]=useState('');
   const [pendingRecovery,setPendingRecovery]=useState(false);
   const [draftTitle,setDraftTitle]=useState('');
@@ -1332,6 +1357,11 @@ export default function App(){
       onExit={()=>setRialJournalOpen(false)}/>
   </div>;
   return <div className="app-shell vitrea-layout">
+    {updateInfo&&<div role="status" style={{position:'fixed',bottom:16,left:16,zIndex:1500,padding:12,borderRadius:12,background:'var(--surface, #eef3fa)',color:'var(--text, #17324b)',boxShadow:'0 4px 22px #0003',display:'flex',alignItems:'center',gap:12,maxWidth:440}}>
+      <span>نسخه {updateInfo.latest} مدار منتشر شده است.</span>
+      <button type="button" className="btn primary" disabled={updateBusy} onClick={actOnUpdate}>{updateBusy?'در حال پردازش…':updateDownloaded?'نصب بعد از خروج':'دریافت آپدیت'}</button>
+      <button type="button" className="tiny-icon" aria-label="بعداً" onClick={()=>setUpdateInfo(null)}><X size={15}/></button>
+    </div>}
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">

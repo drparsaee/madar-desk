@@ -82,6 +82,7 @@ export const pathValid=path=>/^\\\\[^\\/:*?"<>|\s]+\\[^\\/:*?"<>|\s]+\\[^\x00-\x
 export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
  const [name,setName]=useState(''),[path,setPath]=useState(''),[message,setMessage]=useState('');
  const open=async p=>{setMessage('');try{await api.openSharedFile(p);}catch(e){setMessage('بازکردن فایل ممکن نشد: '+e.message);}};
+ const choose=async()=>{setMessage('');try{const file=await api.chooseSharedFile();if(!file.canceled){setPath(file.path);setName(file.name);}}catch(e){setMessage('انتخاب فایل ممکن نشد: '+e.message);}};
  const add=()=>{if(!pathValid(path)){setMessage('مسیر معتبر نمونه: \\\\OFFICE-PC\\Projects\\file.pdf');return;}
    if(!name.trim()){setMessage('عنوان فایل را وارد کنید.');return;}
    onChange([...links,{id:id(),name:name.trim().slice(0,180),path:path.replace(/\//g,'\\')}]);setName('');setPath('');setMessage('');
@@ -93,6 +94,7 @@ export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
    {canEdit&&<button title="حذف لینک" onClick={()=>onChange(links.filter(x=>x.id!==item.id))}><X size={15}/></button>}
  </div>)}
  {!links.length&&<p className="shared-empty">هنوز لینک فایل اشتراکی ثبت نشده است.</p>}
+ {canEdit&&<button type="button" className="btn secondary" onClick={choose}><FolderOpen size={15}/> انتخاب فایل از شبکه</button>}
  {canEdit&&<div className="shared-create"><input aria-label="عنوان فایل" placeholder="نام فایل یا پوشه" value={name} onChange={e=>setName(e.target.value)}/><input dir="ltr" aria-label="مسیر اشتراک ویندوز" placeholder="\\Server\Share\Folder\File.pdf" value={path} onChange={e=>setPath(e.target.value)}/><button className="btn secondary" onClick={add}><Plus size={15}/> ثبت لینک</button></div>}
  {!!message&&<div className="field-error">{message}</div>}
  <small className="shared-note">برای استفاده روی سیستم‌های دیگر، پوشه باید با Windows File Sharing به اشتراک گذاشته شده باشد و حساب ویندوز آن سیستم مجوز دسترسی داشته باشد. فایل‌ها در مدار آپلود نمی‌شوند.</small>

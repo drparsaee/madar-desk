@@ -143,6 +143,9 @@ begin
   Result := '';
   Params := '-DataRoot "' + DataRoot() + '" -BackupRoot "' + BackupRoot() +
             '" -TargetVersion "{#MadarVersion}"';
+  #ifdef QA
+  Params := Params + ' -IsolatedQA';
+  #endif
   if not RunHiddenPowerShell('Madar-Upgrade-Preflight.ps1', Params, Code) then begin
     Result := 'Could not run the pre-update safety check. Nothing was installed.';
     exit;

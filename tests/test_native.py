@@ -179,13 +179,25 @@ class NativeAppTests(unittest.TestCase):
             self.bridge.saveState(state)
 
     def test_windows_explorer_opens_share_on_local_pc(self):
-        with patch.object(native_app.subprocess, "Popen") as popen:
+        with patch.object(native_app.os.path, "isfile", return_value=True), patch.object(native_app.subprocess, "Popen") as popen:
             response = self.bridge.openSharedFile(r"\\FILESERVER\Shared\photo.jpg")
         self.assertTrue(response["opened"])
         self.assertEqual(popen.call_args.args[0][0], "explorer.exe")
         self.assertIn(r"\\FILESERVER\Shared\photo.jpg", popen.call_args.args[0])
         with self.assertRaises(ValueError):
             self.bridge.openSharedFile("https://example.org/")
+
+    def test_explorer_opens_shared_directory_and_fails_closed_missing(self):
+        path = r"\\FILESERVER\Shared\Jobs"
+        with patch.object(native_app.os.path, "isfile", return_value=False), patch.object(
+                native_app.os.path, "isdir", return_value=True), patch.object(
+                native_app.subprocess, "Popen") as popen:
+            self.assertEqual(self.bridge.openSharedFile(path)["kind"], "folder")
+            self.assertEqual(popen.call_args.args[0], ["explorer.exe", path])
+        with patch.object(native_app.os.path, "isfile", return_value=False), patch.object(
+                native_app.os.path, "isdir", return_value=False):
+            with self.assertRaises(FileNotFoundError):
+                self.bridge.openSharedFile(path)
 
     def test_local_backup_auto_and_manual_restore(self):
         original = self.bridge.getState()

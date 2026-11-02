@@ -41,7 +41,7 @@ export function CardAttachments({cardId,api,canEdit}){
   const result=await api.attachmentPreview(item.id);
   setPreview(result);
  });
- const get=async item=>run(async()=>{const result=await api.attachmentRead(item.id);download(item,result.contentBase64);});
+ const get=async item=>run(async()=>{const result=await api.attachmentSave(item.id);if(result.saved)setMessage('فایل با موفقیت در پوشه انتخابی ذخیره شد.');});
  return <div className="card-attachments">
   <div className="section-header"><h3><Paperclip size={17}/> پیوست‌های واقعی کارت ({items.length})</h3><button className="tiny-icon" disabled={busy} onClick={()=>refresh().catch(e=>setMessage(e.message))}><RefreshCw size={15}/></button></div>
   <p className="attachment-warning">فایل در دستگاه میزبان نگهداری می‌شود. هنگام خاموشی میزبان یا بدون دسترسی شبکه، پیوست‌ها قابل دریافت نیستند. همگام‌سازی Google Drive فقط شامل داده‌های کار است، نه این فایل‌ها.</p>
