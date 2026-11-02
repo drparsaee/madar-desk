@@ -10,8 +10,10 @@ from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -235,6 +237,32 @@ class HostBackupSchedulerTests(unittest.TestCase):
             self.scheduler.run_once()
         self.assertEqual(self.bridge.writes, 0)
         self.assertEqual(list(outside.iterdir()), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows junction regression")
+    def test_parent_junction_of_host_data_root_is_refused(self):
+        """A normal-looking child folder cannot hide an ancestor junction."""
+        with tempfile.TemporaryDirectory(prefix="madar-host-parent-junction-") as temp:
+            base = Path(temp)
+            outside = base / "outside"
+            outside.mkdir()
+            company = outside / "company"
+            company.mkdir()
+            junction = base / "redirect"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+                capture_output=True, check=False,
+            )
+            if created.returncode:
+                self.skipTest("Temporary junction creation unavailable")
+            try:
+                bridge = SyntheticBridge(junction / "company")
+                scheduler = HostBackupScheduler(bridge)
+                with self.assertRaisesRegex(HostBackupError, "root|junction|linked"):
+                    scheduler.run_once()
+                self.assertEqual(bridge.writes, 0)
+                self.assertFalse((company / "backups").exists())
+            finally:
+                junction.rmdir()
 
     def test_corrupt_or_unsupported_backup_does_not_retire_old_backups(self):
         self.assertTrue(self.scheduler.run_once())

@@ -160,7 +160,9 @@ class HostBackupScheduler:
     def _folder(self):
         folder = Path(self.bridge.backups_dir).absolute()
         data_root = Path(self.bridge.path).absolute().parent
-        if folder.parent != data_root or _linked(data_root) or not data_root.is_dir():
+        if (folder.parent != data_root or
+                any(_linked(component) for component in (data_root, *data_root.parents)) or
+                not data_root.is_dir()):
             raise HostBackupError("Backup folder must be directly inside the host data root")
         if _linked(folder) or (folder.exists() and not folder.is_dir()):
             raise HostBackupError("Backup folder is not a safe local directory")
