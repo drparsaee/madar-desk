@@ -166,6 +166,27 @@ class AutomaticBackupTests(unittest.TestCase):
         self.assertTrue(original.exists())
         self.assertEqual(max(auto._check_input(p)[0] for p in self.files()), 1)
 
+    def test_new_backup_corrupted_during_enumeration_cannot_retire_last_good_copy(self):
+        """Synthetic corruption after publication must block destructive rotation."""
+        manager = auto.AutomaticStandaloneBackups(
+            self.root, plaintext_acknowledged=True, max_backups=1)
+        original = manager.backup_now()
+        self.event(1)
+        enumerate_original = manager._managed_files
+
+        def corrupt_new_manifest():
+            candidates = enumerate_original()
+            newest = next(path for path in candidates if path != original)
+            newest.with_suffix('.manifest.json').write_text(
+                '{"synthetic":"damaged-after-publication"}', encoding='utf-8')
+            return candidates
+
+        with patch.object(manager, '_managed_files', side_effect=corrupt_new_manifest):
+            with self.assertRaises(manifest_module.BackupManifestError):
+                manager.backup_now()
+        self.assertTrue(original.is_file())
+        self.assertIsNotNone(manifest_module.verify_completion_manifest(original))
+
     def test_failed_retirement_preserves_old_sqlite_and_both_companions(self):
         """A failed unlink cannot strip identities/templates from a valid old copy."""
         LocalCompanyIdentity(self.root).add_user(

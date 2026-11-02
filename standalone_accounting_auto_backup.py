@@ -24,7 +24,9 @@ from standalone_accounting_backup import (
     backup_standalone_accounting,
 )
 from standalone_accounting_restore import _check_input
-from standalone_accounting_backup_manifest import publish_completion_manifest
+from standalone_accounting_backup_manifest import (
+    publish_completion_manifest, verify_completion_manifest,
+)
 
 
 BACKUP_FOLDER = "standalone-accounting-backups"
@@ -208,6 +210,10 @@ class AutomaticStandaloneBackups:
                     candidates = self._managed_files()
                     if created not in candidates:
                         raise AutomaticBackupError("Published backup disappeared before rotation")
+                    # The new set may have changed since its completion marker
+                    # was first published. Never retire the last good copy if
+                    # the replacement has become incomplete in the meantime.
+                    verify_completion_manifest(created)
                     # The validated new copy must not be selected for deletion,
                     # even after a clock adjustment or older timestamp.
                     for obsolete in [p for p in candidates if p != created][
