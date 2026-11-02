@@ -72,6 +72,25 @@ class UserPersistenceFailureTests(unittest.TestCase):
         self.assertEqual(self.service.current_user(self.admin), before)
         self.assertEqual(self.service.users_path.read_bytes(), disk_before)
 
+    def test_user_registry_update_never_overwrites_unowned_fixed_temp_file(self):
+        unrelated = self.service.users_path.with_name(self.service.users_path.name + ".tmp")
+        sentinel = b"unrelated-synthetic-file-do-not-clobber"
+        unrelated.write_bytes(sentinel)
+        self.service.update_profile(self.admin, {"displayName": "Synthetic updated profile"})
+        self.assertEqual(unrelated.read_bytes(), sentinel)
+        self.assertEqual(self.service.current_user(self.admin)["displayName"],
+                         "Synthetic updated profile")
+
+    def test_failed_user_deletion_keeps_account_session_and_registry(self):
+        editor_token = self.service.authenticate("editor", "synthetic-editor-password")["token"]
+        disk_before = self.service.users_path.read_bytes()
+        with patch.object(self.service, "_store_users", side_effect=OSError("synthetic disk failure")):
+            with self.assertRaises(OSError):
+                self.service.delete_user(self.admin, "editor")
+        self.assertEqual(self.service.users_path.read_bytes(), disk_before)
+        self.assertEqual(self.service.account_for(editor_token)["username"], "editor")
+        self.assertEqual(self.service.users["editor"]["role"], "editor")
+
     def test_failed_delete_preserves_user_session_and_assigned_cards(self):
         bridge = self.service.bridge
         bridge.state["tasks"] = [{"id": "card-qa", "assignees": ["editor", "admin"]}]
