@@ -690,7 +690,10 @@ class LanService:
             if username not in self.users:
                 raise ValueError("کاربر پیدا نشد.")
             with self.bridge._lock:
-                state = self.bridge.getState()
+                # getState may return the bridge's live in-memory state. Build
+                # the unassignment on a detached copy: a failed save must not
+                # silently change what the running host currently exposes.
+                state = deepcopy(self.bridge.getState())
                 updated = False
                 for task in state["tasks"]:
                     if username in task.get("assignees", []):
