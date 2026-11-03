@@ -1620,7 +1620,7 @@ export default function App(){
           {show('activity')&&<button onClick={()=>setActivityOpen(true)}><Activity size={17}/> تاریخچه فعالیت</button>}
           {show('timeDashboard')&&<button onClick={()=>{setSelected('all');setMode('time');setFilter('all');}}><Clock3 size={17}/> داشبورد زمان</button>}
           <button onClick={()=>setTrashOpen(true)}><Trash2 size={17}/> زباله‌دان <span>{trashCards.length.toLocaleString('fa-IR')}</span></button>
-          {show('trelloImport')&&<button onClick={()=>setTrelloImportOpen(true)}><FileInput size={17}/> ورود فایل Trello</button>}
+          {show('trelloImport')&&<button onClick={()=>setTrelloImportOpen(true)}><FileInput size={17}/> ورود فایل Trello / Notion</button>}
           {show('trelloImport')&&<button onClick={()=>setPortableExportOpen(true)}><ArrowDownToLine size={17}/> خروجی قابل‌انتقال</button>}
           {show('calendarInterop')&&<button onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={17}/> تبادل فایل تقویم</button>}
         </nav>
