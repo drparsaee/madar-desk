@@ -8,3 +8,17 @@
 .trello-import-body small{color:#7d899e;line-height:1.8}
 .trello-import-body .trello-error{color:#b7384f}.trello-import-actions{display:flex;justify-content:flex-end;gap:9px}
 .trello-import-actions button{padding:10px;border-radius:9px;cursor:pointer;border:1px solid #dce3ef;background:transparent;color:inherit}
+.trello-import-body label{display:grid;gap:6px;color:inherit;font-weight:650}
+.trello-import-body select{width:100%;min-height:38px;border:1px solid var(--border,#b9c8da);border-radius:8px;
+  background:var(--surface,#fff);color:inherit;padding:6px 9px}
+:root[data-theme="dark"] .trello-import-dialog{
+  --surface:#1c283a;--text:#edf3fd;--border:#465f7b;color:var(--text);background:var(--surface);
+  border:1px solid var(--border);
+}
+:root[data-theme="dark"] .trello-import-dialog header{border-color:var(--border)}
+:root[data-theme="dark"] .trello-import-body small{color:#bfcee0}
+:root[data-theme="dark"] .trello-import-body :is(input[type=file],select){
+  background:#132238;color:#edf3fd;border-color:var(--border)
+}
+:root[data-theme="dark"] .trello-import-body .trello-error{color:#ffb6c7}
+:root[data-theme="dark"] .trello-import-actions button{border-color:var(--border)}
