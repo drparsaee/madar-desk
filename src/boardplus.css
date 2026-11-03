@@ -11,7 +11,7 @@
 .advanced-filter{position:relative;z-index:20}
 .filter-toggle{display:flex;align-items:center;gap:7px;border:1px solid #dce4ef;border-radius:10px;padding:11px;background:#fff;color:#677e9d;font-size:11px;white-space:nowrap}
 .filter-toggle.selected,.filter-toggle:hover{background:#edf3fc;border-color:#baccec}
-.filter-popover{position:absolute;z-index:60;left:0;top:calc(100% + 10px);width:355px;max-width:min(355px,88vw);padding:15px;background:#fff;border:1px solid #e0e7f0;border-radius:14px;box-shadow:0 18px 44px #1c386035;display:grid;gap:13px}
+.filter-popover{position:absolute;z-index:60;inset-inline-start:0;top:calc(100% + 10px);width:400px;max-width:min(400px,88vw);max-height:min(76vh,680px);overflow-y:auto;overscroll-behavior:contain;padding:15px;background:#fff;border:1px solid #e0e7f0;border-radius:14px;box-shadow:0 18px 44px #1c386035;display:grid;gap:13px}
 .filter-header{display:flex;justify-content:space-between;align-items:center;color:#3d5b80;font-size:12px}
 .filter-header strong{display:flex;align-items:center;gap:8px}
 .filter-header button{background:transparent;color:#90a0b2}
@@ -26,6 +26,30 @@
 .saved-searches>div{display:flex;align-items:center;justify-content:space-between;background:#f6f9fc;border-radius:8px}
 .saved-searches button{padding:6px 9px;background:transparent;color:#607da5;font-size:11px}
 .clear-filters{display:flex;gap:6px;align-items:center;color:#a15a65;background:transparent;justify-content:center;font-size:11px}
+.filter-rule-builder{border:1px solid #dbe3ee;border-radius:10px;padding:10px;min-width:0}
+.filter-rule-builder summary{font-size:11px;font-weight:700;cursor:pointer;color:#486992}
+.filter-rule-builder[open]{display:grid;gap:9px}
+.filter-rule-builder small{font-size:10px;color:#768ba5;line-height:1.8}
+.filter-rule-group{border:1px solid #dbe3ee;border-radius:9px;padding:9px;display:grid;gap:8px;min-width:0;background:#f8fafd}
+.filter-rule-group.nested{border-inline-start:3px solid #78a5d0;background:#f1f6fc}
+.filter-rule-group-header{display:flex;justify-content:space-between;align-items:end;gap:6px}
+.filter-rule-group-header label,.filter-rule label{display:grid;gap:4px;font-size:10px;color:#58718d;min-width:0}
+.filter-rule-group :is(select,input){width:100%;min-width:0;padding:6px;border:1px solid #d4deec;border-radius:7px;color:#375678;background:#fff;font:inherit;font-size:10px}
+.filter-rule-group :is(button){color:#426caa;background:#e6efff;border-radius:7px;padding:5px 8px;font-size:10px;white-space:nowrap}
+.filter-rule-group button:disabled{opacity:.45;cursor:not-allowed}
+.filter-rule{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px;align-items:end;background:#fff;border:1px solid #e1e8f2;border-radius:8px;padding:8px;min-width:0}
+.filter-rule-value{grid-column:1 / 3}
+.filter-rule .filter-rule-remove{grid-column:2;justify-self:end}
+.filter-rule-actions{display:flex;flex-wrap:wrap;gap:7px}
+.filter-rule-error{margin:0;padding:8px;border-radius:7px;background:#fff1ef;color:#9f3e3e;font-size:11px;line-height:1.7}
+.filter-rule-builder .filter-rule-reset{color:#9f3e3e;background:#ffebe8;border-radius:6px;padding:7px;font-size:11px}
+:root[data-theme=dark] .filter-rule-builder,:root[data-theme=dark] .filter-rule-group{background:#1b2c41;border-color:#3a506c}
+:root[data-theme=dark] .filter-rule-group.nested{background:#20354c;border-inline-start-color:#689bc9}
+:root[data-theme=dark] .filter-rule{background:#16273a;border-color:#3a506c}
+:root[data-theme=dark] .filter-rule-builder summary,:root[data-theme=dark] .filter-rule-group-header label,:root[data-theme=dark] .filter-rule label{color:#c9d7e9}
+:root[data-theme=dark] .filter-rule-group :is(select,input){background:#142338;border-color:#3a506c;color:#edf3fc}
+:root[data-theme=dark] .filter-rule-group button{color:#d6e6ff;background:#294362}
+:root[data-theme=dark] .filter-rule-error{background:#4b252e;color:#ffcbcb}
 .rich-description{display:grid;gap:6px}
 .rich-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:4px;background:#f5f8fc;padding:6px;border:1px solid #e2e9f1;border-radius:9px}
 .rich-toolbar button{display:grid;place-items:center;color:#6b7e99;background:transparent;border-radius:6px;padding:7px}
