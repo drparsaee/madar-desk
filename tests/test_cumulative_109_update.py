@@ -161,14 +161,14 @@ class Cumulative109Acceptance(unittest.TestCase):
 
 
 class Cumulative109PackagingContract(unittest.TestCase):
-    def test_default_build_entrypoint_and_updater_are_version_aligned(self):
+    def test_current_release_metadata_remains_aligned_after_109(self):
         from madar_update import CURRENT_VERSION
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual((package["version"], lock["version"],
                           lock["packages"][""]["version"], CURRENT_VERSION),
-                         ("1.0.9",) * 4)
-        self.assertIn("scripts/build_integrated_v109.py", package["scripts"]["dist:rc"])
+                         ("1.0.10",) * 4)
+        self.assertIn("scripts/build_integrated_v110.py", package["scripts"]["dist:rc"])
         self.assertEqual(package["scripts"]["dist"], "npm run dist:rc")
 
     def test_powershell_release_scripts_parse(self):
