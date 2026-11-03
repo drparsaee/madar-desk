@@ -821,10 +821,32 @@ def _partial_return(p, command, now, *, sales):
     old_gross = sum(line["unitPrice"] * qty for line, qty in zip(
         original_lines, document.get("returnedQuantities", [0] * len(original_lines))))
     new_gross = sum(line["unitPrice"] * qty for line, qty in zip(original_lines, quantities))
-    previous_discount = _rounded_share(document["discount"], old_gross, document["subtotal"])
+    if (not sales and document.get("receiptDiscountAllocation") is not None
+            and document["tax"] and
+            any(q != row["quantity"] for q, row in zip(quantities, original_lines))):
+        # The bill stores document-level tax only. Guessing per-line VAT on a
+        # partial vendor credit can misstate 5200; a complete return reverses
+        # the original posted tax exactly.
+        raise ValueError("Taxed per-line purchase partial return requires source-approved tax allocation")
+    # Stock receipts with a recorded per-line allocation cannot use
+    # the original invoice-wide gross proration for a later credit note.
+    # Reversing stock before the return keeps inventory and this GL correction
+    # independent, and cumulative integer shares avoid double rounding.
+    line_policy = document.get("receiptDiscountAllocation") if not sales else None
+    if line_policy is not None:
+        before_quantities = document.get("returnedQuantities", [0] * len(original_lines))
+        previous_discount = sum(_rounded_share(share, q, row["quantity"])
+                                for share, q, row in zip(line_policy["lineDiscounts"],
+                                                         before_quantities, original_lines))
+        total_discount_returned = sum(_rounded_share(share, q, row["quantity"])
+                                      for share, q, row in zip(line_policy["lineDiscounts"],
+                                                               quantities, original_lines))
+    else:
+        previous_discount = _rounded_share(document["discount"], old_gross, document["subtotal"])
+        total_discount_returned = _rounded_share(document["discount"], new_gross, document["subtotal"])
     previous_tax = _rounded_share(document["tax"], old_gross, document["subtotal"])
     gross = new_gross - old_gross
-    discount = _rounded_share(document["discount"], new_gross, document["subtotal"]) - previous_discount
+    discount = total_discount_returned - previous_discount
     tax = _rounded_share(document["tax"], new_gross, document["subtotal"]) - previous_tax
     amount = gross - discount + tax
     if amount <= 0:
@@ -1267,6 +1289,9 @@ def _run(p, command, role, now, *, finance_edit=False):
                     quantity = _int(command.get("quantity"), "inventory quantity", positive=True)
                     if prior + quantity > available:
                         raise ValueError("Inventory movement exceeds unreturned document quantity")
+        if (kind == "inventory.receive" and
+                command.get("discountAllocation") == "per-line-exact" and role != "admin"):
+            raise PermissionError("Exact purchase discount allocation requires administrator")
         if kind == "inventory.reverse" and role != "admin":
             movement_id = command.get("movementId")
             movement = (p["stockMovements"].get(movement_id)
