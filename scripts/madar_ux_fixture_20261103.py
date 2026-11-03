@@ -10,6 +10,7 @@ from accounting_core import (
     apply_accounting_command,
     empty_rial_accounting_state,
 )
+from standalone_financial_report_host import attach_verified_reports
 
 
 def main():
@@ -38,6 +39,9 @@ def main():
         "capabilities": {"canManage": True, "canDraft": True, "canAdmin": True},
         "currentUser": {"username": "uxqa", "role": "admin", "jobTitle": "آزمون رابط"},
     }
+    # Attach the exact production read-only report projection, so keyboard
+    # tests exercise real report controls without fabricating financial sums.
+    payload = attach_verified_reports(payload)
     print(json.dumps(payload, ensure_ascii=False))
 
 
