@@ -82,6 +82,60 @@ def _put_fifo(bucket, source, quantity, unit_cost, h):
     return amount
 
 
+def _explicit_bill_line_discounts(bill, command, h):
+    """Accept only the operator's complete indexed allocation, never guess one."""
+    declared = command.get("lineDiscounts")
+    if type(declared) is not list or len(declared) != len(bill["lines"]):
+        raise ValueError("Exact discount allocation requires every purchase line")
+    allocation = []
+    for index, (entry, source_line) in enumerate(zip(declared, bill["lines"])):
+        h["object"](entry, ("lineIndex", "amount"))
+        if type(entry["lineIndex"]) is not int or entry["lineIndex"] != index:
+            raise ValueError("Discount allocations must use ordered unique lineIndex values")
+        amount = h["int"](entry["amount"], "line discount")
+        if amount > source_line["total"]:
+            raise ValueError("Line discount exceeds purchase line amount")
+        allocation.append(amount)
+    if sum(allocation) != bill["discount"]:
+        raise ValueError("Line discounts must equal the posted purchase discount")
+    policy = {"lineDiscounts": allocation,
+              "allocationReference": h["id"](command.get("allocationReference"),
+                                                "allocationReference"),
+              "allocationReason": h["text"](command.get("allocationReason"),
+                                               "allocationReason", limit=1000)}
+    existing = bill.get("receiptDiscountAllocation")
+    if existing is not None and policy != existing:
+        raise ValueError("Purchase discount allocation differs from prior receipt")
+    return policy
+
+
+def _put_exact_discounted_fifo(bucket, source, *, first_unit, quantity,
+                               full_quantity, gross_unit_price, discount, helpers):
+    """Allocate total integer net cost with deterministic high-unit-first FIFO.
+
+    Works across multiple partial receipts, with the same first-unit index
+    independent of warehouse. Every unit remains integer and all costs sum to
+    full_quantity * gross_unit_price - discount without floating point.
+    """
+    if full_quantity <= 0 or not 0 <= first_unit < full_quantity or first_unit + quantity > full_quantity:
+        raise ValueError("Invalid remaining inventory allocation interval")
+    net = full_quantity * gross_unit_price - discount
+    base, high_count = divmod(net, full_quantity)
+    if base <= 0:
+        raise ValueError("Zero-cost units require separate reviewed valuation policy")
+    higher = max(0, min(first_unit + quantity, high_count) - first_unit)
+    batches = []
+    if higher:
+        batches.append({"quantity": higher, "unitCost": base + 1})
+    if quantity - higher:
+        batches.append({"quantity": quantity - higher, "unitCost": base})
+    value = sum(_put_fifo(bucket, source, part["quantity"], part["unitCost"], helpers)
+                for part in batches)
+    if value <= 0:
+        raise ValueError("Inventory receipt has no positive carrying value")
+    return value, batches
+
+
 def pending_goods_issues(projection, *, through_date=None):
     """Outstanding stock-tracked sales quantity before a financial cutoff.
 
@@ -192,11 +246,16 @@ def apply_extended(p, c, now, *, helpers):
         bucket = _stock_bucket(p, wid, item_id)
         moved = move["value"]
         if move["type"] in ("inventory.receive", "inventory.opening"):
-            source_label = move.get("billId", source_id)
+            source_label = move.get("fifoSource", move.get("billId", source_id))
             available = sum(x["quantity"] for x in bucket["layers"]
                             if x["source"] == source_label)
             if available < move["quantity"]:
                 raise ValueError("Received stock was consumed; reverse subsequent issues first")
+            if move.get("fifoSource") is not None:
+                exact_value = sum(x["quantity"] * x["unitCost"] for x in bucket["layers"]
+                                  if x["source"] == source_label)
+                if available != move["quantity"] or exact_value != moved:
+                    raise ValueError("Receipt FIFO layer values differ from movement; reversal denied")
             remaining = move["quantity"]
             for layer in bucket["layers"]:
                 if layer["source"] == source_label and remaining:
@@ -265,7 +324,8 @@ def apply_extended(p, c, now, *, helpers):
             "inventory.adjust": ("reason",),
         }[t]
         object_(c, (*common, *extra),
-                ("taxTreatment", "discountAllocation") if t == "inventory.receive" else ())
+                ("taxTreatment", "discountAllocation", "lineDiscounts",
+                 "allocationReference", "allocationReason") if t == "inventory.receive" else ())
         if t in ("inventory.receive", "inventory.issue",
                  "inventory.opening", "inventory.adjust"):
             _requires_system_accounts(p, ("1300", "5300"))
@@ -290,38 +350,86 @@ def apply_extended(p, c, now, *, helpers):
                 raise ValueError("Taxed purchase receipt requires explicit taxTreatment='expense' (5200); recoverable input tax is not configured")
             if "taxTreatment" in c and c["taxTreatment"] not in ("none", "expense"):
                 raise ValueError("Unsupported tax treatment for warehouse receipt")
+            if bill["tax"]:
+                _requires_system_accounts(p, ("5200",))
             matching = [row for row in bill["lines"] if row.get("itemId") == iid]
             if len(matching) != 1:
                 raise ValueError("Purchase bill must contain one matching stock line")
             source_line = matching[0]
+            line_index = next(index for index, row in enumerate(bill["lines"])
+                              if row is source_line)
+            existing_receipts = [x for x in p["stockMovements"].values()
+                                 if x["type"] == "inventory.receive" and
+                                 x.get("billId") == bill_id]
             prior = sum(x["quantity"] for x in p["stockMovements"].values()
                         if x["type"] == "inventory.receive" and not x.get("reversed") and
                         x.get("billId") == bill_id and x["itemId"] == iid)
-            if qty + prior > source_line["quantity"]:
+            returned = bill.get("returnedQuantities", [0] * len(bill["lines"]))[line_index]
+            remaining_quantity = source_line["quantity"] - returned
+            if qty + prior > remaining_quantity:
                 raise ValueError("Warehouse receipt exceeds bill quantity")
             # Existing bill posting expenses input tax in account 5200. Do not
             # silently capitalize or call that tax recoverable. A document
             # discount on a single stock line can be allocated exactly only
             # when every purchased unit has the same integral net cost.
             discount_per_unit = 0
+            allocation_mode = c.get("discountAllocation")
             if bill["discount"]:
-                if c.get("discountAllocation") != "single-line-uniform":
-                    raise ValueError("Discounted purchase receipt requires explicit discountAllocation='single-line-uniform'")
-                if len(bill["lines"]) != 1:
-                    raise ValueError("Allocate multi-line purchase discount per item before warehouse receipt")
+                if allocation_mode not in ("single-line-uniform", "per-line-exact"):
+                    raise ValueError("Discounted purchase receipt requires explicit discountAllocation policy")
                 _requires_system_accounts(p, ("5100",))
-                if bill["discount"] % source_line["quantity"]:
-                    raise ValueError("Purchase discount per unit is fractional; verified valuation allocation required")
-                discount_per_unit = bill["discount"] // source_line["quantity"]
-            elif "discountAllocation" in c and c["discountAllocation"] != "none":
+                if allocation_mode == "single-line-uniform":
+                    if bill.get("receiptDiscountAllocation") is not None:
+                        raise ValueError("Cannot change an established receipt discount allocation")
+                    if any(k in c for k in ("lineDiscounts", "allocationReason", "allocationReference")):
+                        raise ValueError("Line discounts require per-line-exact policy")
+                    if len(bill["lines"]) != 1:
+                        raise ValueError("Allocate multi-line purchase discount per item before warehouse receipt")
+                    if bill["discount"] % source_line["quantity"]:
+                        raise ValueError("Purchase discount per unit is fractional; verified valuation allocation required")
+                    discount_per_unit = bill["discount"] // source_line["quantity"]
+                    if existing_receipts and any(x.get("discountAllocation") == "per-line-exact"
+                                                 for x in existing_receipts):
+                        raise ValueError("Cannot change established receipt discount policy")
+                else:
+                    policy = _explicit_bill_line_discounts(bill, c, h)
+                    if any(x.get("discountAllocation") != "per-line-exact"
+                           for x in existing_receipts):
+                        raise ValueError("Existing stock receipts use a different discount policy")
+                    if bill.get("receiptDiscountAllocation") is None:
+                        if any(note["direction"] == "purchase" and
+                               note["documentId"] == bill_id for note in p["returns"].values()):
+                            raise ValueError("Allocate line discounts before partial purchase returns")
+                        bill["receiptDiscountAllocation"] = policy
+            elif ("discountAllocation" in c and c["discountAllocation"] != "none") or any(
+                    k in c for k in ("lineDiscounts", "allocationReason", "allocationReference")):
                 raise ValueError("Unsupported discount allocation for undiscounted purchase")
-            unit_cost = source_line["unitPrice"] - discount_per_unit
-            if not unit_cost:
-                raise ValueError("Zero-cost stock must use explicit opening provenance")
-            if unit_cost < 0:
-                raise ValueError("Purchase discount exceeds inventory gross value")
-            moved_value = _put_fifo(bucket, bill_id, qty, unit_cost, h)
-            allocated_discount = discount_per_unit * qty
+            metadata = {}
+            if allocation_mode == "per-line-exact":
+                full_line_discount = policy["lineDiscounts"][line_index]
+                previously_returned_discount = (full_line_discount * returned * 2 +
+                                                source_line["quantity"]) // (2 * source_line["quantity"])
+                current_discount = full_line_discount - previously_returned_discount
+                # '@' cannot occur in a public bill/event ID; distinguish new
+                # receipt layers from historical billId-labelled FIFO layers.
+                fifo_source = "@receipt:" + event_id
+                moved_value, received_layers = _put_exact_discounted_fifo(
+                    bucket, fifo_source, first_unit=prior, quantity=qty,
+                    full_quantity=remaining_quantity,
+                    gross_unit_price=source_line["unitPrice"], discount=current_discount,
+                    helpers=h)
+                allocated_discount = source_line["unitPrice"] * qty - moved_value
+                metadata = {"fifoSource": fifo_source, "receivedLayers": received_layers,
+                            "discountAllocation": "per-line-exact", "lineIndex": line_index,
+                            "allocationReference": policy["allocationReference"]}
+            else:
+                unit_cost = source_line["unitPrice"] - discount_per_unit
+                if not unit_cost:
+                    raise ValueError("Zero-cost stock must use explicit opening provenance")
+                if unit_cost < 0:
+                    raise ValueError("Purchase discount exceeds inventory gross value")
+                moved_value = _put_fifo(bucket, bill_id, qty, unit_cost, h)
+                allocated_discount = discount_per_unit * qty
             gross = source_line["unitPrice"] * qty
             rows = [line("1300", debit=moved_value)]
             if allocated_discount:
@@ -329,8 +437,8 @@ def apply_extended(p, c, now, *, helpers):
             rows.append(line(source_line["accountId"], credit=gross))
             gl = post(p, event_id, t, event_id, day,
                       rows)["id"]
-            metadata = {"billId": bill_id, "allocatedDiscount": allocated_discount,
-                        "taxTreatment": "expense-account-5200" if bill["tax"] else "none"}
+            metadata.update({"billId": bill_id, "allocatedDiscount": allocated_discount,
+                             "taxTreatment": "expense-account-5200" if bill["tax"] else "none"})
         elif t == "inventory.issue":
             inv_id = ident(c["invoiceId"], "invoiceId")
             inv = p["invoices"].get(inv_id)
