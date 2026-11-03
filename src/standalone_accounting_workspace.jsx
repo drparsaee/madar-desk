@@ -1581,9 +1581,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             <AccountingVitreaHome view={view} currency={ledgerCurrency} today={today}
               canDraft={canManage||canDraft} canSettle={canManage} disabled={busy||pendingRetry}
               preferenceKey={snapshot?.currentUser?.username&&
-                (view?.companyWorkspaceId||view?.companyWorkspaceLabel)?
-                snapshot.currentUser.username+'|'+
-                  (view.companyWorkspaceId||view.companyWorkspaceLabel):''}
+                typeof view?.companyWorkspaceId==='string'&&
+                /^[a-f0-9]{32}$/.test(view.companyWorkspaceId)?
+                snapshot.currentUser.username+'|'+view.companyWorkspaceId:''}
               onNavigate={gotoTab} onNewInvoice={openQuickInvoice}/>
             <details className="sac-vtr-management-details"><summary>گزارش‌های تحلیلی و یادآورهای مدیریتی</summary>
               <AccountingManagementDashboard view={view} currency={ledgerCurrency}

@@ -17,6 +17,7 @@
 .sac-root .sac-money-debit{color:#bd263b;font-weight:750;direction:ltr;unicode-bidi:isolate}
 .sac-root .sac-money-credit{color:#147d50;font-weight:750;direction:ltr;unicode-bidi:isolate}
 .sac-root .sac-money-neutral{color:#52616a;direction:ltr;unicode-bidi:isolate}
+.sac-root .sac-workflow-actions button{min-height:44px;min-width:44px}
 .sac-root .sac-money-debit::before{content:'●';font-size:8px;margin-inline-end:5px}
 .sac-root .sac-money-credit::before{content:'●';font-size:8px;margin-inline-end:5px}
 .sac-root .sac-table-pagination{flex-wrap:wrap}

@@ -58,8 +58,8 @@ def main():
     installation = qa / "Programs" / "MadarDesk"
     old = installation / "versions" / "1.0.12" / "Madar-Desk.exe"
     old.parent.mkdir(parents=True)
-    old.write_bytes(b"MZsynthetic-v1.0.11-old-program")
-    (installation / "current-version.txt").write_text("1.0.11\n", encoding="ascii")
+    old.write_bytes(b"MZsynthetic-v1.0.12-old-program")
+    (installation / "current-version.txt").write_text("1.0.12\n", encoding="ascii")
     old_digest = digest(old)
     log = qa / "qa-installer.log"
     command = [str(builder.QA), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
