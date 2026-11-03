@@ -435,13 +435,18 @@ export function validateStandaloneResponse(payload){
     !['accounts','parties','items','invoices','bills','receipts','payments'].every(
       k=>view[k]&&typeof view[k]==='object'&&!Array.isArray(view[k])))
     throw new Error('پاسخ میزبان با قرارداد حسابداری مستقل سازگار نیست.');
+  const postingToday=payload.postingToday;
+  if(postingToday!==undefined&&(typeof postingToday!=='string'||
+      !validStandaloneDate(postingToday,postingToday)))
+    throw new Error('تاریخ روز مالی اعلام‌شده از میزبان معتبر نیست.');
   const currentUser=payload.currentUser;
   if(currentUser!==undefined&&(
     !currentUser||typeof currentUser.username!=='string'||
     !['admin','editor','viewer'].includes(currentUser.role)||
     typeof currentUser.jobTitle!=='string'||currentUser.jobTitle.length>80))
     throw new Error('هویت نمایشی کاربر در پاسخ میزبان نامعتبر است.');
-  return {...(currentUser?{currentUser}:{}),revision:payload.revision,view};
+  return {...(currentUser?{currentUser}:{}),
+    ...(postingToday?{postingToday}:{}),revision:payload.revision,view};
 }
 
 const T=()=>standaloneToday();
@@ -613,8 +618,31 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const [printDesignerOpen,setPrintDesignerOpen]=useState(false);
   const live=useRef(true),request=useRef(0),locked=useRef(false),latest=useRef(null),
     pending=useRef(null);
-  const today=T();
+  const today=snapshot?.postingToday||T();
   const view=snapshot?.view;
+  const initialPostingDayApplied=useRef(false);
+  useEffect(()=>{
+    const hostDay=snapshot?.postingToday;
+    if(!hostDay||initialPostingDayApplied.current)return;
+    initialPostingDayApplied.current=true;
+    // Only replace untouched local defaults. Never overwrite an edited date.
+    const oldDefault=T();
+    setForms(current=>{
+      const withDay=(section,field)=>current[section]?.[field]===oldDefault?
+        {...current[section],[field]:hostDay}:current[section];
+      return {...current,
+        document:withDay('document','documentDate'),
+        proforma:withDay('proforma','documentDate'),
+        settlement:withDay('settlement','postingDate'),
+        deposit:withDay('deposit','postingDate'),
+        transfer:withDay('transfer','postingDate'),
+        manual:withDay('manual','postingDate'),
+        reverse:withDay('reverse','postingDate'),
+        close:withDay('close','throughDate')};
+    });
+    setIssueDate(value=>value===oldDefault?hostDay:value);
+    setCorrectionDate(value=>value===oldDefault?hostDay:value);
+  },[snapshot?.postingToday]);
   const stockCostControl=view?.financialReports?.stockCostControl;
   const ledgerCurrency=view?.currency||'RIAL';
   const templateBridge=typeof api?.standaloneAccountingTemplateList==='function';

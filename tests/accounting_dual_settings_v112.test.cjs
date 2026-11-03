@@ -69,3 +69,11 @@ test('company posting day is explicitly configurable as a fixed offset, not sile
   assert.match(source,/حالت قبلی دفتر \(UTC، بدون تغییر\)/);
   assert.doesNotMatch(source,/Date\.parse\(.+postingUtcOffsetMinutes/);
 });
+test('authenticated UI accepts only canonical trusted host posting days',()=>{
+  const {validateStandaloneResponse}=load('src/standalone_accounting_workspace.jsx');
+  const view={currency:'RIAL',journals:[],accounts:{},parties:{},items:{},
+    invoices:{},bills:{},receipts:{},payments:{}};
+  assert.equal(validateStandaloneResponse({revision:0,view,postingToday:'2026-11-03'}).postingToday,'2026-11-03');
+  assert.throws(()=>validateStandaloneResponse({revision:0,view,postingToday:'1405-08-13'}));
+  assert.throws(()=>validateStandaloneResponse({revision:0,view,postingToday:'2026-02-30'}));
+});

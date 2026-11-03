@@ -203,6 +203,17 @@ class AccountingDesktopAPI:
             result["view"]["companyWorkspaceLabel"] = self.company_name
         return result
 
+    @staticmethod
+    def _with_posting_today(result):
+        """Expose the ledger's trusted calendar boundary for date pickers.
+
+        The same core rule rejects future postings. The result is descriptive,
+        not a browser-supplied override or another financial event.
+        """
+        from accounting_core import _company_today
+        return {**result, "postingToday": _company_today(
+            result["view"], datetime.now(timezone.utc).isoformat())}
+
     def standaloneAccountingRead(self):
         with self._lock:
             self._require_authenticated()
@@ -218,7 +229,7 @@ class AccountingDesktopAPI:
                       {"username":self._actor,"role":role,"jobTitle":""})
             result["currentUser"]={"username":identity['username'],
                                    "jobTitle":identity.get('jobTitle',''),"role":role}
-            return result
+            return self._with_posting_today(result)
 
     def standaloneAccountingParsianArchiveIndex(self):
         """Admin-only catalogue of verified, immutable Parsian year archives."""
@@ -246,11 +257,11 @@ class AccountingDesktopAPI:
             if self._exit_backed_up:
                 raise RuntimeError("Accounting desktop is closing; financial changes are locked")
             from standalone_financial_report_host import attach_verified_reports
-            return self._with_migration(attach_verified_reports(self._store().command(
+            return self._with_posting_today(self._with_migration(attach_verified_reports(self._store().command(
                 request["command"], actor=self._actor, accounts=self._accounts,
                 expected_revision=request["expectedRevision"],
                 now=datetime.now(timezone.utc).isoformat(),
-            )))
+            ))))
 
     def _template_store(self):
         from standalone_accounting_template_store import StandaloneAccountingTemplateStore

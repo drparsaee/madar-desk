@@ -2,10 +2,12 @@
 import base64
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import madar_update
+import standalone_accounting_desktop
 from standalone_accounting_desktop import AccountingDesktopAPI, JS_BRIDGE
 
 
@@ -77,6 +79,22 @@ class AccountingDualUpdateTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "معتبر"):
                 madar_update.schedule_verified_install_after_exit()
             spawn.assert_not_called()
+
+    def test_trusted_host_day_uses_explicit_company_offset_not_browser_timezone(self):
+        class FakeClock:
+            @staticmethod
+            def now(_tz):
+                return datetime(2026, 11, 2, 22, 0, tzinfo=timezone.utc)
+
+        with patch.object(standalone_accounting_desktop, "datetime", FakeClock):
+            legacy = self.api._with_posting_today({"view": {"companyProfile": None}})
+            iran = self.api._with_posting_today({"view": {"companyProfile": {
+                "postingUtcOffsetMinutes": 210,
+                "postingCalendarMode": "fixed-offset-no-dst"
+            }}})
+        self.assertEqual(legacy["postingToday"], "2026-11-02")
+        self.assertEqual(iran["postingToday"], "2026-11-03")
+        self.assertFalse(self.api.path.exists())
 
 
 if __name__ == "__main__":
