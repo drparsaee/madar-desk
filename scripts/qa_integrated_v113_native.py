@@ -15,7 +15,7 @@ import time
 
 import psutil
 
-from build_integrated_v113 import builder
+from build_integrated_v113 import builder, digest, read_verified_release_descriptor
 
 
 def stop_owned_process(process):
@@ -45,23 +45,40 @@ def stop_owned_process(process):
             pass
 
 
+def synthetic_environment(root: Path, source: dict[str, str]) -> dict[str, str]:
+    """Scope both environment-based profile roots and the Python home.
+
+    This cannot override OS known-folder APIs; this native check is therefore
+    deliberately a narrow readiness smoke, NOT proof of whole-app isolation.
+    """
+    env = {key: value for key, value in source.items()
+           if not key.upper().startswith(("MADAR_", "PARSIAN_", "ACCOUNTING_",
+                                          "SQLSERVER_")) and
+           key.upper() not in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV")}
+    for key, name in (("APPDATA", "Roaming"), ("LOCALAPPDATA", "Local"),
+                      ("TEMP", "Temp"), ("TMP", "Temp"),
+                      ("USERPROFILE", "UserProfile"), ("HOME", "UserProfile")):
+        folder = root / name
+        folder.mkdir(exist_ok=True)
+        env[key] = str(folder)
+    user = root / "UserProfile"
+    env["HOMEDRIVE"] = user.drive
+    env["HOMEPATH"] = str(user)[len(user.drive):]
+    return env
+
+
 def main():
-    if not builder.PROGRAM.is_file() or builder.PROGRAM.open("rb").read(2) != b"MZ":
-        raise FileNotFoundError("Full packaged 1.0.13 Windows program is missing")
+    # Require exact pinned binary identity before starting a native process,
+    # not merely the first two "MZ" bytes of any executable.
+    descriptor = read_verified_release_descriptor()
     with tempfile.TemporaryDirectory(prefix="madar-qa-bridge-v113-") as directory:
         root = Path(directory)
-        env = os.environ.copy()
-        for key in list(env):
-            if key.upper().startswith(("MADAR_", "PARSIAN_", "ACCOUNTING_", "SQLSERVER_")):
-                env.pop(key, None)
-        for key, name in (("APPDATA", "Roaming"), ("LOCALAPPDATA", "Local"),
-                          ("TEMP", "Temp"), ("TMP", "Temp")):
-            folder = root / name
-            folder.mkdir(exist_ok=True)
-            env[key] = str(folder)
+        env = synthetic_environment(root, os.environ)
         report = root / "native-bridge-report.json"
         env.update(MADAR_QA_REPORT=str(report), MADAR_QA_VIEW="bridge-readiness",
                    PYTHONIOENCODING="utf-8")
+        if digest(builder.PROGRAM) != descriptor["applicationSha256"]:
+            raise RuntimeError("Packaged program changed after native smoke preflight")
         process = subprocess.Popen([str(builder.PROGRAM)], env=env,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:

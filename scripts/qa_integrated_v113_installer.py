@@ -15,7 +15,8 @@ import sqlite3
 import subprocess
 from zipfile import ZipFile
 
-from build_integrated_v113 import builder, MANIFEST, digest
+from build_integrated_v113 import (builder, digest, read_verified_release_descriptor,
+                                   QA_ACCEPTANCE as ACCEPTANCE)
 
 
 def snapshot(root: Path):
@@ -23,18 +24,26 @@ def snapshot(root: Path):
             for file in root.rglob("*") if file.is_file()}
 
 
+def assert_disposable_qa_root(qa: Path) -> None:
+    """No caller-selected profile, linked/junction directory or live APPDATA."""
+    expected = builder.ROOT / ".qa-inno-v113-integrated"
+    if qa != expected or qa.parent.resolve() != builder.ROOT.resolve():
+        raise RuntimeError("QA installer destination is not the fixed isolated root")
+    for directory in (qa, *qa.parents):
+        if directory.is_symlink() or (hasattr(directory, "is_junction") and
+                                      directory.is_junction()):
+            raise RuntimeError("QA root or ancestor is a link/junction: " + str(directory))
+
+
 def main():
-    if not builder.QA.is_file() or not builder.PROD.is_file() or not builder.PROGRAM.is_file():
-        raise FileNotFoundError("Compile immutable 1.0.13 QA/production installers first")
-    if not MANIFEST.is_file():
-        raise FileNotFoundError("Integrated release descriptor missing")
-    descriptor = json.loads(MANIFEST.read_text(encoding="utf8"))
-    if (descriptor.get("version") != "1.0.13" or
-            descriptor.get("installerSha256") != digest(builder.PROD) or
-            descriptor.get("applicationSha256") != digest(builder.PROGRAM)):
-        raise RuntimeError("Release descriptor or program hash mismatch")
+    # Verify the QA installer itself before executing it. A renamed production
+    # installer must never run here just because production/application match.
+    descriptor = read_verified_release_descriptor()
+    if ACCEPTANCE.exists():
+        raise FileExistsError("Immutable 1.0.13 QA acceptance already exists")
 
     qa = builder.QA_ROOT
+    assert_disposable_qa_root(qa)
     if qa.exists() and any(qa.iterdir()):
         raise FileExistsError("Refusing to overwrite an existing QA profile: " + str(qa))
     qa.mkdir(parents=True, exist_ok=True)
@@ -63,7 +72,9 @@ def main():
     old_digest = digest(old)
     log = qa / "qa-installer.log"
     command = [str(builder.QA), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-               "/SP-", "/LOG=" + str(log)]
+               "/SP-", "/DIR=" + str(installation), "/LOG=" + str(log)]
+    if digest(builder.QA) != descriptor["qaInstallerSha256"]:
+        raise RuntimeError("QA executable changed after preflight verification")
     result = subprocess.run(command, capture_output=True, timeout=240,
                             check=False, text=True)
     if result.returncode:
@@ -86,13 +97,38 @@ def main():
                       for name in archive.namelist() if not name.endswith("/")}
     if zip_hashes != before:
         raise RuntimeError("Synthetic backup content differs from original data")
+    if not log.is_file():
+        raise RuntimeError("QA Inno installer did not produce a diagnostic log")
+    log_digest = digest(log)
     # Remove only the positively identified self-owned disposable QA directory.
-    if not marker.is_file() or json.loads(marker.read_text(encoding="utf8"))["version"] != "1.0.13":
+    assert_disposable_qa_root(qa)
+    if (not marker.is_file() or
+            json.loads(marker.read_text(encoding="utf8")) != {
+                "version": "1.0.13", "purpose": "synthetic-installer-acceptance"}):
         raise RuntimeError("Synthetic QA ownership marker missing, refusing cleanup")
     shutil.rmtree(qa)
+    if qa.exists():
+        raise RuntimeError("Disposable QA root still exists after cleanup")
+    receipt = {
+        "schema": 1, "version": "1.0.13", "result": "synthetic-installer-passed",
+        "sourceGitCommit": descriptor["sourceGitCommit"],
+        "qaInstallerSha256": descriptor["qaInstallerSha256"],
+        "productionInstallerSha256": descriptor["installerSha256"],
+        "applicationSha256": descriptor["applicationSha256"],
+        "qaInstallerLogSha256": log_digest,
+        "upgradeFrom": "1.0.12", "upgradeTo": "1.0.13",
+        "syntheticProfileFileCount": len(before),
+        "verifiedBackupFileCount": len(zip_hashes),
+        "previousProgramUnchanged": True,
+        "profileByteHashesUnchanged": True,
+        "qaDirectoryRemoved": True,
+    }
+    with ACCEPTANCE.open("x", encoding="utf-8") as output:
+        json.dump(receipt, output, indent=2, ensure_ascii=False)
+        output.write("\n")
     print("INNO_113_SYNTHETIC_UPGRADE_PASSED: old=1.0.12 new=1.0.13;"
           f" preserved={len(before)} files, verified_backup={len(zip_hashes)} files;"
-          " isolated QA directory removed; real profile untouched", flush=True)
+          " isolated QA directory removed; real profile not inspected", flush=True)
 
 
 if __name__ == "__main__":
