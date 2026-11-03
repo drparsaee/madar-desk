@@ -149,6 +149,18 @@
   background:#2a303c;color:#cbd9eb;border-color:var(--sac-line);
 }
 :root[data-theme="dark"] .sac-root td {color:var(--sac-text);border-color:var(--sac-line);}
+:root[data-theme="dark"] .sac-root .sac-invoice-editor
+  :is(.sac-grid,.sac-invoice-line,.sac-invoice-summary,
+    .sac-entry-template-bar,.sac-template-library,.sac-catalog-search) .sac-field,
+:root[data-theme="dark"] .sac-root .sac-invoice-editor
+  :is(.sac-grid,.sac-invoice-line,.sac-invoice-summary,
+    .sac-entry-template-bar,.sac-template-library,.sac-catalog-search) .sac-field>span {
+  /* These composer surfaces remain white in both themes. */
+  color:#344b65;
+}
+:root[data-theme="light"] .sac-root .sac-panel .sac-panel-title>p{
+  color:#465a70;
+}
 :root[data-theme="dark"] .sac-root tbody tr:hover {background:#344155;}
 :root[data-theme="dark"] .sac-root .sac-pill {background:#333c4c;color:#e9f2ff;}
 :root[data-theme="dark"] .sac-root .sac-pill.issued {background:#204a39;color:#b0f0cf;}

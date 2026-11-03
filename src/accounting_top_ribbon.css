@@ -162,3 +162,17 @@
 @media(max-width:620px){.sac-workflow-actions{width:100%;margin-right:0}.sac-root .sac-workflow-actions button{width:100%;justify-content:center}}
 @media(max-width:900px){.sac-ribbon-titlebar{padding:8px 11px;flex-wrap:wrap}.sac-ribbon-tabs,.sac-ribbon-tools{padding-inline:10px}.sac-ribbon-quick{flex-wrap:wrap}.sac-ribbon-unit{display:none}}
 @media(max-width:560px){.sac-ribbon-shell .sac-ribbon-app-icon{display:none}.sac-ribbon-titlebar{gap:8px}.sac-root .sac-ribbon-quick button{font-size:11px;padding:6px 8px}.sac-ribbon-identity small{display:none}.sac-ribbon-tools{min-height:50px;padding-block:7px}}
+@media(max-width:560px){
+  /* The ribbon already provides context and back navigation on small screens. */
+  .sac-invoice-composing .sac-workflow-nav,
+  .sac-invoice-composing .sac-invoice-commandbar-actions .sac-back-button{display:none}
+  .sac-invoice-composing .sac-invoice-commandbar{
+    position:sticky;top:0;z-index:5;padding:9px 11px;margin-bottom:9px;gap:7px}
+  .sac-invoice-composing .sac-invoice-commandbar-title small{display:none}
+  .sac-invoice-composing .sac-invoice-commandbar-actions{flex-wrap:nowrap}
+  .sac-invoice-composing .sac-invoice-commandbar-actions button{min-height:44px}
+  .sac-invoice-composing .sac-invoice-summary{padding:10px;gap:7px}
+  .sac-invoice-composing .sac-invoice-summary .sac-live-total{
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .sac-invoice-composing .sac-invoice-summary .sac-live-total>strong{grid-column:1/-1}
+}

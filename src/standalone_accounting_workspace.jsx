@@ -101,9 +101,39 @@ export function accountingSettlementCsv(entries,parties={},accounts={},unit='ر�
   return '\ufeff'+rows.map(row=>row.map(csvField).join(',')).join('\r\n');
 }
 
+/** Unsettled issued documents only. Historical imported balances and cash
+ * movements are separate ledgers; malformed/unsafe records cannot imply zero. */
+export function accountingOutstandingOverview(view,today=standaloneToday()){
+  const result={receivable:0,payable:0,receivableCount:0,payableCount:0,
+    overdueReceivableCount:0,overduePayableCount:0,invalidReceivable:0,invalidPayable:0};
+  for(const [collection,kind] of [['invoices','receivable'],['bills','payable']]){
+    let amount=0n,count=0,overdue=0,invalid=0;
+    for(const doc of Object.values(view?.[collection]||{})){
+      if(doc?.status!=='issued')continue;
+      const returned=doc.returnedAmount??0;
+      if(typeof doc.id!=='string'||!ID.test(doc.id)||
+        ![doc.total,doc.allocated,returned].every(v=>Number.isSafeInteger(v)&&v>=0)||
+        BigInt(doc.allocated)+BigInt(returned)>BigInt(doc.total)){
+        invalid++;continue;
+      }
+      const balance=BigInt(doc.total)-BigInt(doc.allocated)-BigInt(returned);
+      if(balance===0n)continue;
+      amount+=balance;count++;
+      if(typeof doc.dueDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(doc.dueDate)&&
+        doc.dueDate<today)overdue++;
+    }
+    result[kind]=invalid||amount>BigInt(Number.MAX_SAFE_INTEGER)?null:Number(amount);
+    result[kind+'Count']=count;
+    result[kind==='receivable'?'overdueReceivableCount':'overduePayableCount']=overdue;
+    result[kind==='receivable'?'invalidReceivable':'invalidPayable']=invalid;
+  }
+  return result;
+}
+
 export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNavigate,onNewInvoice}){
   const [filter,setFilter]=useState('all');
   const overview=useMemo(()=>accountingSettlementOverview(view,today),[view,today]);
+  const outstanding=useMemo(()=>accountingOutstandingOverview(view,today),[view,today]);
   const parties=view.parties||{},accounts=view.accounts||{};
   const unit=currency==='TOMAN'?'تومان':'ریال';
   const amount=value=>formatStandaloneMoney(value,currency);
@@ -130,9 +160,43 @@ export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNa
         <div className="sac-vtr-hero-stat"><span className="sac-vtr-stat-icon"><ArrowRight size={17}/></span><div><small>پرداخت ثبت‌شده</small><strong dir="auto">{amount(overview.paid)}</strong></div></div>
         <div className="sac-vtr-hero-stat"><span className="sac-vtr-stat-icon"><TrendingUp size={17}/></span><div><small>خالص گردش نقدی این بازه</small><strong dir="auto">{amount(overview.net)}</strong></div></div>
       </div>
-      {canDraft&&<button type="button" className="sac-vtr-cta" disabled={disabled}
-        onClick={onNewInvoice}><Plus size={17}/> فاکتور جدید</button>}
     </header>
+    <section className="sac-vtr-action-panel" aria-label="دسترسی مستقیم به کارهای حسابداری">
+      <div><h3>شروع کار</h3><p>مسیرهای پرتکرار، بدون جست‌وجو در دسته‌های نوار بالا</p></div>
+      <div className="sac-vtr-quick-actions">
+        {canDraft&&<button type="button" className="sac-vtr-cta" disabled={disabled}
+          onClick={onNewInvoice}><Plus size={17}/> فاکتور جدید</button>}
+        <button type="button" onClick={()=>onNavigate('bill')}>خرید</button>
+        <button type="button" onClick={()=>onNavigate('settlements')}>دریافت و پرداخت</button>
+        <button type="button" onClick={()=>onNavigate('cash')}>بانک و مغایرت</button>
+        <button type="button" onClick={()=>onNavigate('reports')}>گزارش‌ها</button>
+      </div>
+    </section>
+    <section className="sac-vtr-outstanding" aria-label="مانده اسناد صادرشده و تسویه‌نشده">
+      <div className="sac-vtr-outstanding-head"><h3>مبالغ در انتظار تسویه</h3>
+        <p>فقط اسناد صادرشدهٔ دفتر جاری؛ این مبالغ وجه دریافت یا پرداخت‌شده نیستند.
+          مانده‌های تاریخی منتقل‌شده جداگانه نمایش داده می‌شوند.</p></div>
+      <div className="sac-vtr-outstanding-grid">
+        <button type="button" onClick={()=>onNavigate('invoice')}
+          aria-label="دریافتنی از مشتریان؛ مشاهده فاکتورهای فروش و مطالبات باز">
+          <span>دریافتنی از مشتریان</span>
+          <strong dir="auto">{amount(outstanding.receivable)}</strong>
+          <small>{outstanding.receivableCount.toLocaleString('fa-IR')} فاکتور با مانده باز
+            {' · '}{outstanding.overdueReceivableCount.toLocaleString('fa-IR')} فاکتور با سررسید گذشته</small>
+        </button>
+        <button type="button" onClick={()=>onNavigate('bill')}
+          aria-label="پرداختنی به تأمین‌کنندگان؛ مشاهده صورتحساب‌های خرید و بدهی‌های باز">
+          <span>پرداختنی به تأمین‌کنندگان</span>
+          <strong dir="auto">{amount(outstanding.payable)}</strong>
+          <small>{outstanding.payableCount.toLocaleString('fa-IR')} سند خرید با مانده باز
+            {' · '}{outstanding.overduePayableCount.toLocaleString('fa-IR')} سند با سررسید گذشته</small>
+        </button>
+      </div>
+      {(outstanding.invalidReceivable>0||outstanding.invalidPayable>0)&&
+        <p role="alert" className="sac-vtr-warning">
+          مبلغ بخشی از اسناد صادرشده معتبر یا قابل جمع دقیق نیست. مانده مربوطه نامشخص است؛
+          برای تطبیق به فهرست اسناد و دفترکل مراجعه کنید.</p>}
+    </section>
     {overview.omitted>0&&<div className="sac-vtr-warning" role="status">
       {overview.omitted.toLocaleString('fa-IR')} رکورد با مبلغ یا تاریخ نامعتبر از این نما کنار گذاشته شد. اطلاعات اصلی تغییر نکرده است.</div>}
     {overview.unrepresentable&&<div className="sac-vtr-warning" role="status">
@@ -175,7 +239,8 @@ export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNa
           {[['all','همه'],['receipt','دریافت‌ها'],['payment','پرداخت‌ها'],['reversed','برگشت‌شده']].map(([value,label])=><button
             type="button" key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}
             className={filter===value?'active':''}>{label}</button>)}</div>
-        <div className="sac-vtr-table-scroll"><table><thead><tr><th>عملیات / شناسه</th><th>طرف‌حساب</th>
+        <div className="sac-vtr-table-scroll" role="region" tabIndex={0}
+          aria-label="جدول گردش دریافت و پرداخت؛ با کلیدهای جهت‌دار قابل پیمایش"><table><thead><tr><th>عملیات / شناسه</th><th>طرف‌حساب</th>
           <th>مبلغ ({unit})</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>
           {filtered.slice(0,9).map(r=><tr key={r.type+'-'+r.id}>
             <td><strong>{r.type==='receipt'?'دریافت':'پرداخت'}</strong><small dir="ltr">{r.id}</small></td>
@@ -1043,7 +1108,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   };
 
   return <div dir="rtl" className={'sac-root'+(tab==='invoice'?' sac-invoice-work-mode':
-    tab==='overview'?' sac-overview-work-mode sac-vtr-overview':'')}
+    tab==='overview'?' sac-overview-work-mode sac-vtr-overview':'')+
+    (tab==='invoice'&&invoiceComposerOpen?' sac-invoice-composing':'')}
     aria-label="حسابداری مستقل مدار">
     <AccountingTopRibbon tab={tab} sections={SECTIONS}
       onNavigate={gotoTab} onNewInvoice={openQuickInvoice}
