@@ -60,3 +60,11 @@ test('accounting settings are a first-class route and exposed from the ribbon',(
     assert.match(bridge,new RegExp("'"+name+"'"));
   }
 });
+test('company posting day is explicitly configurable as a fixed offset, not silently inferred',()=>{
+  const source=fs.readFileSync(path.join(root,'src/accounting_operational_panels.jsx'),'utf8');
+  assert.match(source,/postingUtcOffsetMinutes/);
+  assert.match(source,/ایران، UTC\+03:30/);
+  assert.match(source,/ساعت تابستانی/);
+  assert.match(source,/حالت قبلی دفتر \(UTC، بدون تغییر\)/);
+  assert.doesNotMatch(source,/Date\.parse\(.+postingUtcOffsetMinutes/);
+});

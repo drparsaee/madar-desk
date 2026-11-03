@@ -554,7 +554,7 @@ export function FiscalYearClose({view,canManage,disabled,execute,today}){
 export function CompanyProfile({view,canManage,disabled,execute}){
   const company=view.companyProfile||null;
   const empty={legalName:'',address:'',phone:'',nationalId:'',
-    economicCode:'',postalCode:'',reason:''};
+    economicCode:'',postalCode:'',reason:'',postingUtcOffsetMinutes:''};
   const [form,setForm]=useState(empty);
   useEffect(()=>setForm({...empty,...company,reason:''}),[
     company?.history?.length,
@@ -569,6 +569,11 @@ export function CompanyProfile({view,canManage,disabled,execute}){
       <p>شناسه ملی: {company.nationalId||'ثبت نشده'} | شناسه اقتصادی: {
         company.economicCode||'ثبت نشده'} | کد پستی: {company.postalCode||'ثبت نشده'}</p>
       <p>نشانی: {company.address||'ثبت نشده'} | تلفن: {company.phone||'ثبت نشده'}</p>
+      <p>مرز تاریخ ثبت اسناد: {Number.isInteger(company.postingUtcOffsetMinutes)?
+        'UTC'+(company.postingUtcOffsetMinutes<0?'-':'+')+
+        String(Math.floor(Math.abs(company.postingUtcOffsetMinutes)/60)).padStart(2,'0')+':'+
+        String(Math.abs(company.postingUtcOffsetMinutes)%60).padStart(2,'0'):
+        'حالت سازگار با دفاتر قدیمی (UTC)'}</p>
       <p>تعداد ویرایش‌های دارای سابقه: {
         company.history.length.toLocaleString('fa-IR')}</p>
     </section>}
@@ -578,7 +583,9 @@ export function CompanyProfile({view,canManage,disabled,execute}){
         const result=await sendCommand(execute,'company.profile.set',{
           legalName:form.legalName,address:form.address,phone:form.phone,
           nationalId:form.nationalId,economicCode:form.economicCode,
-          postalCode:form.postalCode,reason:form.reason.trim()});
+          postalCode:form.postalCode,reason:form.reason.trim(),
+          ...(form.postingUtcOffsetMinutes!==''&&form.postingUtcOffsetMinutes!==undefined?
+            {postingUtcOffsetMinutes:Number(form.postingUtcOffsetMinutes)}:{})});
         if(result)setForm(x=>({...x,reason:''}));
       }}>
       {[
@@ -591,6 +598,19 @@ export function CompanyProfile({view,canManage,disabled,execute}){
         ['reason','دلیل ثبت/تغییر',true],
       ].map(([key,label,required])=><Input key={key} label={label}
         value={form[key]||''} required={required} onChange={v=>ch(key,v)}/>)}
+      <label className="sac-field">
+        <span>مرز روز مالی شرکت (اختیاری)</span>
+        <select value={form.postingUtcOffsetMinutes??''}
+          onChange={e=>ch('postingUtcOffsetMinutes',e.target.value)}>
+          <option value="">حالت قبلی دفتر (UTC، بدون تغییر)</option>
+          <option value="210">ایران، UTC+03:30 (ثابت)</option>
+          <option value="0">UTC+00:00 (ثابت)</option>
+          <option value="60">UTC+01:00 (ثابت)</option>
+          <option value="120">UTC+02:00 (ثابت)</option>
+          <option value="-300">UTC−05:00 (ثابت)</option>
+        </select>
+        <small>این انتخاب فقط مرز روز ثبت سند را تغییر می‌دهد و منطقهٔ زمانی با تغییر ساعت تابستانی نیست. پیش از تغییر، زمان محلی شرکت را مشخص کنید.</small>
+      </label>
     </InlineForm>
   </section>;
 }
