@@ -27,10 +27,10 @@ const freePort=()=>new Promise((resolve,reject)=>{
 test('legacy UX audit readiness waits for the correct simple/advanced navigation',()=>{
   const source=fs.readFileSync(path.join(root,
     'scripts/madar_ux_completion_audit_20261103.cjs'),'utf8');
-  assert.match(source,/if\(width>700\)[\s\S]*?name:'پیشرفته'/);
-  assert.match(source,/\.sac-simple-nav \[data-accounting-tab=/);
+  assert.match(source,/\.sac-nav-mode[^\n]*getByRole\('button',\{name:'پیشرفته'\}\)/);
+  assert.match(source,/\.sac-simple-nav [^\n]*data-accounting-tab/);
   assert.match(source,/getByRole\('dialog',\{name:'جست‌وجوی حسابداری'\}\)/);
-  assert.match(source,/const newInvoice=async page/);
+  assert.match(source,/const openInvoice=async page/);
   assert.doesNotMatch(source,/getByRole\('searchbox',\{name:'رفتن سریع به بخش حسابداری'\}\)/);
 });
 

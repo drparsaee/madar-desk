@@ -52,9 +52,11 @@ class CompanySwitchTests(unittest.TestCase):
                 current=windows[-1]
                 if len(windows)==1:
                     self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceLabel'],'شرکت الف')
+                    self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceId'],a['id'])
                     self.assertTrue(current.api.standaloneAccountingRequestCompanySwitch())
                 else:
                     self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceLabel'],'شرکت ب')
+                    self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceId'],b['id'])
                     self.assertFalse(current.api._switch_requested)
                 self.assertTrue(current.events.closing.callback())
             webview.create_window=create_window

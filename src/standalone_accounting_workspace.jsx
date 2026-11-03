@@ -840,6 +840,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const refresh=useCallback(async()=>{
     if(locked.current)return;
     const n=++request.current;
+    // Never keep the preceding company's or user's authorized ledger visible
+    // while refreshing. A denied/failed read must revoke search results too.
+    latest.current=null;
+    setSnapshot(null);
     setState(p=>({...p,loading:true,error:''}));
     try{
       if(typeof api?.standaloneAccountingRead!=='function')
@@ -849,8 +853,12 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       latest.current=result;setSnapshot(result);
       setState({loading:false,error:'',notice:'اطلاعات دفترکل از میزبان دریافت شد.'});
       return result;
-    }catch(err){if(live.current&&n===request.current)setState({
-      loading:false,error:err?.message||'خواندن دفترکل ناموفق بود.',notice:''});}
+    }catch(err){if(live.current&&n===request.current){
+      latest.current=null;
+      setSnapshot(null);
+      setState({loading:false,
+        error:err?.message||'خواندن دفترکل ناموفق بود.',notice:''});
+    }}
     return null;
   },[api]);
   useEffect(()=>{live.current=true;void refresh();return()=>{live.current=false;request.current++;};},[refresh]);
@@ -1538,8 +1546,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           {tab==='overview'&&<>
             <AccountingVitreaHome view={view} currency={ledgerCurrency} today={today}
               canDraft={canManage||canDraft} canSettle={canManage} disabled={busy||pendingRetry}
-              preferenceKey={snapshot?.currentUser?.username&&view?.companyWorkspaceLabel?
-                snapshot.currentUser.username+'|'+view.companyWorkspaceLabel:''}
+              preferenceKey={snapshot?.currentUser?.username&&
+                (view?.companyWorkspaceId||view?.companyWorkspaceLabel)?
+                snapshot.currentUser.username+'|'+
+                  (view.companyWorkspaceId||view.companyWorkspaceLabel):''}
               onNavigate={gotoTab} onNewInvoice={openQuickInvoice}/>
             <details className="sac-vtr-management-details"><summary>گزارش‌های تحلیلی و یادآورهای مدیریتی</summary>
               <AccountingManagementDashboard view={view} currency={ledgerCurrency}

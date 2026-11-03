@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -64,8 +65,8 @@ window.madar = Object.fromEntries(
 class AccountingDesktopAPI:
     """Single local desktop principal; not a multi-user authentication server."""
 
-    def __init__(self, explicit_data_root, *, company_name="", authenticated_user=None,
-                 identity_store=None, identity_token=None):
+    def __init__(self, explicit_data_root, *, company_name="", company_workspace_id="",
+                 authenticated_user=None, identity_store=None, identity_token=None):
         path = Path(explicit_data_root)
         if not path.is_absolute():
             raise ValueError("Accounting data directory must be explicit and absolute")
@@ -92,6 +93,11 @@ class AccountingDesktopAPI:
         # Only a display hint from an explicitly selected private company
         # directory. This never becomes an accounting event or ledger field.
         self.company_name = company_name if isinstance(company_name,str) else ""
+        # Registry-verified opaque ID, never a filesystem path or accounting event.
+        # Unlike the display name it is stable even if the company gets renamed.
+        self.company_workspace_id = (company_workspace_id if
+            isinstance(company_workspace_id,str) and
+            re.fullmatch(r"[a-f0-9]{32}",company_workspace_id) else "")
         self._switch_requested = False
         self._native_window = None
         from provider_csv_bridge import ProviderCsvPreviewBridge
@@ -219,6 +225,8 @@ class AccountingDesktopAPI:
             result["view"]["parsianMigration"] = historic
         if self.company_name:
             result["view"]["companyWorkspaceLabel"] = self.company_name
+        if self.company_workspace_id:
+            result["view"]["companyWorkspaceId"] = self.company_workspace_id
         return result
 
     def standaloneAccountingRead(self):
@@ -421,6 +429,7 @@ def _run_company_session(data_dir, selected_company_name, args):
                 return False
             logged_in_user,identity_token=login
         api = AccountingDesktopAPI(data_dir, company_name=selected_company_name,
+            company_workspace_id=directory.name if registered else "",
             authenticated_user=logged_in_user,identity_store=identity_store,
             identity_token=identity_token)
         from standalone_accounting_auto_backup import AutomaticStandaloneBackups
