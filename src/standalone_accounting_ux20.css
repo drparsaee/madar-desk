@@ -151,14 +151,14 @@
   border:1px solid var(--sac-line);border-radius:12px;background:var(--sac-paper)}
 .sac-invoice-wizard-guided .sac-invoice-editor .sac-wizard-tax .sac-grid,
 .sac-invoice-wizard-guided .sac-invoice-editor .sac-wizard-due .sac-grid{margin:0}
-.sac-wizard-sticky-footer{position:sticky;bottom:0;z-index:15;display:flex;
-  justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+.sac-wizard-sticky-footer{position:sticky;bottom:0;z-index:15;display:grid;
+  grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;
   background:var(--sac-paper);color:var(--sac-text);border:1px solid var(--sac-line);
   border-radius:12px;padding:10px 13px;margin:14px 0 0;
   box-shadow:0 -9px 24px #101f3842}
 .sac-wizard-sticky-amount{display:grid;gap:1px;min-width:0;position:relative;
-  z-index:1;align-self:stretch;align-content:center;padding:5px 9px;
-  background:#fff;border-radius:8px}
+  z-index:2;isolation:isolate;overflow:hidden;align-self:stretch;
+  align-content:center;padding:5px 9px;background:#fff;border-radius:8px}
 .sac-wizard-sticky-amount>span,.sac-wizard-sticky-amount>small{color:#33485c}
 :root[data-theme="dark"] .sac-wizard-sticky-amount{background:#1d2532}
 :root[data-theme="dark"] .sac-wizard-sticky-amount>span,
@@ -177,7 +177,8 @@
 :root[data-theme="light"] .sac-root.sac-invoice-wizard-guided .sac-invoice-summary-note{
   color:#33485c}
 .sac-wizard-sticky-amount strong{font-size:17px;line-height:1.4;color:var(--sac-text)}
-.sac-wizard-sticky-actions{display:flex;gap:8px;align-items:center}
+.sac-wizard-sticky-actions{display:flex;gap:8px;min-width:0;align-items:center;
+  justify-content:flex-end;flex-wrap:wrap;position:relative;z-index:1}
 .sac-root .sac-wizard-sticky-actions button{border:1px solid var(--sac-line);
   border-radius:10px;padding:10px 14px;font-weight:750}
 .sac-root .sac-wizard-sticky-actions button.sac-primary{color:#fff;background:#315f9e;border-color:#315f9e}
@@ -196,10 +197,13 @@
     padding:4px 1px;font-size:10px;line-height:1.45}
   .sac-wizard-step-nav button b{width:23px;height:23px}
   .sac-wizard-sticky-footer{border-radius:10px;padding:8px 10px;gap:8px;
-    margin-bottom:0;box-shadow:0 -5px 18px #101f3849}
-  .sac-wizard-sticky-amount{min-width:0;flex:1}
+    margin-bottom:0;box-shadow:0 -5px 18px #101f3849;
+    grid-template-columns:minmax(0,1fr)}
+  .sac-wizard-sticky-amount{min-width:0;width:100%}
   .sac-wizard-sticky-amount strong{font-size:15px;overflow-wrap:anywhere}
-  .sac-wizard-sticky-actions button{white-space:normal;max-width:180px}
+  .sac-wizard-sticky-actions{width:100%;display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
+  .sac-wizard-sticky-actions button{white-space:normal;max-width:none;min-width:0}
   .sac-invoice-wizard-guided .sac-invoice-summary{padding:12px}
 }
 /* Explicit opaque backing prevents a mobile blue CTA from bleeding through a
@@ -208,3 +212,8 @@
 :root[data-theme="light"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>small{color:#33485c}
 :root[data-theme="dark"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>span,
 :root[data-theme="dark"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>small{color:#e1edf8}
+/* The document-level floating-field portal normally paints above every form
+   (z-index:999). In a guided invoice this put the focused line-item caption
+   over the sticky total and falsely obscured the total's actual text. Keep
+   captions above ordinary fields but below the sticky financial action bar. */
+body:has(.sac-root.sac-invoice-wizard-guided) .madar-fl-layer{z-index:10}
