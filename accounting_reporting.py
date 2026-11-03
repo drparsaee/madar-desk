@@ -23,6 +23,63 @@ def _day(value, name):
     return value
 
 
+def _current_stock_cost_control(view):
+    """Conservative live warnings; not an inventory valuation certification.
+
+    Historical inventory-tracking flags are not reconstructed by accounting_view,
+    so callers must not use this current-state control for dated snapshots.
+    """
+    required = ("items", "invoices", "bills", "stockMovements")
+    if any(type(view.get(name)) is not dict for name in required):
+        return {"scope": "unavailable", "assessment": "not-assessed",
+                "profitCertified": False, "sales": [], "purchases": []}
+
+    moves = {}
+    for movement in view["stockMovements"].values():
+        if movement["type"] not in ("inventory.receive", "inventory.issue") or movement.get("reversed"):
+            continue
+        key_name = "invoiceId" if movement["type"] == "inventory.issue" else "billId"
+        key = (movement["type"], movement[key_name], movement["itemId"])
+        moves[key] = moves.get(key, 0) + movement["quantity"]
+
+    warnings = {"sales": [], "purchases": []}
+    for document_type, collection, move_type in (
+            ("sales", "invoices", "inventory.issue"),
+            ("purchases", "bills", "inventory.receive")):
+        for document_id, document in sorted(view[collection].items()):
+            if document["status"] != "issued":
+                continue
+            required_by_item = {}
+            for index, source in enumerate(document["lines"]):
+                item_id = source.get("itemId")
+                item = view["items"].get(item_id)
+                if not item or item.get("kind") != "goods" or not item.get("stockTracked"):
+                    continue
+                returned = document.get("returnedQuantities", [0] * len(document["lines"]))[index]
+                outstanding = source["quantity"] - returned
+                if outstanding < 0:
+                    raise ValueError("Stock document returned quantity exceeds issued amount")
+                required_by_item[item_id] = required_by_item.get(item_id, 0) + outstanding
+            for item_id, expected in sorted(required_by_item.items()):
+                posted = moves.get((move_type, document_id, item_id), 0)
+                if expected == posted:
+                    continue
+                reason = ("stock-issue-and-cogs-pending" if document_type == "sales" else
+                          "valuation-policy-required" if document["tax"] or document["discount"] else
+                          "stock-receipt-pending")
+                if posted > expected:
+                    reason = "stock-movement-exceeds-document"
+                warnings[document_type].append({
+                    "documentId": document_id, "itemId": item_id,
+                    "expectedQuantity": expected, "postedQuantity": posted,
+                    "unpostedQuantity": max(expected - posted, 0), "reason": reason,
+                })
+    return {"scope": "current-projection",
+            "assessment": ("incomplete" if warnings["sales"] or warnings["purchases"]
+                           else "no-unmatched-tracked-lines-detected"),
+            "profitCertified": False, **warnings}
+
+
 def ledger_reports(view, *, from_date=None, through_date=None):
     """Trial balance, ledger statements, P&L and balance sheet in exact ledger units.
 
@@ -44,6 +101,9 @@ def ledger_reports(view, *, from_date=None, through_date=None):
     initial = {ident: 0 for ident in accounts}
     balances = dict(initial)
     movement = {ident: {"debit": 0, "credit": 0} for ident in accounts}
+    # The trial balance includes closing journals. Operational P&L does not:
+    # a year-end transfer to retained earnings is not a second sale or cost.
+    operating_movement = {ident: {"debit": 0, "credit": 0} for ident in accounts}
     ledger = {ident: [] for ident in accounts}
     party_net = {}
     count = 0
@@ -70,6 +130,9 @@ def ledger_reports(view, *, from_date=None, through_date=None):
             if first is None or day >= first:
                 movement[aid]["debit"] += debit
                 movement[aid]["credit"] += credit
+                if journal["sourceType"] != "fiscal.year.close":
+                    operating_movement[aid]["debit"] += debit
+                    operating_movement[aid]["credit"] += credit
                 ledger[aid].append({"date": day, "journalId": journal["id"],
                                     "sourceType": journal["sourceType"],
                                     "sourceId": journal["sourceId"],
@@ -88,14 +151,18 @@ def ledger_reports(view, *, from_date=None, through_date=None):
     credit_total = sum(row["credit"] for row in rows)
     if debit_total != credit_total:
         raise ValueError("Trial balance mismatch")
-    # Income/expense movements in the selected interval; closing retained
-    # earnings is a presentation adjustment, NOT an unposted journal entry.
-    period_net = sum(movement[r["accountId"]]["credit"] -
-                     movement[r["accountId"]]["debit"] for r in rows
-                     if r["kind"] == "revenue") - sum(
-                         movement[r["accountId"]]["debit"] -
-                         movement[r["accountId"]]["credit"] for r in rows
-                         if r["kind"] == "expense")
+    def period_profit(moves):
+        revenue = sum(moves[r["accountId"]]["credit"] -
+                      moves[r["accountId"]]["debit"] for r in rows
+                      if r["kind"] == "revenue")
+        expense = sum(moves[r["accountId"]]["debit"] -
+                      moves[r["accountId"]]["credit"] for r in rows
+                      if r["kind"] == "expense")
+        return {"revenue": revenue, "expense": expense, "net": revenue - expense}
+
+    operational_profit = period_profit(operating_movement)
+    post_close_profit = period_profit(movement)
+    closing_adjustment = post_close_profit["net"] - operational_profit["net"]
     lifetime_net = sum(-balances[r["accountId"]] for r in rows if r["kind"] == "revenue") - sum(
         balances[r["accountId"]] for r in rows if r["kind"] == "expense")
     assets = sum(balances[r["accountId"]] for r in rows if r["kind"] == "asset")
@@ -126,6 +193,11 @@ def ledger_reports(view, *, from_date=None, through_date=None):
         if account["liquid"]:
             liquid_accounts.append({"accountId": account_id, "name": account["name"],
                                     "balance": balances[account_id]})
+    stock_cost_control = (_current_stock_cost_control(view) if last is None else {
+        "scope": "historical-inventory-tracking-not-reconstructed",
+        "assessment": "not-assessed", "profitCertified": False,
+        "sales": [], "purchases": [],
+    })
     return deepcopy({"currency": view["currency"], "scope": "all-projects",
                      "fromDate": first, "throughDate": last,
                      "journalCountThroughDate": count,
@@ -134,15 +206,15 @@ def ledger_reports(view, *, from_date=None, through_date=None):
                      "accountStatements": ledger,
                      "counterpartyBalances": counterparties,
                      "cashBankBalances": liquid_accounts,
+                     "stockCostControl": stock_cost_control,
                      "reconciled": True,
-                     "profitLoss": {"revenue": sum(
-                         movement[r["accountId"]]["credit"] -
-                         movement[r["accountId"]]["debit"] for r in rows if r["kind"] == "revenue"),
-                                    "expense": sum(
-                                        movement[r["accountId"]]["debit"] -
-                                        movement[r["accountId"]]["credit"] for r in rows
-                                        if r["kind"] == "expense"),
-                                    "net": period_net},
+                     "profitLoss": operational_profit,
+                     "profitLossReconciliation": {
+                         "basis": "operational-excludes-fiscal-year-close",
+                         "postCloseLedgerMovements": post_close_profit,
+                         "closingAdjustmentNet": closing_adjustment,
+                         "reconciled": (operational_profit["net"] + closing_adjustment ==
+                                        post_close_profit["net"])},
                      "balanceSheet": {"assets": assets, "liabilities": liabilities,
                                       "capital": capital, "unclosedProfitLoss": lifetime_net,
                                       "liabilitiesAndEquity": liabilities + capital + lifetime_net}})
