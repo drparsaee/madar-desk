@@ -1,0 +1,24 @@
+{
+  "status": "BLOCKED_BY_SAFETY_PREFLIGHT",
+  "setupExitCode": 7,
+  "reason": "running Madar Desk detected; no QA install performed",
+  "verifiedAfterFailure": {
+    "syntheticProfileFileCount": 5,
+    "sha256ByRelativeName": {
+      "company-settings.json": "b2835e2d18abaf756eb5bebef8795f8265145c412cb2552eb962c7be4a6c0a41",
+      "planner-synthetic.json": "f6af7b8f30760b05251331535e69ff6a1732e40f16f0bbfa4f6439d16f49a8e1",
+      "standalone-accounting.sqlite3": "d7a4d54421039ddb41a3650c424b795c200964972e4c365ffc4b3a1db7d950c3",
+      "synthetic-attachment.dat": "fe85f4cfd5267d549a60a4692f3735ee43007188a369ae572a83310e2aa7e897",
+      "tasks.json": "93dd14645fa9b9b7db4aa525b92dd35d1661bf5e9fe132d4ea770957c27d93ca"
+    },
+    "sqliteIntegrity": "ok",
+    "sqliteRial": 515200000,
+    "currentVersion": "1.0.11",
+    "oldBinaryUnchanged": true,
+    "newVersionBinaryPresent": false,
+    "newSnapshotPresent": false
+  },
+  "syntheticRoot": "D:\\CoS-Test\\madar-integrated-v112-20261103\\.qa-inno-v112-cumulative",
+  "productionInstallAttempted": false,
+  "elapsedAt": "2026-11-03T10:50:24.127193+00:00"
+}

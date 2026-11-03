@@ -1,0 +1,63 @@
+{
+  "port": 11480,
+  "nativeBridgeBefore": {
+    "path": "/",
+    "ready": "complete",
+    "bridge": "object",
+    "api": "object",
+    "read": "function",
+    "command": "function",
+    "root": 33939,
+    "error": ""
+  },
+  "nativeBridgeAccounting": {
+    "path": "/accounting.html",
+    "ready": "complete",
+    "bridge": "object",
+    "api": "object",
+    "read": "function",
+    "command": "function",
+    "root": 44786,
+    "error": ""
+  },
+  "nativeAccountingReadHealth": {
+    "done": true,
+    "ok": true,
+    "errorType": ""
+  },
+  "nativeBridgeAfterReturn": {
+    "path": "/index.html",
+    "ready": "complete",
+    "bridge": "object",
+    "api": "object",
+    "read": "function",
+    "command": "function",
+    "root": 33939,
+    "error": ""
+  },
+  "url": "http://127.0.0.1:11480/index.html",
+  "readyState": "complete",
+  "rootLength": 33939,
+  "bodyTextStart": "محلی\nمدار\n|\nدر جریان کسب و کار\nنمای کلی\nم\nفضای کار من\nهمه کارها\n14\n:\n31\nسه‌شنبه، ۱۲ آبان ۱۴۰۵\nهمه‌چیز، روی مدار.\nبازگشت\nانجام دوباره\nکل کارهای این نما\n۰\nکارهای تکمیل‌نشده\n۰\nکارهای انجام‌شده\n۰\nروند فعالیت\nتعداد کارهای ثبت‌شده در ۸ ماه اخیر\n۰\nکار ثبت‌ش",
+  "bridgeType": "object",
+  "pywebviewType": "object",
+  "fontLoaded": true,
+  "theme": "light",
+  "stageCount": 0,
+  "cardCount": 0,
+  "cardTextStart": "",
+  "assignedDisplay": "",
+  "widgetTheme": "",
+  "widgetPlacement": "clock-widget clock-widget--fixed",
+  "widgetSettingsShown": false,
+  "widgetSettingsSections": 0,
+  "taskLayout": null,
+  "taskQuickJumpFocus": "",
+  "workspaceModalStyle": null,
+  "clockQuickPopup": null,
+  "kanbanGeometry": null,
+  "laneMenuGeometry": null,
+  "inlineListForm": false,
+  "qaAddedList": false,
+  "qaBrowserErrors": []
+}
