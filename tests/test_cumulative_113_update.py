@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
-class Cumulative112SourceContract(unittest.TestCase):
+class Cumulative113SourceContract(unittest.TestCase):
     def test_versioned_builder_requires_all_three_source_version_markers(self):
         sys.path.insert(0, str(SCRIPTS))
         try:
@@ -30,7 +30,7 @@ class Cumulative112SourceContract(unittest.TestCase):
         self.assertEqual(release.builder.PROD.name, "Madar-Desk-1.0.13-Setup.exe")
         self.assertEqual(release.builder.QA.name, "Madar-Desk-1.0.13-Setup-QA.exe")
         self.assertEqual(release.MANIFEST.name, "Madar-Desk-1.0.13-Setup.release.json")
-        with TemporaryDirectory(prefix="madar-build-112-") as folder:
+        with TemporaryDirectory(prefix="madar-build-113-") as folder:
             root = Path(folder)
             package, updater, lock = [root / name for name in
                                       ("package.json", "madar_update.py", "package-lock.json")]
@@ -60,9 +60,9 @@ class Cumulative112SourceContract(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows PowerShell required")
-class Cumulative112SyntheticUpgrade(unittest.TestCase):
-    def test_111_to_113_with_synthetic_ledger_preserves_profile_exactly(self):
-        with TemporaryDirectory(prefix="madar-upgrade-112-") as folder:
+class Cumulative113SyntheticUpgrade(unittest.TestCase):
+    def test_112_to_113_with_synthetic_ledger_preserves_profile_exactly(self):
+        with TemporaryDirectory(prefix="madar-upgrade-113-") as folder:
             root = Path(folder)
             qa = root / ".qa-inno-v113-integrated"
             profile = qa / "Roaming" / "MadarDesk"
