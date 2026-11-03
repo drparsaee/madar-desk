@@ -97,7 +97,8 @@ function pageMetrics(){
   const targets=[...document.querySelectorAll(
     '.sac-ribbon-quick button,.sac-vtr-cta,.sac-vtr-due-actions button,'+
     '.sac-invoice-commandbar-actions button,.sac-workflow-actions button,'+
-    '.sac-ribbon-tabs button,.sac-ribbon-tools button')].filter(el=>visible(el)&&!el.disabled)
+    '.sac-ribbon-tabs button,.sac-ribbon-tools button,'+
+    '.sac-simple-nav button,.sac-nav-quick-actions button')].filter(el=>visible(el)&&!el.disabled)
     .map(el=>({text:(el.getAttribute('aria-label')||el.textContent||'').trim().slice(0,44),
       width:Math.round(el.getBoundingClientRect().width),
       height:Math.round(el.getBoundingClientRect().height)}));
@@ -126,12 +127,13 @@ function pageMetrics(){
     activeActionNames:activeActions.map(el=>el.textContent?.trim()?.slice(0,45)),
     hasInvoiceSummary:!!document.querySelector('.sac-invoice-summary,.sac-invoice-totals,'+
       '[aria-label="خلاصه فاکتور"],.sac-wizard-sticky-footer'),
-    routeIds:[...document.querySelectorAll('.sac-ribbon-tools button,.sac-sidebar nav button')]
+    routeIds:[...document.querySelectorAll('.sac-ribbon-tools [data-accounting-tab],'+
+      '.sac-simple-nav [data-accounting-tab],.sac-nav-more-menu [data-accounting-tab]')]
       .filter(visible).map(b=>({id:b.getAttribute('data-route-id')||
         b.getAttribute('data-ux-route')||b.getAttribute('data-accounting-tab')||
         b.getAttribute('data-tab-id')||b.getAttribute('aria-controls')||'',
         label:b.textContent?.trim()?.slice(0,50)})),
-    jumpSearchCount:document.querySelectorAll('[role=search] input').length};
+    jumpSearchCount:document.querySelectorAll('[data-accounting-action="search"]').length};
 }
 
 async function axeScan(page){
@@ -189,20 +191,40 @@ async function main(){
       {waitUntil:'domcontentloaded',timeout:30000});
     if(http.status()!==200)throw Error('Vite accounting page HTTP '+http.status());
     await page.locator('.sac-root').waitFor({state:'visible',timeout:20000});
-    await page.locator('.sac-ribbon-tabs button').first().waitFor({state:'visible'});
+    // v1.0.13 defaults to the novice navigation. The old unconditional wait
+    // for an advanced Ribbon was a false hang, especially at 390/560px.
+    if(width>700){
+      await page.getByRole('group',{name:'سطح نمایش حسابداری'})
+        .getByRole('button',{name:'پیشرفته'}).click();
+      await page.locator('.sac-ribbon-tabs button').first()
+        .waitFor({state:'visible',timeout:4000});
+    }else{
+      await page.locator('.sac-simple-nav [data-accounting-tab="invoice"]')
+        .waitFor({state:'visible',timeout:4000});
+    }
     await page.waitForFunction(()=>!document.querySelector('.sac-alert')?.textContent?.includes('دریافت داده دفترکل'),null,{timeout:9000}).catch(()=>{});
     return {context,page,errors};
   };
   const nav=async(page,key)=>{
-    const input=page.getByRole('searchbox',{name:'رفتن سریع به بخش حسابداری'});
     await page.keyboard.press('Control+k');
+    const input=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'})
+      .getByRole('combobox');
+    await input.waitFor({state:'visible',timeout:4000});
     if(!(await input.evaluate(el=>document.activeElement===el)))throw Error('Ctrl+K did not focus search');
-    await page.keyboard.type(key);
+    await input.fill(key);
     await page.keyboard.press('Enter');
     return (await page.locator('.sac-header h1').textContent()).trim();
   };
+  const newInvoice=async page=>{
+    const more=page.locator('.sac-nav-more-trigger:visible').first();
+    await more.click({timeout:4000});
+    await page.locator('.sac-nav-more-menu').getByRole('button',{name:'فاکتور جدید'})
+      .click({timeout:4000});
+  };
   const keyboardOperate=async(page,selector,{activate=false}={})=>{
     await page.keyboard.press('Control+k');
+    await page.getByRole('dialog',{name:'جست‌وجوی حسابداری'}).waitFor({state:'visible'});
+    await page.keyboard.press('Escape'); // Close focus-trapping modal before keyboard-walking page.
     let found=false,tabs=0;
     for(let index=0;index<100;index++){
       await page.keyboard.press('Tab');
@@ -244,7 +266,7 @@ async function main(){
         const {page,errors}=session;
         const overview=await page.evaluate(pageMetrics);
         const overviewAxe=await axeScan(page);
-        await page.locator('.sac-ribbon-quick').getByRole('button',{name:/فاکتور جدید/}).first().click();
+        await newInvoice(page);
         await page.locator('.sac-invoice-editor').waitFor({state:'visible',timeout:7000});
         const composer=await page.evaluate(pageMetrics);
         const composerAxe=await axeScan(page);
@@ -446,7 +468,7 @@ async function main(){
       }
       // Actual novice use: one quick action opens an editable invoice, then
       // changed data must remain if an attempted navigation is cancelled.
-      await page.locator('.sac-ribbon-quick').getByRole('button',{name:/فاکتور جدید/}).first().click();
+      await newInvoice(page);
       await page.locator('.sac-invoice-editor').waitFor();
       const rowInput=page.locator('.sac-invoice-editor input').filter({visible:true});
       const draftInput=page.locator('.sac-invoice-editor input[dir=ltr]').first();
