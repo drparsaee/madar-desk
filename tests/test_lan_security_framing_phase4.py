@@ -65,10 +65,16 @@ class LanOriginAndFramingTests(unittest.TestCase):
         self.assertEqual(self.service.sessions, {})
 
     def test_patch_rejects_signed_content_length_before_routing(self):
-        status, _ = self.request("PATCH", "/api/me", b"{}",
-                                 {"Content-Type": "application/json",
-                                  "Content-Length": "+2"})
+        # The framing violation is the signed header itself. Supplying actual
+        # body bytes here can make Windows abort the TCP connection when the
+        # server rightly rejects the header *before* reading that body.
+        # Header-only keeps the security assertion without an unread-body RST.
+        status, result = self.request("PATCH", "/api/me",
+                                      headers={"Content-Type": "application/json",
+                                               "Content-Length": "+2"})
         self.assertEqual(status, 400)
+        self.assertEqual(result, {"error": "طول درخواست نامعتبر است."})
+        self.assertEqual(self.service.sessions, {})
 
     def test_absolute_form_http_target_rejected_before_authorization(self):
         status, result = self.request("POST", "/api/login",
