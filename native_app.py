@@ -1963,6 +1963,17 @@ class Bridge:
         return StandaloneAccountingStore(self.path.parent / "standalone-accounting.sqlite3",
                                          default_currency="RIAL")
 
+    @staticmethod
+    def _with_company_posting_today(result):
+        """Trusted host posting date, valid for Solo, Server and remote LAN reads.
+
+        The browser is never permitted to choose this boundary for the ledger.
+        The server-side core applies the same rule while validating posting dates.
+        """
+        from accounting_core import _company_today
+        return {**result, "postingToday": _company_today(
+            result["view"], datetime.now(timezone.utc).isoformat())}
+
     def _standalone_accounting_read_local(self, *, actor, accounts):
         from lan import standalone_finance_access, standalone_finance_accounts
         from standalone_financial_report_host import attach_verified_reports
@@ -1979,7 +1990,7 @@ class Bridge:
             "canDraft": principal["role"] == "admin" or editor,
             "canAdmin": principal["role"] == "admin",
         }
-        return result
+        return self._with_company_posting_today(result)
 
     def _standalone_accounting_command_local(self, request, *, actor, accounts):
         if getattr(self, "_exit_financial_locked", False):
@@ -1991,10 +2002,10 @@ class Bridge:
         command, expected_revision = standalone_command_request(request)
         standalone_finance_access(actor, accounts, mutation=True)
         from standalone_financial_report_host import attach_verified_reports
-        return attach_verified_reports(self._standalone_accounting_store().command(
+        return self._with_company_posting_today(attach_verified_reports(self._standalone_accounting_store().command(
             command, actor=actor, accounts=standalone_finance_accounts(accounts),
             expected_revision=expected_revision,
-            now=datetime.now(timezone.utc).isoformat()))
+            now=datetime.now(timezone.utc).isoformat())))
 
     def standaloneAccountingRead(self):
         """Standalone-only read: no task/card/project lookup or cached LAN fallback."""
@@ -2910,8 +2921,9 @@ window.madar = Object.fromEntries(
 ACCOUNTING_JS_BRIDGE = """
 <script>
 window.madar = Object.fromEntries(
- ['standaloneAccountingRead','standaloneAccountingCommand',
-  'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview'].map(key =>
+  ['standaloneAccountingRead','standaloneAccountingCommand',
+   'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview',
+   'releaseCheck','releaseDownload','releaseInstall'].map(key =>
  [key, (...args) => new Promise((resolve, reject) => {
    // The standalone page frequently follows an in-window navigation from the
    // task desk. Its JavaScript API must not race WebView2 method injection.
