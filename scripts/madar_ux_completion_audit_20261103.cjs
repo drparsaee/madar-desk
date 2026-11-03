@@ -18,7 +18,7 @@ const axePath=process.env.MADAR_UXQA_AXE_PATH||
   path.join(root,'.qa-uxqa-tools','node_modules','axe-core','axe.min.js');
 const widths=[390,560,768,1440];
 const themes=['dark','light'];
-const report={format:1,baseline:'6bf687b4b643fb26b0186dc1b0d425f1b2ad0c29',
+const report={format:2,baseline:'7d45c11643f7d9082221750e97e3ad673161e7fe',
   runUTC:new Date().toISOString(),scope:'Synthetic accounting UI, Chromium + axe 4.14.0',
   matrix:[],checks:[],errors:[],limitations:[],toolchain:{}};
 const save=()=>{
@@ -91,13 +91,21 @@ function pageMetrics(){
   const labels=[...document.querySelectorAll(
     '.sac-invoice-editor label.sac-field>span,.sac-invoice-editor .sac-field>span,'+
     '.sac-invoice-editor .sac-panel-title p,.sac-vtr-due-title h3,'+
-    '.sac-vtr-due-item strong,.sac-vtr-due-item small')].filter(visible);
+    '.sac-vtr-due-item strong,.sac-vtr-due-item small,'+
+    '.sac-ah-card>span,.sac-ah-card>small,.sac-ah-action small,'+
+    '.sac-wizard-step-hint,.sac-wizard-heading-top span,'+
+    '.sac-wizard-section-title,.sac-wizard-impact-warning,'+
+    '.sac-invoice-summary-note,.sac-wizard-sticky-amount>span,'+
+    '.sac-wizard-sticky-amount>small')].filter(visible);
   const samples=labels.map(el=>({text:(el.textContent||'').trim().slice(0,55),
     ratio:contrast(el)}));
   const targets=[...document.querySelectorAll(
     '.sac-ribbon-quick button,.sac-vtr-cta,.sac-vtr-due-actions button,'+
     '.sac-invoice-commandbar-actions button,.sac-workflow-actions button,'+
-    '.sac-ribbon-tabs button,.sac-ribbon-tools button')].filter(el=>visible(el)&&!el.disabled)
+    '.sac-ribbon-tabs button,.sac-ribbon-tools button,'+
+    '.sac-simple-nav button,.sac-nav-quick-actions button,.sac-nav-mode button,'+
+    '.sac-ah-actions button,.sac-ah-card button,'+
+    '.sac-wizard-sticky-footer button,.sac-wizard-step-nav button')].filter(el=>visible(el)&&!el.disabled)
     .map(el=>({text:(el.getAttribute('aria-label')||el.textContent||'').trim().slice(0,44),
       width:Math.round(el.getBoundingClientRect().width),
       height:Math.round(el.getBoundingClientRect().height)}));
@@ -114,24 +122,31 @@ function pageMetrics(){
       /ذخیره|پیش‌نویس|ادامه|بعد|مرور|ثبت اصلاح/.test(el.textContent||el.getAttribute('aria-label')||''));
   const activeRects=activeActions.map(el=>el.getBoundingClientRect());
   const heading=(document.querySelector('.sac-header h1')?.textContent||'').trim();
-  const actionText=document.querySelector('.sac-vtr-due')?.textContent||'';
+  const actionText=document.querySelector('.sac-ah-card.primary')?.textContent||'';
+  const openAR=document.querySelector('.sac-ah-card.primary strong')?.textContent?.trim()||'';
   return {heading,theme:document.documentElement.dataset.theme,
     viewport:innerWidth,pageScrollWidth:document.documentElement.scrollWidth,
     horizontalOverflow:document.documentElement.scrollWidth>innerWidth+1,
     labels:samples,targets,scrollables,invoiceForm:!!composer,
-    actionableOverview:/دریافتنی|مطالبات/.test(actionText),
+    actionableOverview:/دریافتنی|مطالبات/.test(actionText)&&
+      !!openAR&&!/نامشخص|—|^۰$|^0$/.test(openAR),
     dueSectionText:actionText.slice(0,250),
     saveVisibleInViewport:activeRects.some(rect=>rect.top>=0&&rect.bottom<=innerHeight),
+    guidedWizard:!!document.querySelector('.sac-invoice-wizard-guided'),
+    wizardStep:document.querySelector('.sac-wizard-step-nav [aria-current="step"]')?.textContent?.trim()||'',
     composerActionCount:activeActions.length,
     activeActionNames:activeActions.map(el=>el.textContent?.trim()?.slice(0,45)),
     hasInvoiceSummary:!!document.querySelector('.sac-invoice-summary,.sac-invoice-totals,'+
       '[aria-label="خلاصه فاکتور"],.sac-wizard-sticky-footer'),
-    routeIds:[...document.querySelectorAll('.sac-ribbon-tools button,.sac-sidebar nav button')]
+    routeIds:[...document.querySelectorAll('.sac-simple-nav button[data-accounting-tab],'+
+      '.sac-nav-more-menu button[data-accounting-tab],'+
+      '.sac-ribbon-tools button[data-accounting-tab]')]
       .filter(visible).map(b=>({id:b.getAttribute('data-route-id')||
         b.getAttribute('data-ux-route')||b.getAttribute('data-accounting-tab')||
         b.getAttribute('data-tab-id')||b.getAttribute('aria-controls')||'',
         label:b.textContent?.trim()?.slice(0,50)})),
-    jumpSearchCount:document.querySelectorAll('[role=search] input').length};
+    searchTrigger:!!document.querySelector('[data-accounting-action="search"]'),
+    simpleNav:!!document.querySelector('.sac-ux-simple .sac-simple-nav')};
 }
 
 async function axeScan(page){
@@ -189,20 +204,150 @@ async function main(){
       {waitUntil:'domcontentloaded',timeout:30000});
     if(http.status()!==200)throw Error('Vite accounting page HTTP '+http.status());
     await page.locator('.sac-root').waitFor({state:'visible',timeout:20000});
-    await page.locator('.sac-ribbon-tabs button').first().waitFor({state:'visible'});
+    await page.locator('.sac-simple-nav button[data-accounting-tab]').first().waitFor({state:'visible',timeout:9000});
     await page.waitForFunction(()=>!document.querySelector('.sac-alert')?.textContent?.includes('دریافت داده دفترکل'),null,{timeout:9000}).catch(()=>{});
     return {context,page,errors};
   };
   const nav=async(page,key)=>{
-    const input=page.getByRole('searchbox',{name:'رفتن سریع به بخش حسابداری'});
     await page.keyboard.press('Control+k');
-    if(!(await input.evaluate(el=>document.activeElement===el)))throw Error('Ctrl+K did not focus search');
-    await page.keyboard.type(key);
-    await page.keyboard.press('Enter');
+    const dialog=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'});
+    await dialog.waitFor({state:'visible',timeout:3500});
+    const input=dialog.getByRole('combobox',{name:/جست‌وجوی بخش/});
+    if(!await input.evaluate(el=>el===document.activeElement))
+      throw Error('Ctrl+K failed to focus search combobox');
+    await input.fill(key);
+    const options=dialog.getByRole('option');
+    const count=await options.count();
+    if(!count)throw Error('No authorized search result for '+key);
+    const exact=options.filter({hasText:key});
+    if(await exact.count())await exact.first().click();
+    else await page.keyboard.press('Enter');
+    await dialog.waitFor({state:'hidden',timeout:3500});
     return (await page.locator('.sac-header h1').textContent()).trim();
   };
+  const tabNav=async(page,key)=>{
+    const target=page.locator('.sac-simple-nav [data-accounting-tab="'+key+'"]');
+    if(await target.isVisible().catch(()=>false)){await target.click();return 1;}
+    const more=page.locator('.sac-simple-nav [data-accounting-action="more"]');
+    await more.click();
+    const item=page.locator('.sac-nav-more-menu [data-accounting-tab="'+key+'"]');
+    await item.click({timeout:3500});return 2;
+  };
+  const openInvoice=async page=>{
+    // 390/560 mobile intentionally hides the quick-action row; the actionable
+    // home card is the primary one-tap route. The desktop quick button remains.
+    const quick=page.locator('.sac-nav-quick-actions [data-accounting-action="invoice"]');
+    if(await quick.isVisible().catch(()=>false))await quick.click();
+    else if(await page.locator('.sac-ah-action.sac-ah-sale').isVisible().catch(()=>false))
+      await page.locator('.sac-ah-action.sac-ah-sale').click();
+    else{
+      await tabNav(page,'invoice');
+      await page.locator('.sac-workflow-actions button.sac-primary').click({timeout:4000});
+    }
+    await page.locator('.sac-invoice-editor').waitFor({state:'visible',timeout:4500});
+  };
+  const homeActionPaths=[
+    {id:'sale',tab:'invoice',expect:'فاکتورهای فروش',composer:true},
+    {id:'purchase',tab:'bill',expect:'صورتحساب‌های خرید'},
+    {id:'receipt',tab:'settlements',expect:'دریافت، پرداخت و اقساط'},
+    {id:'payment',tab:'settlements',expect:'دریافت، پرداخت و اقساط'},
+    {id:'reconcile',tab:'cash',expect:'صندوق، بانک و مغایرت'},
+    {id:'reports',tab:'reports',expect:'گزارش‌های مالی'}
+  ];
+  const verifyHomePaths=async(page,scope)=>{
+    for(const route of homeActionPaths){
+      try{
+        await page.locator('.sac-ah-action.sac-ah-'+route.id).click({timeout:3500});
+        const heading=(await page.locator('.sac-header h1').textContent()).trim();
+        const composer=await page.locator('.sac-invoice-editor').isVisible();
+        add('UX-03',heading===route.expect&&(!route.composer||composer)?'PASS':'FAIL',
+          'Quick action home workflow uses one visible click',
+          {scope,action:route.id,actions:1,heading,composer});
+      }catch(error){
+        add('UX-03','FAIL','Quick action home workflow cannot reach destination',
+          {scope,action:route.id,error:errorText(error)});
+      }finally{
+        try{await tabNav(page,'overview');}catch(error){
+          add('UX-03','BLOCKED','Cannot return to synthetic action home',
+            {scope,action:route.id,error:errorText(error)});
+        }
+      }
+    }
+  };
+  const verifyWizard=async(page,scope)=>{
+    const wizard=page.locator('.sac-wizard-step-nav');
+    if(!await wizard.isVisible())return {status:'MISSING',reason:'Guided five-stage invoice navigation not rendered'};
+    const steps=await wizard.locator('button').count();
+    if(steps!==5)return {status:'FAIL',reason:'Wizard does not expose exactly five stages',steps};
+    const auditStage=async(stage)=>{
+      const stageScope=scope+'/wizard/'+stage;
+      const metrics=await page.evaluate(pageMetrics);
+      const scan=await axeScan(page);
+      const axeResult=assessAxe(scan);
+      add('UX-02',axeResult.status,axeResult.reason,{scope:stageScope,
+        severe:axeResult.severe,incomplete:axeResult.incomplete});
+      const colorViolations=scan.violations.filter(v=>v.id==='color-contrast');
+      const contrast=assessContrast(metrics.labels);
+      add('UX-01',colorViolations.length?'FAIL':contrast.status,
+        colorViolations.length?'axe-core found text color contrast violations':contrast.reason,
+        {scope:stageScope,colorViolations,unresolved:contrast.unresolved?.slice(0,8),
+          failures:contrast.failures?.slice(0,8)});
+      const touch=assessTouch(metrics.targets);
+      add('UX-06',touch.status,touch.reason,{scope:stageScope,count:touch.measured,
+        failures:touch.failures?.slice(0,12)});
+      add('UX-07',metrics.horizontalOverflow?'FAIL':'PASS',
+        metrics.horizontalOverflow?'Wizard stage causes page overflow':
+          'Wizard stage fits viewport width',{scope:stageScope,
+          scrollWidth:metrics.pageScrollWidth,viewport:metrics.viewport});
+      add('UX-05',metrics.saveVisibleInViewport?'PASS':'FAIL',
+        'Active guided wizard step action must remain visible in viewport',
+        {scope:stageScope,activeActionNames:metrics.activeActionNames,
+          wizardStep:metrics.wizardStep});
+    };
+    const id=page.locator('#sac-wizard-panel-document input[dir="ltr"]').first();
+    await id.fill('UX-DRAFT-UNSAVED');
+    const customer=page.locator('#sac-wizard-panel-document select').first();
+    await customer.selectOption({index:1});
+    const actions=page.locator('.sac-wizard-sticky-actions');
+    const next=async()=>{
+      await actions.locator('button.sac-primary').click();
+      await page.waitForTimeout(50);
+    };
+    await next();
+    const active=()=>wizard.locator('[aria-current="step"]').textContent();
+    if(!String(await active()).includes('اقلام'))return {status:'FAIL',reason:'Did not advance to line items after valid document'};
+    await auditStage('lines');
+    await page.locator('#sac-wizard-panel-lines [data-invoice-col="0"]').first().fill('UX QATEST SERVICE');
+    await page.locator('#sac-wizard-panel-lines [data-invoice-col="2"]').first().fill('97500');
+    await next();
+    if(!String(await active()).includes('مالیات'))return {status:'FAIL',reason:'Did not advance to tax step after valid line'};
+    await auditStage('tax');
+    await next();
+    if(!String(await active()).includes('پرداخت'))return {status:'FAIL',reason:'Did not advance to due/payment step'};
+    await auditStage('due');
+    await next();
+    if(!String(await active()).includes('مرور'))return {status:'FAIL',reason:'Did not reach review/save step'};
+    await auditStage('review');
+    const warning=await page.locator('.sac-wizard-impact-warning').isVisible();
+    const reviewSave=await page.locator('.sac-wizard-sticky-actions button[type=submit]').isVisible();
+    // Returning across steps must leave the exact line and header untouched.
+    await wizard.locator('button').nth(1).click();
+    const line=await page.locator('#sac-wizard-panel-lines [data-invoice-col="0"]').first().inputValue();
+    await wizard.locator('button').first().click();
+    const preserved=await id.inputValue();
+    const selected=await customer.inputValue();
+    const noCalls=await page.evaluate(()=>window.__uxqaCalls.length===0);
+    return {status:warning&&reviewSave&&line==='UX QATEST SERVICE'&&
+      preserved==='UX-DRAFT-UNSAVED'&&!!selected&&noCalls?'PASS':'FAIL',
+    reason:'Five-stage guided invoice; financial warning, review save and persistence across steps',
+    steps,warning,reviewSave,line,preserved,selected,noCalls};
+  };
   const keyboardOperate=async(page,selector,{activate=false}={})=>{
-    await page.keyboard.press('Control+k');
+    // Close the modal first; its focus trap deliberately prevents Tab from
+    // reaching application controls. Then navigate with keyboard Tab.
+    const dialog=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'});
+    if(await dialog.count())await page.keyboard.press('Escape');
+    await page.locator('[data-accounting-action="search"]').first().focus();
     let found=false,tabs=0;
     for(let index=0;index<100;index++){
       await page.keyboard.press('Tab');
@@ -244,8 +389,17 @@ async function main(){
         const {page,errors}=session;
         const overview=await page.evaluate(pageMetrics);
         const overviewAxe=await axeScan(page);
-        await page.locator('.sac-ribbon-quick').getByRole('button',{name:/فاکتور جدید/}).first().click();
-        await page.locator('.sac-invoice-editor').waitFor({state:'visible',timeout:7000});
+        // Advanced Ribbon remains available on desktop; compact mobile
+        // deliberately retains More instead of rendering a second wide row.
+        await page.locator('.sac-nav-mode').getByRole('button',{name:'پیشرفته'}).click();
+        const advancedRibbon=await page.locator('.sac-advanced-ribbon .sac-ribbon-tabs').isVisible();
+        const mobileMore=await page.locator('.sac-simple-nav [data-accounting-action="more"]').isVisible();
+        add('UX-07',(width>=768?advancedRibbon:mobileMore)?'PASS':'FAIL',
+          'Advanced navigation is usable on desktop and compact More remains on mobile',
+          {scope,advancedRibbon,mobileMore});
+        await page.locator('.sac-nav-mode').getByRole('button',{name:'ساده'}).click();
+        await verifyHomePaths(page,scope);
+        await openInvoice(page);
         const composer=await page.evaluate(pageMetrics);
         const composerAxe=await axeScan(page);
         const scrollInfo=await page.evaluate(()=>{
@@ -301,17 +455,28 @@ async function main(){
         if(overview.actionableOverview)add('UX-04','PASS','Outstanding receivable has visible action context',{scope});
         else add('UX-04','FAIL','Outstanding synthetic issued receivable is not surfaced as receivable',{scope,
           excerpt:overview.dueSectionText});
-        const tooWide=overview.scrollables.filter(s=>s.overflow);
-        if(tooWide.length){
-          const cues=await page.locator('button[aria-label*="بیشتر"],button[aria-label*="پیمایش"],'+
-            'button[aria-label*="بعدی"],button[aria-label*="قبلی"],.sac-ribbon-more').count();
-          add('UX-07',cues?'PASS':'FAIL',cues?'Overflow has explicit navigation cues':
-            'Ribbon overflows with no discoverable more/scroll control',{scope,scrolls:tooWide,cues});
-        }
+        const simple=await page.locator('.sac-ux-simple .sac-simple-nav').isVisible();
+        const more=page.locator('.sac-simple-nav [data-accounting-action="more"]');
+        const moreVisible=await more.isVisible();
+        add('UX-07',simple&&moreVisible?'PASS':'FAIL',
+          'Mobile simple navigation requires a visible More control and no horizontal page overflow',
+          {scope,simple,moreVisible,scrolls:overview.scrollables.filter(s=>s.overflow)});
         if(width===390||width===1440){
           const name='invoice-'+theme+'-'+width+'.png';
           await page.screenshot({path:path.join(outDir,name),animations:'disabled'});
           entry.screenshot=name;
+        }
+        try{
+          const outcome=await verifyWizard(page,scope);
+          add('UX-05',outcome.status,outcome.reason,{scope:scope+'/wizard',...outcome});
+          add('UX-09',outcome.status,outcome.reason,{scope:scope+'/wizard',...outcome});
+        }catch(error){
+          add('UX-05','FAIL','Guided wizard navigation or state preservation failed',
+            {scope:scope+'/wizard',error:errorText(error)});
+          add('UX-09','FAIL','Guided wizard navigation or review warning failed',
+            {scope:scope+'/wizard',error:errorText(error)});
+          add('UX-02','BLOCKED','Guided wizard step scans stopped before all four stages',
+            {scope:scope+'/wizard',error:errorText(error)});
         }
         if(errors.length)add('UX-10','FAIL','Uncaught JS exceptions while rendering',{scope,errors});
       }catch(error){
@@ -349,7 +514,7 @@ async function main(){
       // navigation. These do not assert persistence or ledger acceptance.
       for(const goal of [
         {name:'invoice-draft',query:'فاکتورهای فروش',selector:
-          '.sac-ribbon-quick button[title*="باز کردن صفحه ورود اطلاعات فاکتور"]',activate:true},
+          '.sac-nav-quick-actions [data-accounting-action="invoice"]',activate:true},
         {name:'purchase-draft',query:'صورتحساب‌های خرید',selector:
           '.sac-invoice-editor input[dir="ltr"]:not([readonly])'},
         {name:'receipt-entry',query:'دریافت، پرداخت',selector:
@@ -381,48 +546,59 @@ async function main(){
             {goal:goal.name,error:errorText(error)});
         }
       }
-      // Measured novice click paths: one immediate action for sales, at most
-      // one ribbon category plus one command for the remaining four tasks.
+      // Measured novice click paths: visible simple nav and expandable More.
       const novice=[
-        {name:'invoice',group:'فاکتورها و سفارش‌ها',label:'فاکتورهای فروش'},
-        {name:'purchase',group:'فاکتورها و سفارش‌ها',label:'صورتحساب‌های خرید'},
-        {name:'receipts',group:'خزانه و پرداخت',label:'دریافت، پرداخت و اقساط'},
-        {name:'reconciliation',group:'خزانه و پرداخت',label:'صندوق، بانک و مغایرت'},
-        {name:'reports',group:'گزارش‌ها و سوابق',label:'گزارش‌های مالی'}
+        {name:'invoice',id:'invoice',label:'فاکتورهای فروش'},
+        {name:'purchase',id:'bill',label:'صورتحساب‌های خرید'},
+        {name:'receipts',id:'settlements',label:'دریافت، پرداخت و اقساط'},
+        {name:'reconciliation',id:'cash',label:'صندوق، بانک و مغایرت'},
+        {name:'reports',id:'reports',label:'گزارش‌های مالی'}
       ];
       for(const route of novice){
         try{
-          await page.locator('.sac-ribbon-tabs').getByRole('button',
-            {name:route.group,exact:true}).click({timeout:3500});
-          await page.locator('.sac-ribbon-tools').getByRole('button',
-            {name:route.label,exact:true}).click({timeout:3500});
+          const actions=await tabNav(page,route.id);
           const actual=(await page.locator('.sac-header h1').textContent()).trim();
-          add('UX-03',actual===route.label?'PASS':'FAIL',
-            'Novice route via two visible menu actions',{goal:route.name,
-              actions:2,result:actual});
+          add('UX-03',actual===route.label&&actions<=2?'PASS':'FAIL',
+            'Novice route via one or two visible menu actions',{goal:route.name,
+              actions,result:actual});
         }catch(error){
           add('UX-03','FAIL','Novice navigation target not reachable in two actions',
             {goal:route.name,error:errorText(error)});
         }
       }
-      const guide=await page.getByRole('button',{name:/راهنمای میانبر|راهنمای میان‌بر|راهنمای شروع|راهنمای کلید/}).count();
+      await page.keyboard.press('Control+k');
+      const guide=await page.locator('.sac-global-search-footer').filter({hasText:'Esc'}).count();
+      await page.keyboard.press('Escape');
       add('UX-08',guide?'PASS':'MISSING',guide?'Keyboard guidance accessible':
         'Keyboard shortcut/help guide control not found');
-      const searchLabels=await page.locator('[role=search]').evaluateAll(nodes=>nodes.map(x=>x.getAttribute('aria-label')||''));
-      const recordSearch=searchLabels.some(label=>/سراسری|اسناد|رکورد|فاکتور.*شخص|جست‌وجوی اطلاعات/.test(label));
+      await page.keyboard.press('Control+k');
+      const searchDialog=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'});
+      const searchInput=searchDialog.getByRole('combobox');
+      await searchInput.fill('UX-ISSUED-001');
+      const invoiceMatches=await searchDialog.getByRole('option').allTextContents();
+      await searchInput.fill('CUSTOMER-UX');
+      const partyMatches=await searchDialog.getByRole('option').allTextContents();
+      await page.keyboard.press('Escape');
+      const recordSearch=invoiceMatches.some(x=>x.includes('UX-ISSUED-001'))&&
+        partyMatches.some(x=>x.includes('CUSTOMER-UX')||x.includes('مشتری آزمایشی'));
       add('UX-08',recordSearch?'PASS':'MISSING',recordSearch?
-        'Search explicitly exposes record-level retrieval':'Only section jump search exposed; record-level search contract absent',
-        {searchLabels});
-      const routeIds=await page.locator('.sac-sidebar nav button').evaluateAll(buttons=>buttons.map(el=>({
+        'Global search retrieved synthetic invoice and customer by ID':
+        'Global search did not retrieve both authorized invoice ID and customer ID',
+        {invoiceMatches,partyMatches});
+      await page.locator('.sac-simple-nav [data-accounting-action="more"]').click();
+      const routeIds=await page.locator('.sac-simple-nav button[data-accounting-tab],'+
+        '.sac-nav-more-menu button[data-accounting-tab]')
+        .evaluateAll(buttons=>buttons.map(el=>({
         id:el.getAttribute('data-route-id')||el.getAttribute('data-ux-route')||
           el.getAttribute('data-accounting-tab')||el.getAttribute('data-tab-id')||
           el.getAttribute('aria-controls'),
         text:(el.textContent||'').trim().slice(0,35)})));
-      const unique=routeIds.length&&routeIds.every(item=>item.id)&&
+      const unique=routeIds.length===18&&routeIds.every(item=>item.id)&&
         new Set(routeIds.map(item=>item.id)).size===routeIds.length;
       add('UX-10',unique?'PASS':'MISSING',unique?'Navigation uses unique stable route identifiers':
         'Navigation lacks stable route identifiers; tests would rely on display strings',
         {total:routeIds.length,withoutId:routeIds.filter(item=>!item.id).slice(0,8)});
+      await page.locator('.sac-simple-nav [data-accounting-action="more"]').click();
       try{
         await nav(page,'فاکتورهای فروش');
         const statuses=[];
@@ -446,13 +622,13 @@ async function main(){
       }
       // Actual novice use: one quick action opens an editable invoice, then
       // changed data must remain if an attempted navigation is cancelled.
-      await page.locator('.sac-ribbon-quick').getByRole('button',{name:/فاکتور جدید/}).first().click();
+      await openInvoice(page);
       await page.locator('.sac-invoice-editor').waitFor();
       const rowInput=page.locator('.sac-invoice-editor input').filter({visible:true});
       const draftInput=page.locator('.sac-invoice-editor input[dir=ltr]').first();
       await draftInput.fill('UX-DRAFT-UNSAVED');
       const details=page.locator('.sac-invoice-editor details.sac-disclosure').first();
-      if(await details.count())await details.locator('summary').click();
+      if(await details.isVisible())await details.locator('summary').click();
       const stillEdited=await draftInput.inputValue().catch(()=>null);
       add('UX-05',stillEdited==='UX-DRAFT-UNSAVED'?'PASS':'FAIL',
         'Expanding optional invoice details must not reset unsaved form values',
@@ -481,17 +657,35 @@ async function main(){
       const restricted=await start(1440,'dark',role);
       try{
         const {page}=restricted;
-        const newInvoice=await page.locator('.sac-ribbon-quick').getByRole('button',
-          {name:/فاکتور جدید/}).count();
+        const newInvoice=await page.locator('.sac-nav-quick-actions [data-accounting-action="invoice"]').count();
         add('UX-08',(role==='viewer'?newInvoice===0:newInvoice>0)?'PASS':'FAIL',
           'Quick-create permission matches synthetic UI capability',{role,newInvoice});
         await nav(page,'فاکتورهای فروش');
         const issue=await page.getByRole('button',{name:/^صدور فاکتور$|^تأیید فاکتور$/}).count();
         add('UX-08',issue===0?'PASS':'FAIL','Viewer/editor cannot issue or approve without management grant',
           {role,issueCount:issue});
-        const guide=await page.getByRole('button',{name:/راهنمای میانبر|راهنمای میان‌بر|راهنمای شروع/}).count();
-        add('UX-09',guide?'PASS':'MISSING',guide?'Beginner guide available to restricted role':
-          'Guided novice workflow is not available in the restricted role',{role});
+        await page.keyboard.press('Control+k');
+        const searchDialog=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'});
+        const searchInput=searchDialog.getByRole('combobox');
+        const guide=await searchDialog.locator('.sac-global-search-footer').filter({hasText:'Esc'}).count();
+        await searchInput.fill('مهاجرت');
+        const privateOptions=await searchDialog.getByRole('option').allTextContents();
+        add('UX-08',privateOptions.length===0?'PASS':'FAIL',
+          'Non-admin search does not reveal admin-only migration navigation',
+          {role,privateOptions});
+        await page.keyboard.press('Escape');
+        add('UX-08',guide?'PASS':'FAIL',guide?
+          'Keyboard search help visible for restricted role':
+          'Keyboard search help missing for restricted role',{role});
+        if(role==='editor'){
+          await tabNav(page,'overview');
+          await openInvoice(page);
+          const wizard=await page.locator('.sac-wizard-step-nav button').count();
+          add('UX-09',wizard===5?'PASS':'MISSING',
+            wizard===5?'Editor has five-stage novice draft guide':'Editor draft guide unavailable',
+            {role,steps:wizard});
+        }else add('UX-09',newInvoice===0?'PASS':'FAIL',
+          'Read-only viewer is not offered draft creation',{role});
       }catch(error){
         add('UX-08','BLOCKED','Restricted role search/navigation scenario failed: '+errorText(error),{role});
       }finally{await restricted.context.close();}
