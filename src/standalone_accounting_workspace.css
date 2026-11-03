@@ -58,6 +58,12 @@
 .sac-root th,.sac-root td{text-align:right;border-bottom:1px solid #edf1f2;padding:13px 10px;vertical-align:middle;white-space:normal}
 .sac-root th{background:#f5f9f8;font-weight:700;color:#5d767b;font-size:11px;white-space:nowrap}
 .sac-root tbody tr:hover{background:#fafdfc}
+.sac-root tbody tr.sac-search-target-row td{background:#d9f2f0;color:#123f48}
+.sac-root tbody tr.sac-search-target-row:focus{outline:3px solid #087f81;outline-offset:-3px}
+:root[data-theme="dark"] .sac-root tbody tr.sac-search-target-row td{
+  background:#254e55;color:#f1ffff}
+:root[data-theme="dark"] .sac-root tbody tr.sac-search-target-row:focus{
+  outline-color:#83e5d7}
 .sac-root tr:last-child td{border-bottom:0}
 .sac-root td strong{display:block}
 .sac-root td small{display:block;font-size:10px;color:#9ba7ad;margin-top:4px}

@@ -509,10 +509,34 @@ const textOf=node=>{
   if(Array.isArray(node))return node.map(textOf).join(' ');
   return textOf(node?.props?.children);
 };
-function DataTable({cols,rows,empty}){
+function DataTable({cols,rows,empty,focusTarget=null}){
   const [filter,setFilter]=useState(''),[column,setColumn]=useState(-1),
     [desc,setDesc]=useState(false),[visibleLimit,setVisibleLimit]=useState(100);
+  const selectedRow=useRef(null),lastFocusedToken=useRef(null);
   const large=rows.length>12;
+  const targetIndex=focusTarget?rows.findIndex(row=>
+    row.props?.['data-accounting-search-kind']===focusTarget.kind&&
+    row.props?.['data-accounting-search-id']===focusTarget.id):-1;
+  useEffect(()=>{
+    if(!focusTarget||targetIndex<0)return;
+    // The exact selected host-authorized row may be beyond the first 100 rows.
+    // Drop an old table filter/sort rather than focusing an unrelated row.
+    setFilter('');setColumn(-1);setDesc(false);
+    setVisibleLimit(Math.max(100,targetIndex+1));
+  },[focusTarget?.token,focusTarget?.kind,focusTarget?.id,targetIndex]);
+  useEffect(()=>{
+    if(!focusTarget||targetIndex<0||lastFocusedToken.current===focusTarget.token||
+      filter||column!==-1||visibleLimit<=targetIndex)return;
+    const frame=window.requestAnimationFrame(()=>{
+      const row=selectedRow.current;
+      if(!row||row.dataset.accountingSearchId!==focusTarget.id)return;
+      row.scrollIntoView({block:'center',behavior:'instant'});
+      row.focus({preventScroll:true});
+      lastFocusedToken.current=focusTarget.token;
+    });
+    return ()=>window.cancelAnimationFrame(frame);
+  },[focusTarget?.token,focusTarget?.kind,focusTarget?.id,targetIndex,
+    filter,column,visibleLimit]);
   const indexed=rows.map((row,i)=>({
     row,i,cells:React.Children.toArray(row.props.children).filter(Boolean)}));
   const matched=filter.trim()?indexed.filter(x=>textOf(x.row).toLocaleLowerCase('fa-IR')
@@ -538,7 +562,13 @@ function DataTable({cols,rows,empty}){
       <th key={i}>{large?<button type="button" className="sac-table-sort"
         onClick={()=>{setColumn(i);setDesc(column===i?!desc:false);setVisibleLimit(100);}}
         aria-label={'مرتب‌سازی بر اساس '+x}>{x}{column===i?(desc?' ↓':' ↑'):''}</button>:x}</th>)}
-      </tr></thead><tbody>{visible.map(x=>x.row)}</tbody></table></div>
+      </tr></thead><tbody>{visible.map(x=>
+        focusTarget&&x.row.props?.['data-accounting-search-kind']===focusTarget.kind&&
+          x.row.props?.['data-accounting-search-id']===focusTarget.id?
+          React.cloneElement(x.row,{ref:selectedRow,tabIndex:-1,
+            className:'sac-search-target-row',
+            'aria-label':'رکورد انتخاب‌شده: '+focusTarget.id}):x.row
+      )}</tbody></table></div>
     {remaining>0&&<div className="sac-table-pagination">
       <span>{remaining.toLocaleString('fa-IR')} ردیف دیگر در همین فهرست</span>
       <button type="button" onClick={()=>setVisibleLimit(p=>p+100)}>نمایش ۱۰۰ ردیف بعدی</button>
@@ -596,6 +626,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const [batchParty,setBatchParty]=useState('');
   const [editTarget,setEditTarget]=useState('');
   const [detailTarget,setDetailTarget]=useState('');
+  const [searchTarget,setSearchTarget]=useState(null);
+  const searchSequence=useRef(0);
   const [reopenReason,setReopenReason]=useState('');
   const [correctionTarget,setCorrectionTarget]=useState('');
   const [correctionReason,setCorrectionReason]=useState('');
@@ -775,6 +807,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     }
     if(name!==tab&&tab==='invoice'&&invoiceComposerOpen&&!closeInvoiceComposer())return false;
     if(name!==tab)setInvoiceComposerOpen(false);
+    setSearchTarget(null);
     setTab(name);setCancelTarget('');setEditTarget('');
     setDetailTarget('');setReopenReason('');setCorrectionTarget('');
     setCorrectionReason('');setReturnTarget('');setReturnReason('');
@@ -789,14 +822,16 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       account:['accounts','accounts'],journal:['journals','journal'],
       receipt:['receipts','settlements'],payment:['payments','settlements']};
     const spec=locations[kind];
-    if(!spec||destination!==spec[1]||typeof id!=='string')return;
+    if(!spec||destination!==spec[1]||!validId(id)||!view||
+      state.loading||state.error)return;
     const collection=view?.[spec[0]];
     const record=Array.isArray(collection)?collection.find(item=>item?.id===id):
       collection&&typeof collection==='object'?collection[id]:null;
     if(!record||!gotoTab(destination))return;
     if(kind==='invoice'||kind==='bill')setDetailTarget(id);
     else if(kind==='account'){setAccountFilter(id);setSelectedHistoricAccount(id);}
-    else if(kind==='party')setPartyQuery(record.name||id);
+    else if(['party','journal','receipt','payment'].includes(kind))
+      setSearchTarget({kind,id,token:++searchSequence.current});
     else if(kind==='receipt'||kind==='payment'){
       setForms(old=>({...old,settlement:{...old.settlement,
         kind:kind==='payment'?'payment':'receipt',documentId:''}}));
@@ -840,6 +875,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const refresh=useCallback(async()=>{
     if(locked.current)return;
     const n=++request.current;
+    // Never keep a previous host-authorized ledger searchable after a read failure
+    // or company/role switch. Revalidate before exposing any row or deep-link.
+    latest.current=null;setSnapshot(null);setSearchTarget(null);setDetailTarget('');
     setState(p=>({...p,loading:true,error:''}));
     try{
       if(typeof api?.standaloneAccountingRead!=='function')
@@ -2397,7 +2435,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             <Panel title="طرف‌حساب‌ها" description="مانده تاریخی دفترکل و مانده فاکتورهای جدید تفکیک شده‌اند. مانده تاریخی دوباره به اسناد عملیاتی افزوده نشده است.">
               <DataTable cols={['شناسه','نام','نقش','سقف اعتبار','مانده تاریخی','دریافتنی جدید','پرداختنی جدید','گردش','ویرایش']}
                 empty="هیچ شخصی در دفتر ثبت نشده است."
-                rows={historicalPartyAccounts.map(p=><tr key={p.id}><td dir="ltr">{p.id}</td>
+                focusTarget={searchTarget?.kind==='party'?searchTarget:null}
+                rows={historicalPartyAccounts.map(p=><tr key={p.id}
+                  data-accounting-search-kind="party" data-accounting-search-id={p.id}>
+                  <td dir="ltr">{p.id}</td>
                   <td>{p.name}</td><td>{p.kind==='both'?'مشتری و تأمین‌کننده':
                     p.kind==='vendor'?'تأمین‌کننده':'مشتری'}</td>
                   <td>{p.creditLimit===null||p.creditLimit===undefined?'نامحدود':moneyText(p.creditLimit)}</td>
@@ -2590,7 +2631,11 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
               {['receipts','payments'].map(key=><div key={key} className="sac-list-section">
                 <h3>{key==='receipts'?'دریافت‌های ثبت‌شده':'پرداخت‌های ثبت‌شده'}</h3>
                 <DataTable cols={['شناسه','طرف‌حساب','تاریخ','حساب نقدی','مبلغ','وضعیت']}
-                  empty="تراکنشی ثبت نشده است." rows={sortMap(view[key]).map(r=><tr key={r.id}>
+                  focusTarget={searchTarget?.kind===(key==='receipts'?'receipt':'payment')?
+                    searchTarget:null}
+                  empty="تراکنشی ثبت نشده است." rows={sortMap(view[key]).map(r=><tr key={r.id}
+                    data-accounting-search-kind={key==='receipts'?'receipt':'payment'}
+                    data-accounting-search-id={r.id}>
                     <td dir="ltr">{r.id}</td><td>{parties[r.partyId]?.name||r.partyId}</td>
                     <td>{displayAccountingDate(r.date)}</td><td>{accounts[r.accountId]?.name||r.accountId}</td>
                     <td>{moneyText(r.total)}</td>
@@ -2787,7 +2832,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           {tab==='journal'&&<>
             <Panel title="اسناد واقعی دفترکل" description="برگشت یک سند جداگانه ایجاد می‌کند و تاریخچه قبلی را حذف نمی‌کند.">
               <DataTable cols={['شناسه','تاریخ','منبع','بدهکار','بستانکار','وضعیت']}
-                empty="سند دفترکلی ثبت نشده است." rows={view.journals.map(j=><tr key={j.id}>
+                focusTarget={searchTarget?.kind==='journal'?searchTarget:null}
+                empty="سند دفترکلی ثبت نشده است." rows={view.journals.map(j=><tr key={j.id}
+                  data-accounting-search-kind="journal" data-accounting-search-id={j.id}>
                     <td dir="ltr">{j.id}</td><td>{displayAccountingDate(j.date)}</td><td>{humanSource(j.sourceType)}</td>
                   <td>{debitText(j.lines.reduce((s,l)=>s+l.debit,0))}</td>
                   <td>{creditText(j.lines.reduce((s,l)=>s+l.credit,0))}</td>
