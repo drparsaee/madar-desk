@@ -8,7 +8,7 @@ import {
   LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
   MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Tag,
   Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
-  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon, Palette
+  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon, Palette, Undo2, Redo2
 } from 'lucide-react';
 import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
@@ -61,6 +61,7 @@ import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
+import {emptyCardHistory,isUndoableCardPatch,recordCardEdit,cardHistoryAvailability,applyCardHistory} from './card_undo.js';
 import './interface_mode.css';
 import './boardplus.css';
 import './task_editor_compact.css';
@@ -230,7 +231,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
   const [customFieldsOpen,setCustomFieldsOpen]=useState(()=>Boolean(boards.find(board=>board.id===task.boardId)?.customFields?.length));
   const [automationButtonsOpen,setAutomationButtonsOpen]=useState(false);
@@ -312,7 +313,10 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     return()=>cancelAnimationFrame(frame);
   },[initialSection,task.id]);
   return <div className="drawer-overlay" onMouseDown={onClose}><aside ref={drawerRef} tabIndex={-1} className="drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
-    <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div>
+    <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><div style={{display:'flex',alignItems:'center',gap:4,marginInlineStart:'auto'}}>
+      {onUndo&&<button type="button" onClick={onUndo} className="icon-btn" disabled={!canUndo} title="بازگرداندن ویرایش کارت" aria-label="بازگرداندن ویرایش کارت"><Undo2 size={19}/></button>}
+      {onRedo&&<button type="button" onClick={onRedo} className="icon-btn" disabled={!canRedo} title="انجام دوباره ویرایش کارت" aria-label="انجام دوباره ویرایش کارت"><Redo2 size={19}/></button>}
+      <button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div></div>
     <div className="drawer-scroll">
       <input className="task-edit-title" aria-label="عنوان کار" value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
       <nav className="task-quick-actions" aria-label="دسترسی سریع به بخش‌های کارت">
@@ -834,6 +838,8 @@ export default function App(){
   const saving=useRef(false);
   const lastSaved=useRef('');
   const dataMutationEpoch=useRef(0);
+  const cardUndo=useRef(emptyCardHistory(null));
+  const clearCardUndo=()=>{cardUndo.current=emptyCardHistory(null);};
   const refresh=async(force=false)=>{
     if((dirty.current||saving.current||blocked.current)&&!force)return;
     const startEpoch=dataMutationEpoch.current;
@@ -842,12 +848,23 @@ export default function App(){
     // that edit, even if the save debounce has already cleared dirty.current.
     if(!force&&((dirty.current||saving.current||blocked.current)||
                 dataMutationEpoch.current!==startEpoch))return;
-    setData(previous=>!previous||JSON.stringify(previous)!==JSON.stringify(fresh)?fresh:previous);
+    setData(previous=>{
+      if(previous&&JSON.stringify(previous)===JSON.stringify(fresh))return previous;
+      clearCardUndo();
+      return fresh;
+    });
     lastSaved.current=JSON.stringify(fresh);
     setLastSync(new Date());
     setSavingError('');
   };
-  const refreshLan=async()=>setLanStatus(await api.lanStatus(true));
+  const refreshLan=async()=>{
+    const status=await api.lanStatus(true);
+    setLanStatus(previous=>{
+      if(previous?.mode!==status?.mode||previous?.user?.username!==status?.user?.username||
+         previous?.user?.role!==status?.user?.role)clearCardUndo();
+      return status;
+    });
+  };
   const refreshSyncStatus=async()=>setSyncInfo(await api.syncStatus());
   const refreshUsers=async()=>setUsers(await api.lanProfiles());
   useEffect(()=>{Promise.all([api.getStateForUi?api.getStateForUi():api.getState(),api.lanStatus(),api.getPreferences(),api.lanProfiles(),api.syncStatus()]).then(([s,lan,prefs,members,sync])=>{
@@ -876,6 +893,7 @@ export default function App(){
         setSavingError('');
       }
       catch(e){
+        clearCardUndo();
         dirty.current=false;
         blocked.current=true;
         setPendingRecovery(true);
@@ -944,6 +962,14 @@ export default function App(){
   const canEdit=lanStatus?.mode==='client'
     ?(['admin','editor'].includes(lanStatus?.user?.role))
     :lanStatus?.user?.role!=='viewer';
+  // The LAN bridge saves whole snapshots, so it cannot guarantee a single-card
+  // conditional undo against another member's concurrent write. Fail closed.
+  const cardUndoScope=['solo',lanStatus?.user?.username||'local',activeWorkspaceId||'',
+    activeBoard?.id||'overview'].join('|');
+  useEffect(()=>{clearCardUndo();},[cardUndoScope]);
+  const cardUndoEnabled=canEdit&&lanStatus?.mode==='solo'&&!blocked.current&&!saving.current;
+  const canUndo=cardHistoryAvailability(cardUndo.current,data,'undo',cardUndoScope,cardUndoEnabled);
+  const canRedo=cardHistoryAvailability(cardUndo.current,data,'redo',cardUndoScope,cardUndoEnabled);
   const show=feature=>isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
   useEffect(()=>{
     if(interfaceMode==='basic'){
@@ -1021,11 +1047,48 @@ export default function App(){
   }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
-  const change=next=>{if(!canEdit)return;dataMutationEpoch.current++;dirty.current=true;setData(current=>{
+  const change=(next,preserveCardUndo=false)=>{if(!canEdit)return;
+    if(!preserveCardUndo)clearCardUndo();
+    dataMutationEpoch.current++;dirty.current=true;setData(current=>{
     const newState=typeof next==='function'?next(current):next;
     if(blocked.current){try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}}
     return newState;
   });setProfitVisible(false);};
+  const reverseCardEdit=direction=>{
+    const allowed=cardUndoEnabled&&!saving.current&&!blocked.current&&lanStatus.mode==='solo'&&canEdit;
+    if(!cardHistoryAvailability(cardUndo.current,data,direction,cardUndoScope,allowed)){
+      clearCardUndo();setToast('بازگشت تغییر ممکن نیست؛ وضعیت کارت یا دسترسی تغییر کرده است.');return;
+    }
+    const timestamp=now();
+    let result;
+    change(current=>{
+      // React can re-run functional updaters in StrictMode: commit only once.
+      if(result)return result;
+      const attempt=applyCardHistory(cardUndo.current,current,direction,cardUndoScope,
+        allowed&&!saving.current&&!blocked.current,timestamp);
+      if(!attempt.applied){clearCardUndo();return current;}
+      cardUndo.current=attempt.history;
+      result=attempt.state;
+      return result;
+    },true);
+  };
+  useEffect(()=>{
+    const onKey=event=>{
+      if(!event.ctrlKey||event.altKey||event.metaKey||event.defaultPrevented)return;
+      const target=event.target;
+      if(target?.closest?.('input, textarea, select, [contenteditable], [role="textbox"]'))return;
+      if(target?.isContentEditable)return;
+      if(target?.closest?.('[role="dialog"], [aria-modal="true"]'))return;
+      const key=event.key.toLowerCase();
+      const direction=key==='z'&&!event.shiftKey?'undo':
+        (key==='y'&&!event.shiftKey||key==='z'&&event.shiftKey)?'redo':null;
+      if(!direction)return;
+      if(!cardHistoryAvailability(cardUndo.current,data,direction,cardUndoScope,cardUndoEnabled))return;
+      event.preventDefault();reverseCardEdit(direction);
+    };
+    window.addEventListener('keydown',onKey);
+    return()=>window.removeEventListener('keydown',onKey);
+  },[data,cardUndoScope,cardUndoEnabled]);
   const changeAdmin=next=>{if(!canManage)return;change(next);};
   const updateBoardListArchive=(listId,restore=false)=>{
     if(!canManage||!activeBoard)return;
@@ -1184,7 +1247,10 @@ export default function App(){
       setToast('کارت‌ها به لیست مقصد منتقل شدند.');
     }catch(error){setToast('انتقال انجام نشد: '+error.message);}
   };
-  const taskUpdate=(id,fields)=>change(s=>{
+  const taskUpdate=(id,fields)=>{
+    const eligible=lanStatus.mode==='solo'&&!blocked.current&&isUndoableCardPatch(fields);
+    const actionId=uid();
+    change(s=>{
     const original=s.tasks.find(t=>t.id===id);
     const board=s.boards?.find(b=>b.id===original?.boardId);
     const requestedList=fields.listId||(fields.status&&board?.stages.some(x=>x.id===fields.status)?fields.status:null);
@@ -1193,7 +1259,7 @@ export default function App(){
       &&(!fields.boardId||fields.boardId===original.boardId)
       &&(!fields.projectId||fields.projectId===original.projectId);
     const base=movingWithinBoard?moveCardInState(s,{cardId:id,toListId:requestedList,placement:'end'}):s;
-    return {...base,tasks:base.tasks.map(t=>{
+    const next={...base,tasks:base.tasks.map(t=>{
     if(t.id!==id)return t;
     let changed={...t,...fields,updatedAt:now()};
     if(fields.projectId&&fields.projectId!==t.projectId){
@@ -1210,7 +1276,11 @@ export default function App(){
       changed=stageBoard?boardStageUpdate(changed,stageBoard,base.stages,fields.listId||fields.status):{...changed,status:fields.status||fields.listId};
     }
     return changed;
-  })};});
+    })};
+    if(eligible)cardUndo.current=recordCardEdit(cardUndo.current,s,next,id,fields,cardUndoScope,actionId);
+    return next;
+  },eligible);
+  };
   const toggleChecklistStep=(taskId,stepId)=>change(s=>({...s,tasks:s.tasks.map(t=>t.id===taskId?
     {...t,checklist:t.checklist.map(c=>c.id===stepId?{...c,done:!c.done}:c),updatedAt:now()}:t)}));
   const cardTrashOptions=()=>canManage?{canManage:true}:{canEdit:true,grantedProjectIds:projects.map(p=>p.id)};
@@ -1470,10 +1540,10 @@ export default function App(){
         tasks:[...originalOther,...adapted]};
     });
   };
-  const restoreState=s=>{setData(normalize(s));dirty.current=false;setSelected('all');setEditorId(null);setCloudOpen(false);setToast('اطلاعات بازیابی شد.');};
+  const restoreState=s=>{clearCardUndo();setData(normalize(s));dirty.current=false;setSelected('all');setEditorId(null);setCloudOpen(false);setToast('اطلاعات بازیابی شد.');};
   const syncFromServer=async()=>{
     if((blocked.current||dirty.current)&&!window.confirm('تغییرات ذخیره‌نشده وجود دارد. ابتدا از آن‌ها خروجی JSON بگیر. اطلاعات از سرور جایگزین شوند؟'))return;
-    dirty.current=false;blocked.current=false;setPendingRecovery(false);
+    clearCardUndo();dirty.current=false;blocked.current=false;setPendingRecovery(false);
     await refresh(true);await refreshLan();await refreshUsers();setSelected('all');setEditorId(null);
   };
   const saveRecovery=()=>{
@@ -1707,7 +1777,7 @@ export default function App(){
             onGoToLocation={navigateSearchLocation} onClose={()=>setSearch('')}/>
         </>}
 
-        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
+        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{lanStatus.mode==='solo'&&canEdit&&<><button type="button" className="btn secondary" disabled={!canUndo} aria-label="بازگرداندن آخرین ویرایش کارت" aria-keyshortcuts="Control+Z" title="بازگرداندن آخرین ویرایش کارت (Ctrl+Z)" onClick={()=>reverseCardEdit('undo')}><Undo2 size={15}/> بازگشت</button><button type="button" className="btn secondary" disabled={!canRedo} aria-label="انجام دوباره آخرین ویرایش کارت" aria-keyshortcuts="Control+Shift+Z Control+Y" title="انجام دوباره ویرایش کارت (Ctrl+Y)" onClick={()=>reverseCardEdit('redo')}><Redo2 size={15}/> انجام دوباره</button></>}{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
         {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
@@ -1877,7 +1947,7 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
 
     {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
