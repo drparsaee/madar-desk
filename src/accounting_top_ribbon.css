@@ -7,7 +7,7 @@
 .sac-ribbon-identity strong{display:block;font-size:15px}
 .sac-ribbon-identity small{display:block;font-size:11px;color:#bfd5d7}
 .sac-ribbon-app-icon{display:grid;place-items:center;border-radius:9px;background:#285761;color:#d7fff2;width:36px;height:36px;flex-shrink:0}
-.sac-root .sac-ribbon-quick button{display:flex;align-items:center;gap:6px;border:1px solid #41616a;background:#254751;color:#ebf8f8;font-size:12px;padding:8px 10px;white-space:nowrap}
+.sac-root .sac-ribbon-quick button{display:flex;align-items:center;gap:6px;border:1px solid #41616a;background:#254751;color:#ebf8f8;font-size:12px;padding:8px 10px;white-space:nowrap;min-height:44px;min-width:44px}
 .sac-root .sac-ribbon-quick button:hover:not(:disabled){background:#376571;color:white}
 .sac-root .sac-ribbon-quick button.sac-ribbon-back{border-color:#56a89f;background:#1d665f;color:#f1fffc;font-weight:750}
 .sac-root .sac-ribbon-quick button.sac-ribbon-back:hover:not(:disabled){background:#087d73}
