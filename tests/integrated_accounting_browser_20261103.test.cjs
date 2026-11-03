@@ -84,20 +84,21 @@ test('built accounting: safe Settings update, Ctrl+K, dark invoice contrast, nar
       page.on('pageerror',error=>errors.push(error.message));
       await page.goto(new URL('accounting.html',server.resolvedUrls.local[0]).href,
         {waitUntil:'domcontentloaded'});
-      await page.locator('.sac-ribbon-tabs button').first().waitFor();
-      await page.locator('.sac-ribbon-quick button[title="تنظیمات حسابداری و بررسی به‌روزرسانی"]').click();
+      await page.locator('.sac-simple-nav [data-accounting-tab="overview"]').waitFor();
+      await page.locator('.sac-simple-nav .sac-nav-more-trigger').click();
+      await page.locator('.sac-nav-more-menu [data-accounting-tab="settings"]').click();
       await page.getByRole('button',{name:'بررسی به‌روزرسانی'}).click();
       await page.getByText('نسخهٔ جدیدتری در مخزن انتشار رسمی گزارش نشد.').waitFor();
       assert.equal(await page.locator('.madar-release-settings').count(),1);
       await page.keyboard.press('Control+k');
-      const search=page.getByRole('searchbox',{name:'رفتن سریع به بخش حسابداری'});
+      const search=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'})
+        .getByRole('combobox');
       await search.fill('گزارش');
       await page.keyboard.press('Enter');
-      assert.equal(await page.locator('.sac-ribbon-tools button[aria-current="page"]').first().count(),1);
+      assert.equal(await page.locator('.sac-simple-nav [data-accounting-tab="reports"][aria-current="page"]').count(),1);
 
-      await page.locator('.sac-ribbon-tabs').getByRole('button',{name:'فاکتورها و سفارش‌ها'}).click();
-      await page.locator('.sac-ribbon-tools').getByRole('button',{name:'فاکتورهای فروش'}).click();
-      await page.locator('.sac-ribbon-tools').getByRole('button',{name:'ثبت فاکتور جدید'}).click();
+      await page.locator('.sac-simple-nav [data-accounting-tab="invoice"]').click();
+      await page.locator('.sac-nav-quick-actions [data-accounting-action="invoice"]').click();
       const labels=page.locator('.sac-invoice-editor label.sac-field span');
       assert.ok(await labels.count()>=8,'Expected invoice labels in actual built composer');
       const ratios=[];

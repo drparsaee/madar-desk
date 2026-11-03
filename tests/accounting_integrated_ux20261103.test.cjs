@@ -21,6 +21,7 @@ const load=relative=>{
 };
 const source=fs.readFileSync(path.join(root,'src/standalone_accounting_workspace.jsx'),'utf8');
 const ribbonSource=fs.readFileSync(path.join(root,'src/accounting_top_ribbon.jsx'),'utf8');
+const navSource=fs.readFileSync(path.join(root,'src/accounting_navigation_shell.jsx'),'utf8');
 const darkCss=fs.readFileSync(path.join(root,'src/accounting_unslop.css'),'utf8');
 const mobileCss=fs.readFileSync(path.join(root,'src/standalone_accounting_ux20.css'),'utf8');
 const {AccountingVitreaHome,accountingCompanyToday}=load('standalone_accounting_workspace.jsx');
@@ -57,16 +58,15 @@ test('receivable and payable shortcuts count only issued documents with a positi
   assert.match(managerHtml,/ثبت پرداخت/);
 });
 
-test('accounting settings appears in the ribbon and uses the shared desktop updater',()=>{
+test('settings remains reachable through compact More and advanced Ribbon with shared updater',()=>{
   const html=renderToStaticMarkup(React.createElement(AccountingTopRibbon,{
     tab:'settings',sections:[['overview','داشبورد'],['settings','تنظیمات حسابداری']],
     onNavigate:()=>{},onRefresh:()=>{},onExit:()=>{},disabled:false}));
-  assert.match(html,/aria-current="page"[^>]*title="تنظیمات حسابداری و بررسی به‌روزرسانی"/);
-  assert.match(html,/تنظیمات حسابداری/);
-  assert.match(html,/رفتن سریع به بخش حسابداری/);
-  assert.match(ribbonSource,/event\.key==='ArrowDown'/);
-  assert.match(ribbonSource,/event\.key==='Escape'/);
-  assert.match(ribbonSource,/event\.key\.toLocaleLowerCase\('en-US'\)==='k'/);
+  assert.match(html,/sac-nav-more-trigger/);
+  assert.match(html,/جست‌وجوی حسابداری \(Ctrl\+K\)/);
+  assert.match(navSource,/data-accounting-tab="settings"/);
+  assert.match(navSource,/onSearchSelect=null/);
+  assert.match(navSource,/event\.key\.toLocaleLowerCase\('en-US'\)==='k'/);
   assert.match(source,/tab==='settings'&&<Panel title="تنظیمات حسابداری"/);
   assert.match(source,/<ReleaseUpdateSettings api=\{api\} context="accounting"\/>/);
   const release=renderToStaticMarkup(React.createElement(ReleaseUpdateSettings,{api:{},context:'accounting'}));
@@ -79,8 +79,8 @@ test('horizontal tables and accounting scroll regions can receive keyboard focus
   assert.match(source,/className="sac-body" role="region" aria-label="محتوای صفحه حسابداری" tabIndex=\{0\}/);
   assert.match(source,/className="sac-table-wrap" role="region" tabIndex=\{0\}/);
   assert.match(source,/className="sac-vtr-table-scroll" role="region" aria-label="جدول آخرین دریافت‌ها و پرداخت‌ها" tabIndex=\{0\}/);
-  assert.match(ribbonSource,/className="sac-ribbon-tabs" tabIndex=\{0\}/);
-  assert.match(ribbonSource,/className="sac-ribbon-tools"[^>]*tabIndex=\{0\}/);
+  assert.match(navSource,/className="sac-ribbon-tabs" tabIndex=\{0\}/);
+  assert.match(navSource,/className="sac-ribbon-tools"[^>]*tabIndex=\{0\}/);
   assert.match(mobileCss,/\.sac-vtr-table-scroll[^)]*\):focus-visible/);
 });
 
