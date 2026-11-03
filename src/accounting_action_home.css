@@ -29,7 +29,12 @@
 .sac-ah-card>strong{font-weight:850;font-size:clamp(16px,1.7vw,24px);line-height:1.45;overflow-wrap:anywhere;max-width:100%}
 .sac-ah-card>strong small{font-size:11px;font-weight:650;color:var(--vtr-soft)}
 .sac-ah-card>small{display:block;color:var(--vtr-soft);font-size:11px;line-height:1.7}
-.sac-root.sac-vtr-overview .sac-ah-card button{min-height:44px;display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:var(--ah-link);font-size:11px;font-weight:800;padding:7px 0;margin-top:auto}
+.sac-root.sac-vtr-overview .sac-ah-card button{min-height:44px;min-width:44px;display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:var(--ah-link);font-size:11px;font-weight:800;padding:7px 0;margin-top:auto}
+.sac-root.sac-vtr-overview .sac-ah-actions button,
+.sac-root.sac-vtr-overview .sac-ah-customize>summary{min-height:44px;min-width:44px}
+/* Legacy home controls share the same action area. Keep their touch surfaces accessible. */
+.sac-root.sac-vtr-overview :is(.sac-vtr-quick-actions button,
+  .sac-vtr-home button,.sac-vtr-outstanding-grid button){min-height:44px;min-width:44px}
 .sac-ah-performance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;padding:15px;border-radius:17px;background:var(--vtr-card);border:1px solid var(--vtr-line)}
 .sac-ah-performance>div{min-width:0;border-inline-start:1px solid var(--vtr-line);padding-inline:12px}
 .sac-ah-performance>div:first-child{border-inline-start:0}
