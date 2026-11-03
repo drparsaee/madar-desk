@@ -41,6 +41,8 @@ export default function AccountingNavigationShell({tab,sections=[],groups=[],gro
   const [searchOpen,setSearchOpen]=React.useState(false);
   const moreRef=React.useRef(null);
   const searchButtonRef=React.useRef(null);
+  const searchLabelId=React.useId();
+  const searchShortcutId=React.useId();
   const visible=React.useMemo(()=>accountingVisibleSections(sections,role,sectionAccess),
     [sections,role,sectionAccess]);
   const labels=React.useMemo(()=>new Map(visible),[visible]);
@@ -119,9 +121,10 @@ export default function AccountingNavigationShell({tab,sections=[],groups=[],gro
         <button ref={searchButtonRef} type="button" className="sac-nav-search-trigger"
           data-accounting-action="search"
           disabled={disabled} onClick={()=>{setMoreOpen(false);setSearchOpen(true);}}
-          aria-label="جست‌وجوی حسابداری (Ctrl+K)"
+          aria-labelledby={searchLabelId+' '+searchShortcutId}
           aria-keyshortcuts="Control+K Meta+K" title="جست‌وجوی سوابق دفتر جاری (Ctrl+K)">
-          <Search size={17}/> <span>جست‌وجو</span><kbd>Ctrl+K</kbd></button>
+          <Search size={17}/> <span id={searchLabelId}>جست‌وجو</span>{' '}
+          <kbd id={searchShortcutId}>Ctrl+K</kbd></button>
         <div role="group" className="sac-nav-mode" aria-label="سطح نمایش حسابداری">
           <button type="button" aria-pressed={mode==='simple'}
             disabled={disabled} onClick={()=>{setMode('simple');setMoreOpen(false);}}>ساده</button>
