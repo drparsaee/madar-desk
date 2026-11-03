@@ -207,7 +207,20 @@ async function measureRenderedContrast(page,uid){
       const el=document.querySelector('[data-uxqa-contrast-id="'+name+'"]');
       if(!el)return {error:'target disappeared before raster audit'};
       if(!el.textContent?.trim())return {error:'no text to measure'};
-      el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+      // A sticky footer can already be visible at the 768px breakpoint.
+      // Forcing it to the centre of a nested scrollport changes the sticky
+      // constraint while the three screenshots are being captured. Do not
+      // move an element that is already fully inside the viewport.
+      const initialRect=el.getBoundingClientRect();
+      const fullyInViewport=initialRect.width>=4&&initialRect.height>=4&&
+        initialRect.left>=0&&initialRect.top>=0&&
+        initialRect.right<=innerWidth&&initialRect.bottom<=innerHeight;
+      const initialHit=fullyInViewport?document.elementFromPoint(
+        (initialRect.left+initialRect.right)/2,
+        (initialRect.top+initialRect.bottom)/2):null;
+      const initiallyUnoccluded=initialHit&&(initialHit===el||el.contains(initialHit));
+      if(!fullyInViewport||!initiallyUnoccluded)
+        el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
       await document.fonts.ready;
       const rect=el.getBoundingClientRect();
       const styles=getComputedStyle(el);

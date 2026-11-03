@@ -64,6 +64,42 @@ test('actual Chromium glyph-background raster: gradients, overlays, alpha, scrol
       assert.ok(await page.locator('.scroller').evaluate(el=>el.scrollTop)>0,
         'The helper must scroll hidden-offscreen text into view');
 
+      // At the exact 768px breakpoint, re-centring an already visible sticky
+      // caption shifts its scroll container and can change its pixels between
+      // the before and restored shots. This was the stage-5 r68 regression.
+      await page.setViewportSize({width:768,height:850});
+      await page.setContent(`<style>
+        body{margin:0;background:#fff;font:16px Arial}
+        .scrollport{height:720px;overflow:auto;background:#fff}
+        .sticky{position:sticky;bottom:0;display:block;width:300px;
+          background:#1d2532;color:#e1edf8;padding:10px}
+        </style><div class="scrollport"><div style="height:590px"></div>
+        <small class="sticky" data-uxqa-contrast-id="r1">
+          پیش‌نویس ذخیره‌نشده · مرحله ۵/۵</small>
+        <div style="height:500px"></div></div>`);
+      const stickyBefore=await page.locator('.scrollport').evaluate(el=>el.scrollTop);
+      const stickyRendered=await measureRenderedContrast(page,'r1');
+      assert.ok(stickyRendered.ratio>=4.5,JSON.stringify(stickyRendered));
+      assert.equal(await page.locator('.scrollport').evaluate(el=>el.scrollTop),stickyBefore,
+        'Already visible, unobstructed sticky footer must not be force-scrolled');
+
+      // An element may fit inside the viewport yet be covered by a sticky
+      // overlay. In that case scrolling is still required; no fake PASS.
+      await page.setContent(`<style>
+        body{margin:0;background:white;font:16px Arial}
+        .scrollport{height:520px;overflow:auto;background:white}
+        #target{display:block;margin-top:290px;padding:10px;color:black;background:white}
+        .overlay{position:fixed;top:290px;left:0;width:768px;height:55px;
+          background:#888;z-index:10}
+        </style><div class="scrollport"><div id="target"
+          data-uxqa-contrast-id="r1">Covered but scrollable label</div>
+          <div style="height:720px"></div></div><div class="overlay"></div>`);
+      const occludedRendered=await measureRenderedContrast(page,'r1');
+      assert.ok(occludedRendered.ratio>=4.5,JSON.stringify(occludedRendered));
+      assert.ok(await page.locator('.scrollport').evaluate(el=>el.scrollTop)>0,
+        'Visible but occluded text must scroll out from under the overlay');
+      await page.setViewportSize({width:390,height:600});
+
       await setup('color:#111;background:#fff;display:none');
       const hidden=await measureRenderedContrast(page,'r1');
       assert.equal(hidden.ratio,null,'Invisible text cannot silently pass');
