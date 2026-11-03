@@ -1,8 +1,9 @@
 /* UX-03/04. Scoped to accounting action home; Vitrea variables own light/dark. */
-.sac-ah{color:var(--vtr-text);margin:0 0 18px;min-width:0}
+.sac-ah{--ah-link:#285786;color:var(--vtr-text);margin:0 0 18px;min-width:0}
+:root[data-theme="dark"] .sac-ah{--ah-link:#a7caff}
 .sac-ah *{box-sizing:border-box}
 .sac-ah-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0 0 16px}
-.sac-ah-kicker{font-size:10px;letter-spacing:1px;color:var(--vtr-accent);font-weight:850;direction:ltr;display:block;text-align:right}
+.sac-ah-kicker{font-size:10px;letter-spacing:1px;color:var(--ah-link);font-weight:850;direction:ltr;display:block;text-align:right}
 .sac-ah-title h2{font-size:clamp(23px,2.3vw,30px);font-weight:850;line-height:1.35;margin:3px 0 5px}
 .sac-ah-title p{font-size:12px;color:var(--vtr-soft);line-height:1.75;margin:0}
 .sac-ah-customize{position:relative;z-index:3;flex:0 0 auto;border:1px solid var(--vtr-line);background:var(--vtr-card);border-radius:12px;min-width:150px}
@@ -28,7 +29,7 @@
 .sac-ah-card>strong{font-weight:850;font-size:clamp(16px,1.7vw,24px);line-height:1.45;overflow-wrap:anywhere;max-width:100%}
 .sac-ah-card>strong small{font-size:11px;font-weight:650;color:var(--vtr-soft)}
 .sac-ah-card>small{display:block;color:var(--vtr-soft);font-size:11px;line-height:1.7}
-.sac-root.sac-vtr-overview .sac-ah-card button{min-height:44px;display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:var(--vtr-accent);font-size:11px;font-weight:800;padding:7px 0;margin-top:auto}
+.sac-root.sac-vtr-overview .sac-ah-card button{min-height:44px;display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:var(--ah-link);font-size:11px;font-weight:800;padding:7px 0;margin-top:auto}
 .sac-ah-performance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;padding:15px;border-radius:17px;background:var(--vtr-card);border:1px solid var(--vtr-line)}
 .sac-ah-performance>div{min-width:0;border-inline-start:1px solid var(--vtr-line);padding-inline:12px}
 .sac-ah-performance>div:first-child{border-inline-start:0}
