@@ -14,7 +14,7 @@ export const ACCOUNTING_RIBBON_GROUPS=[
   {id:'treasury',title:'خزانه و پرداخت',icon:Wallet,items:['settlements','cash','cheques']},
   {id:'ledger',title:'حسابداری',icon:BookOpen,items:['accounts','journal','period']},
   {id:'reports',title:'گزارش‌ها و سوابق',icon:Layers3,items:['reports','migration']},
-  {id:'settings',title:'تنظیمات و مدیریت',icon:Settings2,items:['company','payroll','period']},
+  {id:'settings',title:'تنظیمات و مدیریت',icon:Settings2,items:['settings','company','payroll','period']},
 ];
 export const accountingRibbonGroupFor=tab=>{
   if(tab==='overview')return 'general';

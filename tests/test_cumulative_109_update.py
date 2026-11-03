@@ -167,8 +167,8 @@ class Cumulative109PackagingContract(unittest.TestCase):
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual((package["version"], lock["version"],
                           lock["packages"][""]["version"], CURRENT_VERSION),
-                         ("1.0.11",) * 4)
-        self.assertIn("scripts/build_integrated_v111.py", package["scripts"]["dist:rc"])
+                         ("1.0.12",) * 4)
+        self.assertIn("scripts/build_integrated_v112.py", package["scripts"]["dist:rc"])
         self.assertEqual(package["scripts"]["dist"], "npm run dist:rc")
 
     def test_powershell_release_scripts_parse(self):

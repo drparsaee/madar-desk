@@ -918,26 +918,7 @@ class Bridge:
         Inno performs an independently verified desktop-profile backup before
         switching versions. The separately running MadarHost is never stopped.
         """
-        info = madar_update.check()
-        saved = madar_update.download(info)
-        if not saved["verified"] or sys.platform != "win32":
-            raise RuntimeError("بسته معتبر ویندوز برای نصب آماده نیست.")
-        target = saved["path"]
-        sha = info["sha256"]
-        parent = os.getpid()
-        # No user-controlled shell expression enters the generated command.
-        ps = ("$ErrorActionPreference='Stop'; "
-              f"if(Get-Process -Id {parent} -ErrorAction SilentlyContinue)"
-              f"{{Wait-Process -Id {parent} -Timeout 1800 -ErrorAction Stop}}; "
-              f"$file='{target.replace(chr(39), chr(39)*2)}'; "
-              f"if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine '{sha}')"
-              "{throw 'Update integrity mismatch'}; "
-              "Start-Process -FilePath $file -Wait")
-        subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive",
-                          "-EncodedCommand", base64.b64encode(ps.encode("utf-16le")).decode("ascii")],
-                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                         close_fds=True)
-        return {"scheduledAfterExit": True, "version": info["latest"]}
+        return madar_update.schedule_verified_install_after_exit()
 
     def downloadSharedFile(self, path):
         if not valid_share_path(path):

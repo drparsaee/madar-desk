@@ -34,6 +34,9 @@ const unavailable=async()=>{throw Error('این بخش فقط با میزبان 
 const api=window.madar || {
   standaloneAccountingRead: unavailable,
   standaloneAccountingCommand: unavailable,
+  releaseCheck: undefined,
+  releaseDownload: undefined,
+  releaseInstall: undefined,
 };
 function AuthenticatedAccounting(){
   // Rendering mutation buttons just because a JS bridge exists is not

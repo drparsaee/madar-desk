@@ -6,22 +6,55 @@ No LAN credentials or application data are sent to GitHub.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import subprocess
+import sys
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
 REPOSITORY = "drparsaee/madar-desk-updates"
-CURRENT_VERSION = "1.0.11"
+CURRENT_VERSION = "1.0.12"
 API = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest"
 MAX_RELEASE_BYTES = 400 * 1024 * 1024
 HEX64 = re.compile(r"sha256:([0-9a-f]{64})\Z")
 VERSION = re.compile(r"v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
+
+
+def schedule_verified_install_after_exit():
+    """Queue only a verified official installer after this desktop process exits.
+
+    No update URL or path is accepted from JavaScript; release metadata and the
+    asset are independently revalidated by the existing download pipeline.
+    Actual deployment occurs after the GUI has exited, with Inno data preflight.
+    """
+    info = check()
+    saved = download(info)
+    if not saved.get("verified") or sys.platform != "win32":
+        raise RuntimeError("بسته معتبر ویندوز برای نصب آماده نیست.")
+    target = saved["path"]
+    sha = info["sha256"]
+    if not isinstance(target, str) or not isinstance(sha, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", sha):
+        raise RuntimeError("مشخصات نسخهٔ تأییدشده نامعتبر است.")
+    parent = os.getpid()
+    ps = ("$ErrorActionPreference='Stop'; "
+          f"if(Get-Process -Id {parent} -ErrorAction SilentlyContinue)"
+          f"{{Wait-Process -Id {parent} -Timeout 1800 -ErrorAction Stop}}; "
+          f"$file='{target.replace(chr(39), chr(39)*2)}'; "
+          f"if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine '{sha}')"
+          "{throw 'Update integrity mismatch'}; "
+          "Start-Process -FilePath $file -Wait")
+    subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive",
+                      "-EncodedCommand", base64.b64encode(ps.encode("utf-16le")).decode("ascii")],
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                     close_fds=True)
+    return {"scheduledAfterExit": True, "version": info["latest"]}
 
 
 def version_tuple(version):

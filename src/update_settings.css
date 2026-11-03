@@ -1,0 +1,14 @@
+.madar-update-settings{border:1px solid var(--sac-line,#8995a5);border-radius:13px;padding:16px;margin-block:12px;background:var(--sac-paper,var(--surface,#242936));color:inherit}
+.madar-update-settings__heading{display:flex;align-items:center;justify-content:space-between;gap:15px}
+.madar-update-settings__heading h3{display:flex;align-items:center;gap:8px;margin:0;font-size:16px}
+.madar-update-settings__heading span{font-size:13px;font-weight:700;color:inherit;opacity:.75}
+.madar-update-settings p{line-height:1.9;font-size:12px;margin:8px 0}
+.madar-update-settings__actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.madar-update-settings__actions button{display:inline-flex;gap:7px;align-items:center;min-height:43px;padding:9px 12px;border-radius:9px;background:#e7edf5;color:#1c3446;border:1px solid #96aec7;cursor:pointer;font:inherit}
+.madar-update-settings__actions button:disabled{opacity:.55;cursor:default}
+.madar-update-settings__actions button:focus-visible{outline:3px solid #2da6c5;outline-offset:2px}
+.madar-update-settings__actions .madar-update-settings__accent{background:#086c6a;color:#fff;border-color:#086c6a}
+.madar-update-settings__error{color:#b5414b;font-weight:700}
+:root[data-theme="dark"] .madar-update-settings{background:#212936;border-color:#4e6179;color:#ecf3ff}
+:root[data-theme="dark"] .madar-update-settings__actions button:not(.madar-update-settings__accent){background:#303d51;color:#edf4ff;border-color:#627993}
+:root[data-theme="dark"] .madar-update-settings__error{color:#ffc1c6}

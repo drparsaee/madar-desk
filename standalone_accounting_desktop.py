@@ -31,7 +31,8 @@ window.madar = Object.fromEntries(
    'standaloneAccountingTemplateDuplicate',
    'standaloneAccountingRequestCompanySwitch',
    'standaloneAccountingTaxPreflight',
-   'standaloneAccountingManageUsers'].map(
+    'standaloneAccountingManageUsers',
+    'releaseCheck', 'releaseDownload', 'releaseInstall'].map(
     key => [key, (...args) => new Promise((resolve, reject) => {
       // WebView2 can expose an api object before populating the methods.
       // Checking only window.pywebview.api caused a TypeError/blank GUI on
@@ -62,6 +63,25 @@ window.madar = Object.fromEntries(
 
 class AccountingDesktopAPI:
     """Single local desktop principal; not a multi-user authentication server."""
+
+    def releaseCheck(self):
+        """Read public version metadata; no financial ledger access."""
+        import madar_update
+        return madar_update.check()
+
+    def releaseDownload(self):
+        """Only download the verified official installer."""
+        import madar_update
+        return madar_update.download(madar_update.check())
+
+    def releaseInstall(self):
+        """Explicit installation opt-in, after accounting process has exited."""
+        import madar_update
+        with self._lock:
+            self._require_authenticated()
+            if self._exit_backed_up:
+                raise RuntimeError("Accounting desktop is closing")
+        return madar_update.schedule_verified_install_after_exit()
 
     def __init__(self, explicit_data_root, *, company_name="", authenticated_user=None,
                  identity_store=None, identity_token=None):

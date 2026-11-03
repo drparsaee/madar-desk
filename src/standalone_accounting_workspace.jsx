@@ -22,6 +22,7 @@ import {formatAccountingJalali,parseAccountingJalali,displayAccountingDate} from
 import AccountingJalaliField from './accounting_jalali_field.jsx';
 import AccountingManagementDashboard from './accounting_management_dashboard.jsx';
 import {accountingPeriodRows} from './accounting_period_report.js';
+import {UpdateSettings} from './update_settings.jsx';
 import {LiveCheques,LiveInventory,BankReconciliation,
   InstalmentPlans,PayrollAndTax,FiscalYearClose,
   CompanyProfile} from './accounting_operational_panels.jsx';
@@ -216,11 +217,12 @@ const SECTIONS=[['overview','داشبورد'],['company','مشخصات شرکت'
   ['proforma','پیش‌فاکتور مستقل'],
   ['invoice','فاکتورهای فروش'],['bill','صورتحساب‌های خرید'],
   ['contractors','کارهای پیمانکاران'],
-  ['parties','اشخاص'],['migration','مهاجرت و سوابق'],['cheques','خزانه و چک'],
+  ['parties','اشخاص'],['migration','سوابق انتقالی پارسیان'],['cheques','خزانه و چک'],
   ['items','کالا، انبار و کاردکس'],['settlements','دریافت، پرداخت و اقساط'],
   ['cash','صندوق، بانک و مغایرت'],['accounts','حساب‌ها و دفترکل'],
   ['journal','سند دستی و برگشت'],['reports','گزارش‌های مالی'],
-  ['payroll','حقوق و مالیات'],['period','سال مالی و بستن دوره']];
+  ['payroll','حقوق و مالیات'],['period','سال مالی و بستن دوره'],
+  ['settings','تنظیمات برنامه']];
 export const standaloneToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
 const validId=v=>typeof v==='string'&&ID.test(v);
 const validText=(v,max=300)=>typeof v==='string'&&!!v.trim()&&v.trim().length<=max&&!/[\x00-\x1f\x7f]/.test(v);
@@ -468,6 +470,16 @@ function Action({children,disabled}){return <button type="submit" className="sac
 export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false,
   onSwitchCompany=null,onManageUsers=null,canDraft=canManage,canAdmin=canManage}){
   const [tab,setTab]=useState('overview');
+  const [localTheme,setLocalTheme]=useState(()=>{
+    try{return window.localStorage.getItem('madar-ui-theme')==='light'?'light':'dark';}
+    catch{return 'dark';}
+  });
+  const changeLocalTheme=theme=>{
+    if(theme!=='light'&&theme!=='dark')return;
+    setLocalTheme(theme);
+    document.documentElement.dataset.theme=theme;
+    try{window.localStorage.setItem('madar-ui-theme',theme);}catch{/* Display preference stays in memory. */}
+  };
   const [invoiceComposerOpen,setInvoiceComposerOpen]=useState(false);
   const [invoiceListSearch,setInvoiceListSearch]=useState('');
   const [invoiceListStatus,setInvoiceListStatus]=useState('all');
@@ -1054,9 +1066,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       <nav aria-label="ناوبری میز حسابداری">{SECTIONS.map(([name,label],i)=>{
         const icons={overview:Landmark,company:Building2,proforma:FileText,
           invoice:FileText,bill:FileText,contractors:Layers3,parties:Users,
-          migration:BookOpen,cheques:Wallet,items:Layers3,settlements:Wallet,
+           migration:BookOpen,cheques:Wallet,items:Layers3,settlements:Wallet,
           cash:Landmark,accounts:BookOpen,journal:BookOpen,reports:BookOpen,
-          payroll:Wallet,period:ShieldAlert};
+           payroll:Wallet,period:ShieldAlert,settings:ShieldAlert};
         const Icon=icons[name]||BookOpen;
         return <button key={name} type="button" className={tab===name?'active':''}
           aria-current={tab===name?'page':undefined} onClick={()=>gotoTab(name)}>
@@ -1111,6 +1123,19 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             بازیابی با همان شناسه عملیات</button>
         </div>}
         {!view&&!state.loading&&<Empty>اطلاعات قابل اتکایی از میزبان دریافت نشده است. سند یا مبلغ نمایشی ساخته نمی‌شود.</Empty>}
+        {tab==='settings'&&<section aria-label="تنظیمات حسابداری مستقل">
+          <Panel title="تنظیمات برنامه" description="تنظیمات نمایش و نسخهٔ برنامه، بدون تغییر دفترکل یا رویداد مالی.">
+            <div className="sac-form-actions" role="group" aria-label="تم فعلی این دستگاه">
+              <span>تم فعلی همین دستگاه:</span>
+              <button type="button" aria-pressed={localTheme==='light'}
+                onClick={()=>changeLocalTheme('light')}>روشن {localTheme==='light'?'✓':''}</button>
+              <button type="button" aria-pressed={localTheme==='dark'}
+                onClick={()=>changeLocalTheme('dark')}>تاریک {localTheme==='dark'?'✓':''}</button>
+            </div>
+            <p>انتخاب تم فقط ظاهر این دستگاه را تغییر می‌دهد؛ مبلغ، دفتر شرکت و سطح دسترسی تغییر نمی‌کنند.</p>
+            <UpdateSettings api={api} desktop={typeof api?.releaseCheck==='function'}/>
+          </Panel>
+        </section>}
         {view&&<>
           {tab==='proforma'&&<>
             <Panel title="پیش‌فاکتورهای فروش مستقل"

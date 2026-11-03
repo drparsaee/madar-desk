@@ -22,7 +22,7 @@ const groups=[
   ['خزانه و پرداخت',['دریافت، پرداخت و اقساط','صندوق، بانک و مغایرت','خزانه و چک']],
   ['حسابداری',['حساب‌ها و دفترکل','سند دستی و برگشت','سال مالی و بستن دوره']],
   ['گزارش‌ها و سوابق',['گزارش‌های مالی','سوابق انتقالی پارسیان']],
-  ['تنظیمات و مدیریت',['حقوق و مالیات']],
+  ['تنظیمات و مدیریت',['حقوق و مالیات','تنظیمات برنامه']],
 ];
 const port=()=>new Promise((resolve,reject)=>{
   const server=net.createServer();
@@ -32,7 +32,7 @@ const port=()=>new Promise((resolve,reject)=>{
     server.close(error=>error?reject(error):resolve(selected));
   });
 });
-test('Unslop graphite/blue theme keeps 17 accounting screens reachable in both themes',
+test('Unslop graphite/blue theme keeps 18 accounting screens reachable in both themes',
   {skip:!runnable,timeout:115000},async()=>{
     const {preview}=await import('vite');
     const {chromium}=require(playwright);
@@ -89,7 +89,7 @@ test('Unslop graphite/blue theme keeps 17 accounting screens reachable in both t
             count++;
           }
         }
-        assert.equal(count,17,'Expected all seventeen independent accounting tabs');
+        assert.equal(count,18,'Expected all eighteen independent accounting tabs');
         assert.deepEqual(errors,[]);
         await context.close();
       }
