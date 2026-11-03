@@ -102,7 +102,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
          </div>)}</div>:<p>ستون بایگانی‌شده‌ای برای بازیابی وجود ندارد.</p>}
        </div>
      </details>:null}
-     <p className="setting-foot">فونت داخلی برنامه: وزیرمتن · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>
+     <p className="setting-foot">فونت داخلی برنامه: استعداد (Estedad) با وزیرمتن به‌عنوان جایگزین · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>
    </div>
  </section></div>;
 }

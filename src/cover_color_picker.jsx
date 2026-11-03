@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {Pipette} from 'lucide-react';
-import {CommonColorPalette} from './common_color_palette.jsx';
+import {CommonColorPalette} from './common_color_swatches.jsx';
 
 const HEX=/^#[0-9A-F]{6}$/i;
 export function hsvToHex(h,s,v){

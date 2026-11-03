@@ -63,10 +63,11 @@ test('rejects duplicates, blanks, and invalid palette values without losing othe
   assert.deepEqual(labels, ['مهم', 'ارسال']);
 });
 
-test('renders an adjacent native color input per editable label and a new-label picker', () => {
+test('renders a unified color picker per label with accessible freeform inputs', () => {
   const html = renderToStaticMarkup(React.createElement(LabelEditor, {
     labels: ['کار', 'مهم'], colors: {'کار': '#123456'}, onChange: () => {}}));
   assert.equal((html.match(/type="color"/g) || []).length, 3);
+  assert.equal((html.match(/class="madar-common-colors__details"/g) || []).length, 3);
   assert.match(html, /aria-label="رنگ برچسب کار"/);
   assert.match(html, /aria-label="نام برچسب جدید"/);
   assert.match(html, /aria-label="افزودن برچسب"/);
