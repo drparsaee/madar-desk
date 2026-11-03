@@ -83,6 +83,25 @@ class AccountingReportingTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 self.report(**kwargs)
 
+    def test_closed_year_keeps_operational_profit_but_zeroes_nominal_balances(self):
+        self.cmd("party.register", partyId="customer", name="Buyer", kind="customer")
+        self.cmd("invoice.create", invoiceId="y2025", partyId="customer",
+                 documentDate="2025-11-01", lines=[{"description": "Service",
+                                                     "quantity": 1, "unitPrice": 1000}])
+        self.cmd("invoice.approve", invoiceId="y2025")
+        self.cmd("invoice.issue", invoiceId="y2025", postingDate="2025-11-01")
+        self.assertEqual(self.report(from_date="2025-01-01", through_date="2025-12-31")
+                         ["profitLoss"]["net"], 1000)
+        self.cmd("fiscal.year.close", throughDate="2025-12-31",
+                 reason="Synthetic checked year-end")
+        report = self.report(from_date="2025-01-01", through_date="2025-12-31")
+        self.assertEqual(report["profitLoss"], {"revenue": 1000, "expense": 0, "net": 1000})
+        self.assertEqual(next(x for x in report["trialBalance"]["rows"]
+                              if x["accountId"] == "4000")["balanceDebitMinusCredit"], 0)
+        self.assertEqual(report["balanceSheet"]["capital"], 1000)
+        self.assertEqual(report["balanceSheet"]["unclosedProfitLoss"], 0)
+        self.assertTrue(report["reconciled"])
+
 
 if __name__ == "__main__":
     unittest.main()

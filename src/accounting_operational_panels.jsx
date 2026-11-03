@@ -14,6 +14,18 @@ const numberOf=value=>{
   if(n>BigInt(Number.MAX_SAFE_INTEGER))throw Error('عدد خارج از محدوده دقیق حسابداری است.');
   return Number(n);
 };
+export function fixedCompanyPostingOffset(value){
+  const normalized=String(value??'').trim()
+    .replace(/[۰-۹]/g,x=>String(x.charCodeAt(0)-1776))
+    .replace(/[٠-٩]/g,x=>String(x.charCodeAt(0)-1632));
+  if(!normalized)return null;
+  if(!/^[+-]?(0|[1-9][0-9]{0,3})$/.test(normalized))
+    throw Error('اختلاف ساعت دفتر باید عدد صحیح به دقیقه باشد.');
+  const minutes=Number(normalized);
+  if(!Number.isInteger(minutes)||minutes < -720||minutes > 840)
+    throw Error('اختلاف ساعت دفتر باید بین منفی ۷۲۰ و مثبت ۸۴۰ دقیقه باشد.');
+  return minutes;
+}
 const signedNumber=value=>parseAccountingBankAmount(value);
 const money=(n,unit)=>typeof n==='number'?n.toLocaleString('fa-IR')+' '+unit:'—';
 const opt=(rows,label,selected='')=><><option value="">{label}</option>
@@ -164,9 +176,16 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
   const [warehouse,setWarehouse]=useState({warehouseId:'',name:''});
   const [reverseReason,setReverseReason]=useState({});
   const [form,setForm]=useState({type:'inventory.receive',warehouseId:'',itemId:'',
-    quantity:'',postingDate:today,billId:'',invoiceId:'',unitCost:'',toWarehouseId:'',reason:''});
+    quantity:'',postingDate:today,billId:'',invoiceId:'',unitCost:'',toWarehouseId:'',reason:'',
+    taxTreatment:'',discountAllocation:''});
   const ch=(key,val)=>setForm(p=>({...p,[key]:val}));
   const warehouses=asList(view.warehouses),goods=asList(view.items).filter(a=>a.kind==='goods');
+  const chosenBill=view.bills?.[form.billId]||null;
+  const taxedPurchase=!!chosenBill&&chosenBill.tax>0;
+  const discountedPurchase=!!chosenBill&&chosenBill.discount>0;
+  const discountSingleLine=discountedPurchase&&chosenBill.lines?.length===1;
+  const discountExact=discountSingleLine&&Number.isSafeInteger(chosenBill.lines[0]?.quantity)&&
+    chosenBill.lines[0].quantity>0&&chosenBill.discount%chosenBill.lines[0].quantity===0;
   const stock=warehouses.flatMap(w=>Object.entries(view.stock?.[w.id]||{}).map(([itemId,b])=>
     ({id:w.id+':'+itemId,warehouseId:w.id,itemId,qty:b.quantity,value:b.value})));
   const movements=asList(view.stockMovements);
@@ -214,7 +233,19 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
       disabled={disabled} onSubmit={async()=>{
         const fields={warehouseId:form.warehouseId,itemId:form.itemId,
           quantity:numberOf(form.quantity),postingDate:form.postingDate};
-        if(form.type==='inventory.receive')fields.billId=form.billId;
+        if(form.type==='inventory.receive'){
+          fields.billId=form.billId;
+          if(taxedPurchase){
+            if(form.taxTreatment!=='expense')throw Error('برای مالیات خرید، ثبت به حساب هزینهٔ ۵۲۰۰ را صریحاً تأیید کنید.');
+            fields.taxTreatment='expense';
+          }
+          if(discountedPurchase){
+            if(!discountExact)throw Error('تخصیص تخفیف چندردیفی یا غیرصحیح هنوز مجاز نیست؛ رسید ثبت نمی‌شود.');
+            if(form.discountAllocation!=='single-line-uniform')
+              throw Error('تخصیص مساوی و صحیح تخفیف هر واحد باید صریحاً تأیید شود.');
+            fields.discountAllocation='single-line-uniform';
+          }
+        }
         if(form.type==='inventory.issue')fields.invoiceId=form.invoiceId;
         if(form.type==='inventory.opening'){
           if(!canAdmin)throw Error('ثبت موجودی افتتاحیه تنها برای مدیر مجاز است.');
@@ -242,8 +273,26 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
       <SolarDate label="تاریخ ثبت" value={form.postingDate}
         onChange={v=>ch('postingDate',v)} limit={today}/>
       {form.type==='inventory.receive'&&<Input label="فاکتور خرید قطعی"
-        value={form.billId} onChange={v=>ch('billId',v)}
+        value={form.billId} onChange={v=>setForm(s=>({...s,billId:v,taxTreatment:'',discountAllocation:''}))}
         options={opt(asList(view.bills).filter(d=>d.status==='issued'),'انتخاب خرید')}/>}
+      {form.type==='inventory.receive'&&taxedPurchase&&<>
+        <Input label="تعیین تکلیف مالیات خرید" value={form.taxTreatment}
+          onChange={v=>ch('taxTreatment',v)} options={<>
+            <option value="">تأیید سیاست حسابداری مالیات لازم است</option>
+            <option value="expense">ثبت مالیات خرید به هزینه حساب ۵۲۰۰ (بدون اعتبار قابل‌بازیافت)</option>
+          </>}/>
+        <Err>این انتخاب فقط هزینه‌کرد مالیات خرید را تأیید می‌کند؛ اعتبار مالیات بر ارزش افزوده ادعا یا محاسبه نمی‌شود.</Err>
+      </>}
+      {form.type==='inventory.receive'&&discountedPurchase&&(
+        discountExact?<>
+          <Input label="تخصیص تخفیف خرید در ارزش موجودی" value={form.discountAllocation}
+            onChange={v=>ch('discountAllocation',v)} options={<>
+              <option value="">تأیید صریح تخصیص تخفیف لازم است</option>
+              <option value="single-line-uniform">تخصیص یکسان تخفیف به هر واحد کالای تنها ردیف</option>
+            </>}/>
+          <Err>فقط خرید تک‌ردیفی با تخفیف صحیح به‌ازای هر واحد پشتیبانی می‌شود؛ ارزش موجودی خالص و گردش حساب‌ها ثبت می‌شود.</Err>
+        </>:<Err>این خرید تخفیف چندردیفی یا تقسیم غیرصحیح دارد؛ تخصیص ارزش قابل اتکا نیست و رسید انبار مجاز نیست.</Err>
+      )}
       {form.type==='inventory.issue'&&<Input label="فاکتور فروش قطعی"
         value={form.invoiceId} onChange={v=>ch('invoiceId',v)}
         options={opt(asList(view.invoices).filter(d=>d.status==='issued'),'انتخاب فروش')}/>}
@@ -554,7 +603,7 @@ export function FiscalYearClose({view,canManage,disabled,execute,today}){
 export function CompanyProfile({view,canManage,disabled,execute}){
   const company=view.companyProfile||null;
   const empty={legalName:'',address:'',phone:'',nationalId:'',
-    economicCode:'',postalCode:'',reason:''};
+    economicCode:'',postalCode:'',postingUtcOffsetMinutes:'',reason:''};
   const [form,setForm]=useState(empty);
   useEffect(()=>setForm({...empty,...company,reason:''}),[
     company?.history?.length,
@@ -571,6 +620,9 @@ export function CompanyProfile({view,canManage,disabled,execute}){
       <p>نشانی: {company.address||'ثبت نشده'} | تلفن: {company.phone||'ثبت نشده'}</p>
       <p>تعداد ویرایش‌های دارای سابقه: {
         company.history.length.toLocaleString('fa-IR')}</p>
+      <p>مبنای روز ثبت دفتر: {Number.isInteger(company.postingUtcOffsetMinutes)?
+        'UTC '+(company.postingUtcOffsetMinutes>=0?'+':'')+company.postingUtcOffsetMinutes+' دقیقه (اختلاف ثابت)'
+        :'روز مرجع UTC در میزبان ویندوز (اختلاف ساعت هنوز تنظیم نشده)'}</p>
     </section>}
     <InlineForm title={company?'ویرایش سربرگ شرکت':'ثبت مشخصات شرکت'}
       canManage={canManage} disabled={disabled}
@@ -578,7 +630,8 @@ export function CompanyProfile({view,canManage,disabled,execute}){
         const result=await sendCommand(execute,'company.profile.set',{
           legalName:form.legalName,address:form.address,phone:form.phone,
           nationalId:form.nationalId,economicCode:form.economicCode,
-          postalCode:form.postalCode,reason:form.reason.trim()});
+          postalCode:form.postalCode,reason:form.reason.trim(),
+          postingUtcOffsetMinutes:fixedCompanyPostingOffset(form.postingUtcOffsetMinutes)});
         if(result)setForm(x=>({...x,reason:''}));
       }}>
       {[
@@ -591,6 +644,12 @@ export function CompanyProfile({view,canManage,disabled,execute}){
         ['reason','دلیل ثبت/تغییر',true],
       ].map(([key,label,required])=><Input key={key} label={label}
         value={form[key]||''} required={required} onChange={v=>ch(key,v)}/>)}
+      <Input label="اختلاف ثابت ساعت دفتر با UTC (دقیقه؛ مثال ۲۱۰ برای +۰۳:۳۰)"
+        required={false} value={form.postingUtcOffsetMinutes??''}
+        onChange={v=>ch('postingUtcOffsetMinutes',v)}/>
+      <Err>برای یکسان بودن روز ثبت در همهٔ رایانه‌ها، اختلاف UTC شرکت را مشخص کنید.
+        این مقدار ثابت است و تغییر ساعت تابستانی را خودکار دنبال نمی‌کند.
+        خالی‌گذاشتن فیلد، رفتار تاریخی را حفظ می‌کند. تغییر آن روی مجازبودن تاریخ سندهای آینده اثر می‌گذارد.</Err>
     </InlineForm>
   </section>;
 }

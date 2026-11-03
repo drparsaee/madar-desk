@@ -297,3 +297,52 @@
 @media(prefers-reduced-motion:reduce) {
   .sac-root button {transition:none;}
 }
+
+/* Dark accounting forms used to retain light panels with light inherited ink.
+   Keep ledger status colours semantic and give each editable surface a readable pair. */
+:root[data-theme="dark"] .sac-root :is(
+  .sac-document-detail,.sac-document-info>div,.sac-chart-group,.sac-chart-sub,
+  .sac-inline-info,.sac-live-total,.sac-invoice-summary,.sac-catalog-search,
+  .sac-template-library,.sac-invoice-columns,.sac-invoice-list-toolbar,
+  .sac-invoice-row-menu-items,.sac-invoice-addline,.sac-entry-template-bar,
+  .sac-invoice-editor .sac-grid,.sac-invoice-editor .sac-invoice-line
+){background:#262c38;color:#e8f0fb;border-color:#65738b;}
+:root[data-theme="dark"] .sac-root :is(
+  .sac-document-info dt,.sac-catalog-search small,.sac-invoice-shortcuts,
+  .sac-invoice-summary-note,.sac-invoice-list-search,.sac-entry-template-bar>small,
+  .sac-row-advanced>summary,.sac-invoice-columns,.sac-invoice-total-caption
+){color:#c3d3e8;}
+:root[data-theme="dark"] .sac-root .sac-invoice-editor .sac-invoice-line:nth-of-type(even){
+  background:#2b3341;
+}
+:root[data-theme="dark"] .sac-root .sac-invoice-editor .sac-invoice-line:focus-within{
+  background:#324459;outline-color:#8ab8f5;
+}
+:root[data-theme="dark"] .sac-root :is(.sac-document-detail-header h3,.sac-document-totals strong){
+  color:#f2f6ff;
+}
+:root[data-theme="dark"] .sac-root :is(.sac-invoice-line-total,.sac-live-total strong){
+  color:#a8efd8;
+}
+:root[data-theme="dark"] .sac-root .sac-invoice-editor .sac-live-total>strong{
+  background:#243d39;color:#c5f5e7;
+}
+:root[data-theme="dark"] .sac-root .sac-invoice-summary-heading>strong{
+  background:#28453e;color:#cbf5e9;
+}
+:root[data-theme="dark"] .sac-root .sac-audit-notice{
+  background:#443629;color:#ffe5bc;border:1px solid #aa8e64;
+}
+:root[data-theme="dark"] .sac-root .sac-invoice-row-menu summary{
+  background:#2c3442;color:#edf4ff;border-color:#65738b;
+}
+:root[data-theme="dark"] .sac-root .sac-money-debit{color:#ffb6c2;}
+:root[data-theme="dark"] .sac-root .sac-money-credit{color:#8ce2ba;}
+:root[data-theme="dark"] .sac-root .sac-money-neutral{color:#d4dfed;}
+:root[data-theme="dark"] .sac-root .sac-table-tools>span{color:#c3d3e8;}
+:root[data-theme="dark"] .sac-root .sac-vtr-status.posted{color:#9eefd0;}
+:root[data-theme="dark"] .sac-root .sac-vtr-status.reversed{color:#f7d19a;}
+:root[data-theme="dark"] .sac-root .madar-release-settings :is(h3,p){color:var(--sac-text);}
+:root[data-theme="dark"] .sac-root .sac-invoice-status-filters button[aria-pressed="true"]{
+  background:#7aaef0;color:#10243b;border-color:#a9cdfc;
+}

@@ -284,6 +284,7 @@ def _check_base(state):
     settings = _object(state.get("settings", {}), "settings")
     if settings.get("theme", "light") not in ("light", "dark"):
         _error("settings.theme", "expected light or dark")
+    _boolean(settings.get("themeForAllUsers", False), "settings.themeForAllUsers")
     _boolean(settings.get("costDefault", False), "settings.costDefault")
     priority_ids = priority_definition_ids(settings)
     tasks = list(_records(state.get("tasks"), "tasks", 20000, legacy_ids=True))

@@ -7,7 +7,7 @@ entire returned state. No IO, database, filesystem, or implicit tax rules.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import re
@@ -141,6 +141,19 @@ def _time(value):
     except ValueError as error:
         raise ValueError("Invalid trusted timestamp") from error
     return value
+
+
+def _posting_today(p, now):
+    """Convert the trusted instant to the configured company posting day.
+
+    Historical ledgers without a configured offset preserve their existing
+    calendar-day behavior. The offset is explicit and fixed, not inferred.
+    """
+    offset = (p.get("companyProfile") or {}).get("postingUtcOffsetMinutes")
+    if offset is None:
+        return now[:10]
+    instant = datetime.fromisoformat(now.replace("Z", "+00:00"))
+    return instant.astimezone(timezone(timedelta(minutes=offset))).date().isoformat()
 
 
 def _canonical(value):
@@ -405,7 +418,7 @@ def _proforma_transition(p, command, now):
         invoice_date = _date(command["documentDate"])
         if invoice_date < record["documentDate"]:
             raise ValueError("Invoice cannot predate its proforma")
-        if invoice_date > now[:10]:
+        if invoice_date > _posting_today(p, now):
             raise ValueError("Cannot convert proforma into a future-dated invoice")
         invoice_command = {"type": "invoice.create", "eventId": command["eventId"],
                            "invoiceId": invoice_id, "partyId": record["partyId"],
@@ -518,7 +531,7 @@ def _contractor_bill(p, command):
 
 def _posting_date(p, posting_date, now):
     day = _date(posting_date)
-    if day > now[:10]:
+    if day > _posting_today(p, now):
         raise ValueError("Posting in future is refused")
     if p["closedThrough"] is not None and day <= p["closedThrough"]:
         raise ValueError("Posting in closed period is refused")
@@ -901,7 +914,8 @@ def _run(p, command, role, now, *, finance_edit=False):
         return {"accountId": account_id}
     if kind == "company.profile.set":
         _object(command, ("type", "eventId", "legalName", "address", "phone",
-                          "nationalId", "economicCode", "postalCode", "reason"))
+                          "nationalId", "economicCode", "postalCode", "reason"),
+                ("postingUtcOffsetMinutes",))
         reason = _text(command["reason"], "company edit reason", limit=1000)
         details = {"legalName": _text(command["legalName"], "legal name", limit=300)}
         for field, cap in (("address", 1000), ("phone", 40),
@@ -911,8 +925,13 @@ def _run(p, command, role, now, *, finance_edit=False):
             if type(val) is not str or len(val)>cap or any(ord(ch)<32 or ord(ch)==127 for ch in val):
                 raise ValueError("Invalid company profile " + field)
             details[field] = val.strip()
+        offset = command.get("postingUtcOffsetMinutes", (p["companyProfile"] or {}).get(
+            "postingUtcOffsetMinutes"))
+        if offset is not None and (type(offset) is not int or not -720 <= offset <= 840):
+            raise ValueError("Company posting UTC offset must be integer minutes within -720..840")
+        details["postingUtcOffsetMinutes"] = offset
         history = deepcopy(p["companyProfile"].get("history", [])) if p["companyProfile"] else []
-        if p["companyProfile"] and all(p["companyProfile"][k] == details[k]
+        if p["companyProfile"] and all(p["companyProfile"].get(k) == details[k]
                                        for k in details):
             raise ValueError("Company profile update makes no changes")
         history.append({"eventId": event_id, "at": now, "reason": reason})
@@ -1265,6 +1284,7 @@ def _run(p, command, role, now, *, finance_edit=False):
                 "date": _date, "posting_date": _posting_date, "account": _account,
                 "party": _party, "post": _post, "line": _line,
                 "settle": _settle, "add": _add, "max": MAX_TOMAN,
+                "posting_today": _posting_today,
             })
         finally:
             if installment_doc is not None:
@@ -1272,8 +1292,14 @@ def _run(p, command, role, now, *, finance_edit=False):
     if kind == "period.close":
         _object(command, ("type", "eventId", "throughDate"))
         day = _date(command["throughDate"])
-        if day > now[:10] or (p["closedThrough"] is not None and day <= p["closedThrough"]):
+        if day > _posting_today(p, now) or (p["closedThrough"] is not None and day <= p["closedThrough"]):
             raise ValueError("Invalid period close boundary")
+        from accounting_operational_extensions import pending_goods_issues
+        pending = pending_goods_issues(p, through_date=day)
+        if pending:
+            first_issue = pending[0]
+            raise ValueError("Period close requires inventory.issue/COGS for invoice " +
+                             first_issue["invoiceId"] + " item " + first_issue["itemId"])
         p["closedThrough"] = day
         return {"closedThrough": day}
     raise ValueError("Unknown accounting command")

@@ -82,6 +82,60 @@ def _put_fifo(bucket, source, quantity, unit_cost, h):
     return amount
 
 
+def pending_goods_issues(projection, *, through_date=None):
+    """Outstanding stock-tracked sales quantity before a financial cutoff.
+
+    Date-scoped counts include credit notes and movement reversals effective at
+    the cutoff. This is a completeness control, not a COGS estimate.
+    """
+    movements = projection.get("stockMovements", {})
+    reversals = {move["sourceMovementId"] for move in movements.values()
+                 if move["type"] == "inventory.reverse" and
+                 (through_date is None or move["postingDate"] <= through_date)}
+    issued_quantities = {}
+    for move in movements.values():
+        if (move["type"] != "inventory.issue" or move["id"] in reversals or
+                (through_date is not None and move["postingDate"] > through_date)):
+            continue
+        key = (move["invoiceId"], move["itemId"])
+        issued_quantities[key] = issued_quantities.get(key, 0) + move["quantity"]
+    returned_quantities = {}
+    for note in projection.get("returns", {}).values():
+        if (note.get("direction") != "sale" or
+                (through_date is not None and note["postingDate"] > through_date)):
+            continue
+        for detail in note["lines"]:
+            key = (note["documentId"], detail["lineIndex"])
+            returned_quantities[key] = returned_quantities.get(key, 0) + detail["quantity"]
+    active_invoices_at_cutoff = None
+    if through_date is not None:
+        at_cutoff = [journal for journal in projection.get("journals", [])
+                     if journal["date"] <= through_date]
+        reversed_issue_entries = {journal["reversalOf"] for journal in at_cutoff
+                                  if journal.get("reversalOf")}
+        active_invoices_at_cutoff = {
+            journal["sourceId"] for journal in at_cutoff
+            if journal["sourceType"] == "invoice.issue" and
+            journal["id"] not in reversed_issue_entries}
+    result = []
+    for invoice in projection.get("invoices", {}).values():
+        if ((active_invoices_at_cutoff is None and invoice["status"] != "issued") or
+                (active_invoices_at_cutoff is not None and
+                 invoice["id"] not in active_invoices_at_cutoff)):
+            continue
+        for index, row in enumerate(invoice["lines"]):
+            item_id = row.get("itemId")
+            if not item_id or not projection.get("items", {}).get(item_id, {}).get("stockTracked"):
+                continue
+            returned = returned_quantities.get((invoice["id"], index), 0)
+            issued = issued_quantities.get((invoice["id"], item_id), 0)
+            missing = row["quantity"] - returned - issued
+            if missing > 0:
+                result.append({"invoiceId": invoice["id"], "itemId": item_id,
+                               "lineIndex": index, "missingQuantity": missing})
+    return result
+
+
 def apply_extended(p, c, now, *, helpers):
     h = helpers
     t = c["type"]
@@ -210,7 +264,8 @@ def apply_extended(p, c, now, *, helpers):
             "inventory.transfer": ("toWarehouseId", "reason"),
             "inventory.adjust": ("reason",),
         }[t]
-        object_(c, (*common, *extra))
+        object_(c, (*common, *extra),
+                ("taxTreatment", "discountAllocation") if t == "inventory.receive" else ())
         if t in ("inventory.receive", "inventory.issue",
                  "inventory.opening", "inventory.adjust"):
             _requires_system_accounts(p, ("1300", "5300"))
@@ -231,8 +286,10 @@ def apply_extended(p, c, now, *, helpers):
             bill = p["bills"].get(bill_id)
             if bill is None or bill["status"] != "issued" or bill["postingDate"] > day:
                 raise ValueError("Stock receipt requires a previously issued purchase bill")
-            if bill["tax"] or bill["discount"]:
-                raise ValueError("Allocate tax/discount separately before warehouse valuation")
+            if bill["tax"] and c.get("taxTreatment") != "expense":
+                raise ValueError("Taxed purchase receipt requires explicit taxTreatment='expense' (5200); recoverable input tax is not configured")
+            if "taxTreatment" in c and c["taxTreatment"] not in ("none", "expense"):
+                raise ValueError("Unsupported tax treatment for warehouse receipt")
             matching = [row for row in bill["lines"] if row.get("itemId") == iid]
             if len(matching) != 1:
                 raise ValueError("Purchase bill must contain one matching stock line")
@@ -242,14 +299,38 @@ def apply_extended(p, c, now, *, helpers):
                         x.get("billId") == bill_id and x["itemId"] == iid)
             if qty + prior > source_line["quantity"]:
                 raise ValueError("Warehouse receipt exceeds bill quantity")
-            unit_cost = source_line["unitPrice"]
+            # Existing bill posting expenses input tax in account 5200. Do not
+            # silently capitalize or call that tax recoverable. A document
+            # discount on a single stock line can be allocated exactly only
+            # when every purchased unit has the same integral net cost.
+            discount_per_unit = 0
+            if bill["discount"]:
+                if c.get("discountAllocation") != "single-line-uniform":
+                    raise ValueError("Discounted purchase receipt requires explicit discountAllocation='single-line-uniform'")
+                if len(bill["lines"]) != 1:
+                    raise ValueError("Allocate multi-line purchase discount per item before warehouse receipt")
+                _requires_system_accounts(p, ("5100",))
+                if bill["discount"] % source_line["quantity"]:
+                    raise ValueError("Purchase discount per unit is fractional; verified valuation allocation required")
+                discount_per_unit = bill["discount"] // source_line["quantity"]
+            elif "discountAllocation" in c and c["discountAllocation"] != "none":
+                raise ValueError("Unsupported discount allocation for undiscounted purchase")
+            unit_cost = source_line["unitPrice"] - discount_per_unit
             if not unit_cost:
                 raise ValueError("Zero-cost stock must use explicit opening provenance")
+            if unit_cost < 0:
+                raise ValueError("Purchase discount exceeds inventory gross value")
             moved_value = _put_fifo(bucket, bill_id, qty, unit_cost, h)
+            allocated_discount = discount_per_unit * qty
+            gross = source_line["unitPrice"] * qty
+            rows = [line("1300", debit=moved_value)]
+            if allocated_discount:
+                rows.append(line("5100", debit=allocated_discount))
+            rows.append(line(source_line["accountId"], credit=gross))
             gl = post(p, event_id, t, event_id, day,
-                      [line("1300", debit=moved_value),
-                       line(source_line["accountId"], credit=moved_value)])["id"]
-            metadata = {"billId": bill_id}
+                      rows)["id"]
+            metadata = {"billId": bill_id, "allocatedDiscount": allocated_discount,
+                        "taxTreatment": "expense-account-5200" if bill["tax"] else "none"}
         elif t == "inventory.issue":
             inv_id = ident(c["invoiceId"], "invoiceId")
             inv = p["invoices"].get(inv_id)
@@ -573,7 +654,7 @@ def apply_extended(p, c, now, *, helpers):
         object_(c, ("type", "eventId", "throughDate", "reason"),
                 ("startDate", "periodId"))
         close_day = date_(c["throughDate"])
-        if close_day > now[:10] or (p["closedThrough"] and close_day <= p["closedThrough"]):
+        if close_day > h["posting_today"](p, now) or (p["closedThrough"] and close_day <= p["closedThrough"]):
             raise ValueError("Invalid or already closed fiscal year")
         if "startDate" in c:
             start = date_(c["startDate"])
@@ -597,6 +678,13 @@ def apply_extended(p, c, now, *, helpers):
         _required_reason(h, c)
         if any(j["date"] > close_day for j in p["journals"]):
             raise ValueError("Cannot close prior year while later journals exist")
+        pending = pending_goods_issues(p, through_date=close_day)
+        if pending:
+            first_issue = pending[0]
+            raise ValueError(
+                "Fiscal close requires inventory.issue/COGS for invoice " +
+                first_issue["invoiceId"] + " item " + first_issue["itemId"] +
+                " (missing quantity " + str(first_issue["missingQuantity"]) + ")")
         # Revenue is credit-normal, expenses debit-normal. Close to retained
         # earnings, preserving the existing posted journals and audit trail.
         rows = []

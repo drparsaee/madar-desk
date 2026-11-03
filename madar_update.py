@@ -1,23 +1,26 @@
-"""Public GitHub release checker and fail-closed Windows setup downloader.
+"""Public GitHub release checker and fail-closed Windows setup updater.
 
-This code NEVER executes a downloaded program. The user runs an installer only
-after closing the desktop app; Inno preflight verifies a full user-data backup.
+After explicit user confirmation, a verified installer may run only after the
+owning desktop process exits. Inno preflight must verify a full data backup.
 No LAN credentials or application data are sent to GitHub.
 """
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import subprocess
+import sys
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
 REPOSITORY = "drparsaee/madar-desk-updates"
-CURRENT_VERSION = "1.0.11"
+CURRENT_VERSION = "1.0.12"
 API = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest"
 MAX_RELEASE_BYTES = 400 * 1024 * 1024
 HEX64 = re.compile(r"sha256:([0-9a-f]{64})\Z")
@@ -140,3 +143,43 @@ def download(info, download_root=None):
     finally:
         part.unlink(missing_ok=True)
     return {"path": str(destination), "verified": True}
+
+
+def schedule_verified_install(info, saved, *, parent_pid=None):
+    """Install only a host-discovered, verified release after this process exits.
+
+    No URL, shell command, installer path or checksum is accepted from the UI.
+    The installer itself must separately back up the full application profile.
+    """
+    validated = _verified_release(info)
+    if not isinstance(saved, dict) or saved.get("verified") is not True:
+        raise ValueError("Verified Windows setup is required")
+    if sys.platform != "win32":
+        raise RuntimeError("Windows update installation is not available")
+    path = Path(saved.get("path", ""))
+    if (not path.is_absolute() or path.is_symlink() or
+            path.name != validated["filename"] or not path.is_file() or
+            path.stat().st_size != validated["size"]):
+        raise ValueError("Untrusted or changed Windows setup")
+    with path.open("rb") as source:
+        if source.read(2) != b"MZ":
+            raise ValueError("Windows setup header mismatch")
+        source.seek(0)
+        if hashlib.file_digest(source, "sha256").hexdigest() != validated["sha256"]:
+            raise ValueError("Windows setup digest mismatch")
+    pid = os.getpid() if parent_pid is None else parent_pid
+    if type(pid) is not int or pid <= 0:
+        raise ValueError("Invalid host process")
+    # Quoting is used only for a trusted host-generated absolute path.
+    ps = ("$ErrorActionPreference='Stop'; "
+          f"if(Get-Process -Id {pid} -ErrorAction SilentlyContinue)"
+          f"{{Wait-Process -Id {pid} -Timeout 1800 -ErrorAction Stop}}; "
+          f"$file='{str(path).replace(chr(39), chr(39)*2)}'; "
+          f"if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine '{validated['sha256']}')"
+          "{throw 'Update integrity mismatch'}; "
+          "Start-Process -FilePath $file -Wait")
+    subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive",
+                      "-EncodedCommand", base64.b64encode(ps.encode("utf-16le")).decode("ascii")],
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                     close_fds=True)
+    return {"scheduledAfterExit": True, "version": validated["latest"]}

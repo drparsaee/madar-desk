@@ -88,9 +88,9 @@ const seed=()=>({
   version:1,
   workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],
   boards:[],projects:[],tasks:[],
-  stages:DEFAULT_STAGES,settings:{theme:'dark',googleClientId:'',costDefault:false}
+  stages:DEFAULT_STAGES,settings:{theme:'dark',themeForAllUsers:false,googleClientId:'',costDefault:false}
 });
-const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'dark',costDefault:false,...s.settings}});
+const normalize=s=>({...s,stages:s.stages?.length?s.stages:DEFAULT_STAGES,boards:s.boards||[],workspaces:s.workspaces?.length?s.workspaces:[{id:'workspace-legacy',name:'فضای کاری من',archived:false}],projects:s.projects.map(p=>({costEnabled:false,price:0,fileLinks:[],...p})),tasks:s.tasks.map(t=>({...t,cost:t.cost||0,costEnabled:t.costEnabled??null,assignees:t.assignees||[],fileLinks:t.fileLinks||[],estimatedMinutes:t.estimatedMinutes||0,actualMinutes:t.actualMinutes||0,checklist:t.checklist.map(c=>({cost:0,...c}))})),settings:{theme:'dark',themeForAllUsers:false,costDefault:false,...s.settings}});
 const mockBridge={
   getState:async()=>JSON.parse(localStorage.getItem('madar-preview')||'null')||seed(),
   saveState:async s=>{localStorage.setItem('madar-preview',JSON.stringify(s));return true;},
@@ -912,7 +912,9 @@ export default function App(){
     return()=>clearInterval(timer);
   },[]);
   const appearanceScope=themeScope(lanStatus);
-  const uiTheme=themeChoice?.scope===appearanceScope?themeChoice.theme:
+  const sharedThemeEnabled=data?.settings?.themeForAllUsers===true;
+  const uiTheme=sharedThemeEnabled?(data?.settings?.theme==='light'?'light':'dark'):
+    themeChoice?.scope===appearanceScope?themeChoice.theme:
     readTheme(localStorage,appearanceScope,data?.settings?.theme);
   useEffect(()=>{document.documentElement.dataset.theme=uiTheme;},[uiTheme]);
   useEffect(()=>{
@@ -922,11 +924,17 @@ export default function App(){
     try{localStorage.setItem('madar-ui-theme',uiTheme);}
     catch(_error){/* Private storage may be disabled in a hardened WebView. */}
   },[uiTheme,!!data]);
-  const toggleTheme=()=>{
-    const next=uiTheme==='dark'?'light':'dark';
-    writeTheme(localStorage,appearanceScope,next);
-    setThemeChoice({scope:appearanceScope,theme:next});
+  const chooseTheme=next=>{
+    if(next!=='light'&&next!=='dark')return;
+    if(sharedThemeEnabled){
+      if(lanStatus?.user?.role!=='admin')return;
+      changeAdmin(s=>({...s,settings:{...s.settings,theme:next}}));
+    }else{
+      writeTheme(localStorage,appearanceScope,next);
+      setThemeChoice({scope:appearanceScope,theme:next});
+    }
   };
+  const toggleTheme=()=>chooseTheme(uiTheme==='dark'?'light':'dark');
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
   const tasks=data?.tasks||[];
   const projects=data?.projects||[];
@@ -1672,6 +1680,7 @@ export default function App(){
         title="Google Drive" aria-label="Google Drive"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
       <button type="button" title={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         aria-label={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
+        disabled={sharedThemeEnabled&&!canManage}
         onClick={toggleTheme}>
         {uiTheme==='dark'?<Sun size={19}/>:<Moon size={19}/>}<span className="vitrea-quickdock__label" aria-hidden="true">تغییر تم</span></button>
       <button type="button" title="تنظیمات" aria-label="تنظیمات مدار"
@@ -1968,7 +1977,7 @@ export default function App(){
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
     {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه حذف شود؟ کارهایش به پروژه دیگری منتقل خواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
-    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
+    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}

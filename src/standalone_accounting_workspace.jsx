@@ -1,6 +1,6 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,BookOpen,Building2,Download,FileText,Landmark,Layers3,
-  Plus,RefreshCw,ShieldAlert,TrendingUp,Users,Wallet} from 'lucide-react';
+  Plus,RefreshCw,Settings2,ShieldAlert,TrendingUp,Users,Wallet} from 'lucide-react';
 import './standalone_accounting_workspace.css';
 import './standalone_accounting_ux20.css';
 import './accounting_density.css';
@@ -9,6 +9,7 @@ import './accounting_unslop.css';
 import {buildStandaloneDocumentExport,downloadStandaloneBlob} from './standalone_invoice_export.js';
 import {buildParsianKarmaDocumentExport} from './parsian_karma_invoice_export.js';
 import AccountingTopRibbon from './accounting_top_ribbon.jsx';
+import ReleaseUpdateSettings from './release_update_settings.jsx';
 import ParsianRawArchiveExplorer from './parsian_raw_archive_explorer.jsx';
 import ProviderCsvMigration from './provider_csv_migration.jsx';
 import {buildAccountingInvoiceEntryTemplate,parseAccountingInvoiceEntryTemplate}
@@ -100,10 +101,13 @@ export function accountingSettlementCsv(entries,parties={},accounts={},unit='ر�
   return '\ufeff'+rows.map(row=>row.map(csvField).join(',')).join('\r\n');
 }
 
-export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNavigate,onNewInvoice}){
+export function AccountingVitreaHome({view,currency,today,canDraft,canSettle=false,
+  disabled,onNavigate,onNewInvoice}){
   const [filter,setFilter]=useState('all');
   const overview=useMemo(()=>accountingSettlementOverview(view,today),[view,today]);
   const parties=view.parties||{},accounts=view.accounts||{};
+  const receivableDocs=outstandingStandaloneDocuments(view,'receipt');
+  const payableDocs=outstandingStandaloneDocuments(view,'payment');
   const unit=currency==='TOMAN'?'تومان':'ریال';
   const amount=value=>formatStandaloneMoney(value,currency);
   const filtered=overview.entries.filter(entry=>filter==='all'?true:
@@ -136,6 +140,32 @@ export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNa
       {overview.omitted.toLocaleString('fa-IR')} رکورد با مبلغ یا تاریخ نامعتبر از این نما کنار گذاشته شد. اطلاعات اصلی تغییر نکرده است.</div>}
     {overview.unrepresentable&&<div className="sac-vtr-warning" role="status">
       جمع برخی مبالغ از محدوده محاسبه دقیق رابط فراتر است. نمودار و نسبت‌های مرتبط نمایش داده نمی‌شوند؛ برای بررسی ارقام به دفترکل مراجعه کنید.</div>}
+    <section className="sac-vtr-due" aria-label="اسناد صادرشده دارای مانده باز">
+      <div className="sac-vtr-due-title">
+        <h3>اسناد باز قابل پیگیری</h3>
+        <p>فقط فاکتورها و صورتحساب‌های صادرشده در دفتر جاری؛ سوابق منتقل‌شده جداگانه بررسی می‌شوند.</p>
+      </div>
+      <div className="sac-vtr-due-items">
+        <div className="sac-vtr-due-item">
+          <div><span>فاکتور فروش با مانده دریافتنی</span>
+            <strong>{receivableDocs.length.toLocaleString('fa-IR')} سند</strong></div>
+          <div className="sac-vtr-due-actions">
+            <button type="button" onClick={()=>onNavigate('invoice')}>بررسی فاکتورها <ArrowLeft size={15}/></button>
+            {canSettle&&receivableDocs.length>0&&<button type="button" disabled={disabled}
+              onClick={()=>onNavigate('settlements')}>ثبت دریافت</button>}
+          </div>
+        </div>
+        <div className="sac-vtr-due-item">
+          <div><span>صورتحساب خرید با مانده پرداختنی</span>
+            <strong>{payableDocs.length.toLocaleString('fa-IR')} سند</strong></div>
+          <div className="sac-vtr-due-actions">
+            <button type="button" onClick={()=>onNavigate('bill')}>بررسی خریدها <ArrowLeft size={15}/></button>
+            {canSettle&&payableDocs.length>0&&<button type="button" disabled={disabled}
+              onClick={()=>onNavigate('settlements')}>ثبت پرداخت</button>}
+          </div>
+        </div>
+      </div>
+    </section>
     <div className="sac-vtr-overview-grid">
       <section className="sac-vtr-panel sac-vtr-chart-panel" aria-label="نمودار گردش دوازده ماه اخیر">
         <div className="sac-vtr-panel-head"><div><h3>گردش ماهانه</h3><small>{periodTitle}</small></div>
@@ -174,7 +204,7 @@ export function AccountingVitreaHome({view,currency,today,canDraft,disabled,onNa
           {[['all','همه'],['receipt','دریافت‌ها'],['payment','پرداخت‌ها'],['reversed','برگشت‌شده']].map(([value,label])=><button
             type="button" key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}
             className={filter===value?'active':''}>{label}</button>)}</div>
-        <div className="sac-vtr-table-scroll"><table><thead><tr><th>عملیات / شناسه</th><th>طرف‌حساب</th>
+        <div className="sac-vtr-table-scroll" role="region" aria-label="جدول آخرین دریافت‌ها و پرداخت‌ها" tabIndex={0}><table><thead><tr><th>عملیات / شناسه</th><th>طرف‌حساب</th>
           <th>مبلغ ({unit})</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>
           {filtered.slice(0,9).map(r=><tr key={r.type+'-'+r.id}>
             <td><strong>{r.type==='receipt'?'دریافت':'پرداخت'}</strong><small dir="ltr">{r.id}</small></td>
@@ -220,8 +250,20 @@ const SECTIONS=[['overview','داشبورد'],['company','مشخصات شرکت'
   ['items','کالا، انبار و کاردکس'],['settlements','دریافت، پرداخت و اقساط'],
   ['cash','صندوق، بانک و مغایرت'],['accounts','حساب‌ها و دفترکل'],
   ['journal','سند دستی و برگشت'],['reports','گزارش‌های مالی'],
-  ['payroll','حقوق و مالیات'],['period','سال مالی و بستن دوره']];
+  ['payroll','حقوق و مالیات'],['period','سال مالی و بستن دوره'],
+  ['settings','تنظیمات حسابداری']];
 export const standaloneToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+/** Display-side company day; native host remains authoritative for posting. */
+export function accountingCompanyToday(view,now=new Date()){
+  // Legacy profiles are validated against the native host's UTC timestamp.
+  // Never prefill a different browser-local calendar day until an explicit
+  // company posting offset is stored by the financial administrator.
+  const instant=now instanceof Date&&Number.isFinite(now.getTime())?now:new Date();
+  const legacyDay=instant.toISOString().slice(0,10);
+  const offset=view?.companyProfile?.postingUtcOffsetMinutes;
+  if(!Number.isInteger(offset)||offset< -720||offset>840)return legacyDay;
+  return new Date(instant.getTime()+offset*60000).toISOString().slice(0,10);
+}
 const validId=v=>typeof v==='string'&&ID.test(v);
 const validText=(v,max=300)=>typeof v==='string'&&!!v.trim()&&v.trim().length<=max&&!/[\x00-\x1f\x7f]/.test(v);
 const failure=error=>({error});
@@ -320,6 +362,7 @@ export function outstandingStandaloneDocuments(view,kind,partyId=''){
     (!partyId||d.partyId===partyId)&&Number.isSafeInteger(d.total)&&
     Number.isSafeInteger(d.allocated)&&d.allocated>=0&&
     Number.isSafeInteger(d.returnedAmount??0)&&(d.returnedAmount??0)>=0&&
+    Number.isSafeInteger(d.allocated+(d.returnedAmount??0))&&
     d.allocated+(d.returnedAmount??0)<d.total);
 }
 export function buildStandaloneSettlementCommand({kind,document,amount,accountId,postingDate,
@@ -450,7 +493,8 @@ function DataTable({cols,rows,empty}){
       <span aria-live="polite">{visible.length.toLocaleString('fa-IR')} از {matched.length.toLocaleString('fa-IR')} ردیف
         {filter?' (کل جدول: '+rows.length.toLocaleString('fa-IR')+')':''}</span>
     </div>
-    <div className="sac-table-wrap"><table><thead><tr>{cols.map((x,i)=>
+    <div className="sac-table-wrap" role="region" tabIndex={0}
+      aria-label={'جدول حسابداری: '+cols.slice(0,3).join('، ')}><table><thead><tr>{cols.map((x,i)=>
       <th key={i}>{large?<button type="button" className="sac-table-sort"
         onClick={()=>{setColumn(i);setDesc(column===i?!desc:false);setVisibleLimit(100);}}
         aria-label={'مرتب‌سازی بر اساس '+x}>{x}{column===i?(desc?' ↓':' ↑'):''}</button>:x}</th>)}
@@ -536,8 +580,29 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const [printDesignerOpen,setPrintDesignerOpen]=useState(false);
   const live=useRef(true),request=useRef(0),locked=useRef(false),latest=useRef(null),
     pending=useRef(null);
-  const today=T();
   const view=snapshot?.view;
+  const today=accountingCompanyToday(view);
+  const lastDefaultDay=useRef(T());
+  useEffect(()=>{
+    if(!view||today===lastDefaultDay.current)return;
+    const previous=lastDefaultDay.current;
+    lastDefaultDay.current=today;
+    const fields=[['document','documentDate'],['proforma','documentDate'],
+      ['settlement','postingDate'],['deposit','postingDate'],
+      ['transfer','postingDate'],['manual','postingDate'],
+      ['reverse','postingDate'],['close','throughDate']];
+    setForms(current=>{
+      const next={...current};
+      for(const [group,key] of fields){
+        if(current[group]?.[key]===previous)next[group]={...current[group],[key]:today};
+      }
+      return next;
+    });
+    setIssueDate(date=>date===previous?today:date);
+    setCorrectionDate(date=>date===previous?today:date);
+    setHistoricalReceipt(prev=>prev.postingDate===previous?
+      {...prev,postingDate:today}:prev);
+  },[view,today]);
   const ledgerCurrency=view?.currency||'RIAL';
   const templateBridge=typeof api?.standaloneAccountingTemplateList==='function';
   const loadTemplateLibraries=async()=>{
@@ -695,9 +760,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   },[tab,selectedHistoricAccount]);
   const f=(group,key,value)=>setForms(p=>({...p,[group]:{...p[group],[key]:value}}));
   const reset=group=>setForms(p=>({...p,[group]:{...DEFAULTS[group],
-    ...(group==='document'?{documentDate:T()}:{}),
-    ...(group==='close'?{throughDate:T()}:{}),
-    ...(['settlement','deposit','transfer','manual','reverse'].includes(group)?{postingDate:T()}:{}),
+    ...(['document','proforma'].includes(group)?{documentDate:today}:{}),
+    ...(group==='close'?{throughDate:today}:{}),
+    ...(['settlement','deposit','transfer','manual','reverse'].includes(group)?{postingDate:today}:{}),
   }}));
   const refresh=useCallback(async()=>{
     if(locked.current)return;
@@ -1051,12 +1116,12 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       <div className="sac-brand"><div className="sac-brand-icon"><Building2 size={24}/></div>
         <div><strong>مدار <span>حسابداری</span></strong><small>میز مستقل مالی</small></div></div>
       <p className="sac-nav-caption">محیط کار</p>
-      <nav aria-label="ناوبری میز حسابداری">{SECTIONS.map(([name,label],i)=>{
+      <nav aria-label="ناوبری میز حسابداری" tabIndex={0}>{SECTIONS.map(([name,label],i)=>{
         const icons={overview:Landmark,company:Building2,proforma:FileText,
           invoice:FileText,bill:FileText,contractors:Layers3,parties:Users,
           migration:BookOpen,cheques:Wallet,items:Layers3,settlements:Wallet,
           cash:Landmark,accounts:BookOpen,journal:BookOpen,reports:BookOpen,
-          payroll:Wallet,period:ShieldAlert};
+          payroll:Wallet,period:ShieldAlert,settings:Settings2};
         const Icon=icons[name]||BookOpen;
         return <button key={name} type="button" className={tab===name?'active':''}
           aria-current={tab===name?'page':undefined} onClick={()=>gotoTab(name)}>
@@ -1073,7 +1138,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
         <div className="sac-header-actions"><span>تمام مبالغ: {unitLabel}</span>
           <button type="button" onClick={()=>void refresh()} disabled={busy||state.loading}>
             <RefreshCw size={16}/> بازخوانی</button></div></header>
-      <div className="sac-body">
+      <div className="sac-body" role="region" aria-label="محتوای صفحه حسابداری" tabIndex={0}>
         {tab==='invoice'&&<nav className="sac-workflow-nav" aria-label="مسیر فاکتور فروش">
           <button type="button" onClick={()=>gotoTab('overview')} disabled={busy||pendingRetry}>صفحه اصلی</button>
           <span aria-hidden="true">/</span>
@@ -1111,6 +1176,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             بازیابی با همان شناسه عملیات</button>
         </div>}
         {!view&&!state.loading&&<Empty>اطلاعات قابل اتکایی از میزبان دریافت نشده است. سند یا مبلغ نمایشی ساخته نمی‌شود.</Empty>}
+        {tab==='settings'&&<Panel title="تنظیمات حسابداری"
+          description="مدیریت نسخهٔ نصب‌شده و بررسی انتشار رسمی مدار برای هر دو محیط.">
+          <ReleaseUpdateSettings api={api} context="accounting"/>
+        </Panel>}
         {view&&<>
           {tab==='proforma'&&<>
             <Panel title="پیش‌فاکتورهای فروش مستقل"
@@ -1338,7 +1407,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           </>}
           {tab==='overview'&&<>
             <AccountingVitreaHome view={view} currency={ledgerCurrency} today={today}
-              canDraft={canManage||canDraft} disabled={busy||pendingRetry}
+              canDraft={canManage||canDraft} canSettle={canManage} disabled={busy||pendingRetry}
               onNavigate={gotoTab} onNewInvoice={openQuickInvoice}/>
             <details className="sac-vtr-management-details"><summary>گزارش‌های تحلیلی و یادآورهای مدیریتی</summary>
               <AccountingManagementDashboard view={view} currency={ledgerCurrency}
@@ -1865,6 +1934,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <span>جمع ردیف</span><span>عملیات</span>
                 </div>
                 {rows.map((row,i)=><div key={i} className="sac-doc-line sac-invoice-line" onKeyDown={invoiceKeyDown}>
+                  <div className="sac-invoice-row-heading">ردیف {Number(i+1).toLocaleString('fa-IR')}</div>
                   <Field label="شرح"><input data-invoice-row={i} data-invoice-col={0} required maxLength={300} value={row.description}
                     placeholder="نام کالا یا شرح خدمات"
                     onChange={e=>rowUpdate(i,'description',e.target.value)}/></Field>
@@ -1873,6 +1943,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <Field label={`قیمت واحد (${unitLabel})`}><input data-invoice-row={i} data-invoice-col={2} required dir="ltr" inputMode="numeric"
                     value={row.unitPrice} onChange={e=>rowUpdate(i,'unitPrice',e.target.value)}/></Field>
                   <output className="sac-invoice-line-total" aria-label={'جمع ردیف '+(i+1)}>
+                    <span className="sac-invoice-total-caption" aria-hidden="true">جمع ردیف</span>
                     {(()=>{
                       const qty=parse(row.quantity),unit=parse(row.unitPrice,true);
                       const total=qty!==null&&unit!==null?qty*unit:null;
@@ -2068,7 +2139,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   ],accounts,today,
                 }));
                 if(succeeded)setHistoricalReceipt({
-                  debtorId:'',bankId:'',amount:'',postingDate:T(),note:''});
+                  debtorId:'',bankId:'',amount:'',postingDate:today,note:''});
               })}>
                 <Field label="بدهکار تاریخی">
                   <select required value={historicalReceipt.debtorId}
@@ -2598,10 +2669,15 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
               </Panel>
               <div className="sac-columns">
                 <Panel title="صورت سود و زیان" description="درآمد و هزینه‌های ثبت‌شده؛ سندهای پیش‌نویس در محاسبه نیستند.">
+                  {view.financialReports.profitLossComplete===false&&<div className="sac-audit-notice" role="status">
+                    سود/زیان فعلاً قطعی نیست: حواله خروج و بهای تمام‌شدهٔ بعضی کالاهای فروخته‌شده ثبت نشده است.
+                    تعداد ردیف‌های نیازمند رسیدگی: {(view.financialReports.unpostedGoodsIssues||[]).length.toLocaleString('fa-IR')}.
+                    {canManage&&<button type="button" onClick={()=>setTab('items')}>بررسی حواله‌های انبار</button>}
+                  </div>}
                   <DataTable cols={['عنوان','مبلغ']} empty="گزارش در دسترس نیست." rows={[
                     ['درآمد',view.financialReports.profitLoss.revenue],
                     ['هزینه',view.financialReports.profitLoss.expense],
-                    ['سود / زیان',view.financialReports.profitLoss.net],
+                    [view.financialReports.profitLossComplete===false?'سود / زیان موقت (بهای تمام‌شده ناقص)':'سود / زیان',view.financialReports.profitLoss.net],
                   ].map(([title,value])=><tr key={title}><td>{title}</td><td>{moneyText(value)}</td></tr>)}/>
                 </Panel>
                 <Panel title="ترازنامه" description="دارایی‌ها برابر با بدهی، سرمایه و نتیجه انباشته کنترل می‌شود.">

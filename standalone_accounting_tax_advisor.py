@@ -7,6 +7,7 @@ Regulatory rules require a separately reviewed and dated source pack.
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 from typing import Any
 
 @dataclass(frozen=True)
@@ -51,9 +52,11 @@ def preflight_einvoice(invoice:dict[str,Any],company:dict[str,Any],*,
                   'شناسه کالا/خدمت برای نگاشت سامانه مؤدیان مشخص نیست')
             for amount_key in ('quantity','unitPrice'):
                 value=line.get(amount_key)
-                if isinstance(value,bool) or not isinstance(value,(int,float)) or value<=0:
+                if (type(value) not in (int, float) or
+                    (type(value) is float and not isfinite(value)) or
+                    (type(value) in (int, float) and (value <= 0 or value > 10**15))):
                     issues.append({'severity':'blocker','field':f'lines.{i}.{amount_key}',
-                                   'message':'مقدار مثبت و معتبر لازم است'})
+                                   'message':'مقدار صحیح، مثبت، محدود و متناهی لازم است'})
     kind=invoice.get('kind','original')
     if kind not in ('original','amendment','cancellation','return'):
         issues.append({'severity':'blocker','field':'invoice.kind','message':'نوع سند ناشناخته است'})

@@ -6,6 +6,7 @@ import {CommonColorOptions} from './common_color_palette.jsx';
 import {INTERFACE_FEATURE_TIERS, INTERFACE_MODE_OPTIONS} from './interface_mode.js';
 import {deleteSettingsStage} from './stage_delete_safe.js';
 import './settings_density.css';
+import ReleaseUpdateSettings from './release_update_settings.jsx';
 
 export const DEFAULT_STAGES=[
  {id:'inbox',label:'صندوق ورودی',subtitle:'ایده‌ها و کارهای جدید',color:'#9ca3af'},
@@ -58,7 +59,7 @@ export function FinanceSummary({project,tasks,onChange,canManage=true,compact=fa
  </div>;
 }
 
-export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,onOpenBoardButtons}){
+export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,theme='dark',onThemeChange=()=>{},updateApi=null,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,onOpenBoardButtons}){
  const [name,setName]=useState('');
  const [editing,setEditing]=useState('');
  const [label,setLabel]=useState('');
@@ -76,13 +77,34 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
  };
  const moveStage=(id,d)=>{const index=stages.findIndex(s=>s.id===id),next=index+d;if(next<0||next>=stages.length)return;const a=[...stages];[a[index],a[next]]=[a[next],a[index]];onChange(s=>({...s,stages:a}));};
  const updateDefault=checked=>onChange(s=>({...s,settings:{...s.settings,costDefault:checked},projects:s.projects.map(p=>({...p,costEnabled:checked}))}));
- const updateTheme=theme=>onChange(s=>({...s,settings:{...s.settings,theme}}));
+ const sharedThemeEnabled=settings.themeForAllUsers===true;
+ const updateSharedTheme=enabled=>onChange(s=>({...s,settings:{...s.settings,
+   themeForAllUsers:enabled,...(enabled?{theme}: {})}}));
  return <div className="overlay" onMouseDown={onClose}><section className="dialog settings-modal settings-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="تنظیمات مدار"><div className="dialog-head"><h2><Settings2 size={18}/> تنظیمات مدار</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div>
    <div className="dialog-body settings-content">
      <div className="settings-density__quick-grid" aria-label="تنظیمات پرکاربرد">
-     <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3><p>حالت نمایش در تمام صفحات برنامه اعمال می‌شود.</p><div className="theme-picks"><button className={settings.theme!=='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('light')}><Sun size={19}/> روشن {settings.theme!=='dark'&&<Check size={16}/>}</button><button className={settings.theme==='dark'?'selected':''} disabled={!canManage} onClick={()=>updateTheme('dark')}><Moon size={19}/> تاریک {settings.theme==='dark'&&<Check size={16}/>}</button></div></div>
+     <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3>
+       <p>{sharedThemeEnabled?'تم مشترک همهٔ کاربران فعال است. فقط مدیر می‌تواند آن را تغییر دهد.':
+         'تم فعلی فقط برای این کاربر در همین رایانه انتخاب می‌شود و با دکمهٔ تغییر تم در منوی کناری همگام است.'}</p>
+       <div className="theme-picks">
+         <button type="button" className={theme==='light'?'selected':''}
+           disabled={sharedThemeEnabled&&!canManage} aria-pressed={theme==='light'}
+           onClick={()=>onThemeChange('light')}><Sun size={19}/> روشن {theme==='light'&&<Check size={16}/>}</button>
+         <button type="button" className={theme==='dark'?'selected':''}
+           disabled={sharedThemeEnabled&&!canManage} aria-pressed={theme==='dark'}
+           onClick={()=>onThemeChange('dark')}><Moon size={19}/> تاریک {theme==='dark'&&<Check size={16}/>}</button>
+       </div>
+       <label className="setting-toggle"><input type="checkbox"
+         checked={sharedThemeEnabled} disabled={!canManage}
+         onChange={e=>updateSharedTheme(e.target.checked)}/>
+         <span><strong>اعمال تم برای همهٔ کاربران</strong>
+           <small>در حالت فعال، این تنظیم در دادهٔ مشترک ذخیره می‌شود و انتخاب‌های محلی را تا زمان غیرفعال‌کردن آن کنار می‌گذارد.</small>
+         </span>
+       </label>
+     </div>
      <div className="setting-block"><h3><Layers3 size={17}/> تقویم و نمایش تاریخ</h3><p>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها در همه سیستم‌ها یکسان می‌ماند.</p><div className="theme-picks"><button className={calendar==='jalali'?'selected':''} onClick={()=>onCalendarChange('jalali')}>شمسی {calendar==='jalali'&&<Check size={16}/>}</button><button className={calendar==='gregorian'?'selected':''} onClick={()=>onCalendarChange('gregorian')}>میلادی {calendar==='gregorian'&&<Check size={16}/>}</button></div></div>
      <div className="setting-block"><h3><Wallet size={17}/> مدیریت هزینه‌ها</h3><label className="setting-toggle"><input type="checkbox" checked={!!settings.costDefault} disabled={!canManage} onChange={e=>updateDefault(e.target.checked)}/><span><strong>فعال‌کردن فیلد هزینه برای همه پروژه‌ها</strong><small>هم برای پروژه‌های فعلی اعمال می‌شود و هم پیش‌فرض پروژه‌های جدید خواهد بود؛ مبالغ قبلی پاک نمی‌شوند.</small></span></label></div>
+     <ReleaseUpdateSettings api={updateApi} context="planner"/>
      </div>
      {boardId&&<details className="settings-density__disclosure">
        <summary><span><Layers3 size={17}/> دکمه‌های برد</span><small>نمایش و اجرای دکمه‌های ثبت‌شده با سطح دسترسی کاربر</small></summary>

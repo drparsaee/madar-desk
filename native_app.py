@@ -134,6 +134,7 @@ def normalize_state(state):
     state.setdefault("settings", {})
     if isinstance(state["settings"], dict):
         state["settings"].setdefault("theme", "light")
+        state["settings"].setdefault("themeForAllUsers", False)
         state["settings"].setdefault("costDefault", False)
         state["settings"].setdefault("priorityDefinitions", [dict(item) for item in DEFAULT_PRIORITY_DEFINITIONS])
     for p in state["projects"]:
@@ -194,7 +195,9 @@ def is_valid(state):
                 or ("archived" in s and type(s["archived"]) is not bool)):
             raise ValueError("ستون نامعتبر است.")
         stage_ids.add(s["id"])
-    if state["settings"].get("theme", "light") not in {"light", "dark"} or not isinstance(state["settings"].get("costDefault", False), bool):
+    if (state["settings"].get("theme", "light") not in {"light", "dark"} or
+            not isinstance(state["settings"].get("costDefault", False), bool) or
+            not isinstance(state["settings"].get("themeForAllUsers", False), bool)):
         raise ValueError("تنظیمات نمایش نامعتبر است.")
     priority_ids = priority_definition_ids(state["settings"])
     ids = set()
@@ -411,7 +414,7 @@ def initial_state():
             task(4, "تعریف شیوه گزارش ایجنت", "planned", "low", []),
         ],
         "stages": [dict(s) for s in DEFAULT_STAGES],
-        "settings": {"theme": "light", "googleClientId": "", "costDefault": False},
+        "settings": {"theme": "light", "themeForAllUsers": False, "googleClientId": "", "costDefault": False},
     }
 
 
@@ -426,7 +429,7 @@ def empty_initial_state():
         "projects": [],
         "tasks": [],
         "stages": [dict(stage) for stage in DEFAULT_STAGES],
-        "settings": {"theme": "light", "googleClientId": "", "costDefault": False},
+        "settings": {"theme": "light", "themeForAllUsers": False, "googleClientId": "", "costDefault": False},
     }
 
 
@@ -920,24 +923,7 @@ class Bridge:
         """
         info = madar_update.check()
         saved = madar_update.download(info)
-        if not saved["verified"] or sys.platform != "win32":
-            raise RuntimeError("بسته معتبر ویندوز برای نصب آماده نیست.")
-        target = saved["path"]
-        sha = info["sha256"]
-        parent = os.getpid()
-        # No user-controlled shell expression enters the generated command.
-        ps = ("$ErrorActionPreference='Stop'; "
-              f"if(Get-Process -Id {parent} -ErrorAction SilentlyContinue)"
-              f"{{Wait-Process -Id {parent} -Timeout 1800 -ErrorAction Stop}}; "
-              f"$file='{target.replace(chr(39), chr(39)*2)}'; "
-              f"if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ine '{sha}')"
-              "{throw 'Update integrity mismatch'}; "
-              "Start-Process -FilePath $file -Wait")
-        subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive",
-                          "-EncodedCommand", base64.b64encode(ps.encode("utf-16le")).decode("ascii")],
-                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                         close_fds=True)
-        return {"scheduledAfterExit": True, "version": info["latest"]}
+        return madar_update.schedule_verified_install(info, saved)
 
     def downloadSharedFile(self, path):
         if not valid_share_path(path):
@@ -2930,7 +2916,8 @@ ACCOUNTING_JS_BRIDGE = """
 <script>
 window.madar = Object.fromEntries(
  ['standaloneAccountingRead','standaloneAccountingCommand',
-  'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview'].map(key =>
+  'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview',
+  'releaseCheck','releaseDownload','releaseInstall'].map(key =>
  [key, (...args) => new Promise((resolve, reject) => {
    // The standalone page frequently follows an in-window navigation from the
    // task desk. Its JavaScript API must not race WebView2 method injection.

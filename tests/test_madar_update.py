@@ -9,7 +9,7 @@ import madar_update as update
 
 
 class UpdateSafetyTests(unittest.TestCase):
-    def release(self, version="1.0.12", blob=b"MZ" + b"a" * 512):
+    def release(self, version="1.0.13", blob=b"MZ" + b"a" * 512):
         return {"tag_name": "v" + version, "draft": False, "prerelease": False,
                 "assets": [{"name": f"Madar-Desk-{version}-Setup.exe",
                             "browser_download_url": f"https://github.com/{update.REPOSITORY}/releases/download/v{version}/Madar-Desk-{version}-Setup.exe",
@@ -19,7 +19,7 @@ class UpdateSafetyTests(unittest.TestCase):
     def test_stable_release_and_digest_required(self):
         info = update.inspect_release(self.release())
         self.assertTrue(info["available"])
-        self.assertEqual(info["latest"], "1.0.12")
+        self.assertEqual(info["latest"], "1.0.13")
         self.assertFalse(update.inspect_release(self.release("1.0.11"))["available"])
         self.assertFalse(update.inspect_release(self.release("1.0.8"))["available"])
         self.assertFalse(update.inspect_release(self.release("1.0.9"))["available"])

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date
+from accounting_operational_extensions import pending_goods_issues
 
 
 def _day(value, name):
@@ -44,6 +45,9 @@ def ledger_reports(view, *, from_date=None, through_date=None):
     initial = {ident: 0 for ident in accounts}
     balances = dict(initial)
     movement = {ident: {"debit": 0, "credit": 0} for ident in accounts}
+    # Fiscal closing entries correctly affect account balances and the trial
+    # balance, but must not erase operational P&L for the fiscal year.
+    operational_movement = {ident: {"debit": 0, "credit": 0} for ident in accounts}
     ledger = {ident: [] for ident in accounts}
     party_net = {}
     count = 0
@@ -70,6 +74,9 @@ def ledger_reports(view, *, from_date=None, through_date=None):
             if first is None or day >= first:
                 movement[aid]["debit"] += debit
                 movement[aid]["credit"] += credit
+                if journal["sourceType"] != "fiscal.year.close":
+                    operational_movement[aid]["debit"] += debit
+                    operational_movement[aid]["credit"] += credit
                 ledger[aid].append({"date": day, "journalId": journal["id"],
                                     "sourceType": journal["sourceType"],
                                     "sourceId": journal["sourceId"],
@@ -90,11 +97,11 @@ def ledger_reports(view, *, from_date=None, through_date=None):
         raise ValueError("Trial balance mismatch")
     # Income/expense movements in the selected interval; closing retained
     # earnings is a presentation adjustment, NOT an unposted journal entry.
-    period_net = sum(movement[r["accountId"]]["credit"] -
-                     movement[r["accountId"]]["debit"] for r in rows
+    period_net = sum(operational_movement[r["accountId"]]["credit"] -
+                     operational_movement[r["accountId"]]["debit"] for r in rows
                      if r["kind"] == "revenue") - sum(
-                         movement[r["accountId"]]["debit"] -
-                         movement[r["accountId"]]["credit"] for r in rows
+                         operational_movement[r["accountId"]]["debit"] -
+                         operational_movement[r["accountId"]]["credit"] for r in rows
                          if r["kind"] == "expense")
     lifetime_net = sum(-balances[r["accountId"]] for r in rows if r["kind"] == "revenue") - sum(
         balances[r["accountId"]] for r in rows if r["kind"] == "expense")
@@ -126,6 +133,7 @@ def ledger_reports(view, *, from_date=None, through_date=None):
         if account["liquid"]:
             liquid_accounts.append({"accountId": account_id, "name": account["name"],
                                     "balance": balances[account_id]})
+    pending_cogs = pending_goods_issues(view, through_date=last)
     return deepcopy({"currency": view["currency"], "scope": "all-projects",
                      "fromDate": first, "throughDate": last,
                      "journalCountThroughDate": count,
@@ -135,12 +143,14 @@ def ledger_reports(view, *, from_date=None, through_date=None):
                      "counterpartyBalances": counterparties,
                      "cashBankBalances": liquid_accounts,
                      "reconciled": True,
+                     "profitLossComplete": not pending_cogs,
+                     "unpostedGoodsIssues": pending_cogs,
                      "profitLoss": {"revenue": sum(
-                         movement[r["accountId"]]["credit"] -
-                         movement[r["accountId"]]["debit"] for r in rows if r["kind"] == "revenue"),
+                         operational_movement[r["accountId"]]["credit"] -
+                         operational_movement[r["accountId"]]["debit"] for r in rows if r["kind"] == "revenue"),
                                     "expense": sum(
-                                        movement[r["accountId"]]["debit"] -
-                                        movement[r["accountId"]]["credit"] for r in rows
+                                        operational_movement[r["accountId"]]["debit"] -
+                                        operational_movement[r["accountId"]]["credit"] for r in rows
                                         if r["kind"] == "expense"),
                                     "net": period_net},
                      "balanceSheet": {"assets": assets, "liabilities": liabilities,

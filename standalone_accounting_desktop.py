@@ -31,7 +31,8 @@ window.madar = Object.fromEntries(
    'standaloneAccountingTemplateDuplicate',
    'standaloneAccountingRequestCompanySwitch',
    'standaloneAccountingTaxPreflight',
-   'standaloneAccountingManageUsers'].map(
+   'standaloneAccountingManageUsers',
+   'releaseCheck', 'releaseDownload', 'releaseInstall'].map(
     key => [key, (...args) => new Promise((resolve, reject) => {
       // WebView2 can expose an api object before populating the methods.
       // Checking only window.pywebview.api caused a TypeError/blank GUI on
@@ -95,6 +96,43 @@ class AccountingDesktopAPI:
         self._native_window = None
         from provider_csv_bridge import ProviderCsvPreviewBridge
         self._csv_preview = ProviderCsvPreviewBridge()
+
+    def releaseCheck(self):
+        """Public version metadata only; no accounting data leaves this host."""
+        with self._lock:
+            self._require_authenticated()
+            if self._exit_backed_up:
+                raise RuntimeError("Accounting desktop is closing")
+        import madar_update
+        return madar_update.check()
+
+    def releaseDownload(self):
+        """Host selects and verifies the complete installer, never the browser."""
+        with self._lock:
+            self._require_authenticated()
+            if self._exit_backed_up:
+                raise RuntimeError("Accounting desktop is closing")
+        import madar_update
+        return madar_update.download(madar_update.check())
+
+    def releaseInstall(self):
+        """Schedule only a verified installer; closing still requires finance backup."""
+        with self._lock:
+            self._require_authenticated()
+            if self._exit_backed_up:
+                raise RuntimeError("Accounting desktop is closing")
+            if self._native_window is None:
+                raise RuntimeError("Native accounting window is unavailable")
+        import madar_update
+        info = madar_update.check()
+        saved = madar_update.download(info)
+        with self._lock:
+            self._require_authenticated()
+            if self._exit_backed_up:
+                raise RuntimeError("Accounting desktop is closing")
+        # The pending PowerShell process waits for THIS desktop PID. The normal
+        # closing handler runs and verifies the mandatory financial backup.
+        return madar_update.schedule_verified_install(info, saved)
 
     def standaloneAccountingCsvChooseFile(self, group, encoding, delimiter):
         """Admin-selected local CSV header only; no ledger or disk writes."""
