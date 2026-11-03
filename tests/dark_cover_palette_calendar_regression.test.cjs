@@ -41,32 +41,42 @@ test('solid cover paints entire card regardless of dark mode and priority style'
   const page=await b.newPage();
   await page.setContent('<html data-theme="dark"><body><section class="kanban">'+
     '<div class="task-card task-card--cover-full priority-effect-solid" '+
-    'style="--card-cover-color:#EAB308;--card-cover-contrast:#152238">'+
+    'style="--card-cover-color:#EAB308;--card-cover-contrast:#152238;--priority-color:#EF4444">'+
     '<header class="task-card-head"><b class="task-title">عنوان کارت</b></header>'+
     '<span class="task-description">توضیحات</span></div></section>'+
-    '<div class="drawer"><details class="task-optional-block" open>'+
-    '<div class="edit-section"><div class="cardextras task-card-custom-fields">'+
+    '<div class="drawer"><details class="task-optional-block task-card-custom-fields" open>'+
+    '<div class="edit-section"><div class="cardextras">'+
     '<h3>فیلدهای سفارشی</h3><p class="cardextras-muted">فیلد سفارشی تعریف نشده است.</p>'+
+    '<label>فیلد متن<input aria-label="فیلد متن" value="مقدار آزمایشی"></label>'+
     '</div></div></details></div></body></html>');
   await page.addStyleTag({content:css('styles.css').replace(/^@import[^;]+;/gm,'')});
   await page.addStyleTag({content:css('priorities.css')});
   await page.addStyleTag({content:css('kanban_compact.css')});
   await page.addStyleTag({content:css('task_editor_compact.css')});
   await page.addStyleTag({content:css('cardextras.css')});
-  for(const theme of ['dark','light']){
-    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+  for(const theme of ['dark','light'])for(const effect of ['solid','neon','shimmer','glow','pulse']){
+    await page.evaluate(({theme,effect})=>{
+      document.documentElement.dataset.theme=theme;
+      document.querySelector('.task-card').className='task-card task-card--cover-full priority-effect-'+effect;
+    },{theme,effect});
     const colors=await page.evaluate(()=>{
       const card=document.querySelector('.task-card');
       const text=card.querySelector('.task-title');
       const muted=document.querySelector('.cardextras-muted');
       const section=document.querySelector('.task-optional-block');
+      const field=document.querySelector('.cardextras input');
       return {card:getComputedStyle(card).backgroundColor,text:getComputedStyle(text).color,
-        muted:getComputedStyle(muted).color,section:getComputedStyle(section).backgroundColor};
+        muted:getComputedStyle(muted).color,section:getComputedStyle(section).backgroundColor,
+        fieldBg:getComputedStyle(field).backgroundColor,fieldText:getComputedStyle(field).color};
     });
-    assert.equal(colors.card,'rgb(234, 179, 8)',theme+' full cover must fill card');
-    assert.equal(colors.text,'rgb(21, 34, 56)',theme+' cover text must contrast');
-    if(theme==='dark')assert.ok(ratio(colors.muted,colors.section)>=4.5,
+    assert.equal(colors.card,'rgb(234, 179, 8)',theme+' '+effect+' full cover must fill card');
+    assert.equal(colors.text,'rgb(21, 34, 56)',theme+' '+effect+' cover text must contrast');
+    if(theme==='dark'){
+      assert.ok(ratio(colors.fieldText,colors.fieldBg)>=4.5,
+        'dark custom-field input lacks contrast: '+JSON.stringify(colors));
+      assert.ok(ratio(colors.muted,colors.section)>=4.5,
       'dark empty custom-field message lacks contrast: '+JSON.stringify(colors));
+    }
   }
 });
 

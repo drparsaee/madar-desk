@@ -1,32 +1,6 @@
 import React from 'react';
 import {CoverColorPicker} from './cover_color_picker.jsx';
-
-// Fixed, familiar sRGB choices complement (never replace) the freeform picker.
-export const COMMON_COLORS=Object.freeze([
-  ['#22C55E','سبز'],['#EAB308','زرد'],['#F97316','نارنجی'],['#EF4444','قرمز'],
-  ['#8B5CF6','بنفش'],['#3B82F6','آبی'],['#14B8A6','فیروزه‌ای'],['#EC4899','صورتی'],
-  ['#F59E0B','کهربایی'],['#06B6D4','آبی فیروزه‌ای'],['#6366F1','نیلی'],
-  ['#D946EF','ارغوانی'],['#92400E','قهوه‌ای'],['#64748B','خاکستری'],
-  ['#FFFFFF','سفید'],['#000000','مشکی'],
-]);
-
-// Dark mark on light fills; never evaluate arbitrary user-provided CSS.
-const markColor=hex=>{
-  const [r,g,b]=[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)/255);
-  const light=[r,g,b].map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);
-  return .2126*light[0]+.7152*light[1]+.0722*light[2]>.32?'#111827':'#FFFFFF';
-};
-
-export function CommonColorPalette({value,onChange,disabled=false,label='رنگ'}) {
-  return <div className="madar-common-colors" role="group" aria-label={'رنگ‌های مرسوم '+label}>
-    {COMMON_COLORS.map(([hex,name])=><button key={hex} type="button" disabled={disabled}
-      aria-label={'انتخاب '+name+' برای '+label} aria-pressed={value?.toUpperCase()===hex}
-      title={name+' '+hex} className="madar-common-colors__swatch"
-      style={{backgroundColor:hex,color:markColor(hex)}} onClick={()=>onChange(hex)}>
-      {value?.toUpperCase()===hex&&<span aria-hidden="true" className="madar-common-colors__mark">✓</span>}
-    </button>)}
-  </div>;
-}
+export {COMMON_COLORS,CommonColorPalette} from './common_color_swatches.jsx';
 
 export function CommonColorOptions(props) {
   const current=typeof props.value==='string'&&/^#[0-9a-f]{6}$/i.test(props.value)
