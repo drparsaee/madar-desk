@@ -19,7 +19,8 @@ const mod=new Module(path.join(root,'tests/accounting-vitrea-virtual.cjs'),modul
 mod.filename=path.join(root,'tests/accounting-vitrea-virtual.cjs');
 mod.paths=Module._nodeModulePaths(path.dirname(mod.filename));
 mod._compile(built,mod.filename);
-const {accountingSettlementOverview,accountingSettlementCsv,AccountingVitreaHome}=mod.exports;
+const {accountingSettlementOverview,accountingOutstandingOverview,
+  accountingSettlementCsv,AccountingVitreaHome}=mod.exports;
 
 const today='2026-10-27';
 const view={
@@ -55,6 +56,53 @@ test('empty account gives no fabricated movements, bank status or successful pos
   assert.equal(res.paid,0);
   assert(res.months.every(m=>m.received===0&&m.paid===0));
   assert.equal(res.omitted,0);
+});
+
+test('overview distinguishes issued unsettled invoices and bills from cash, drafts and historic balances',()=>{
+  const data={invoices:{
+    issued:{id:'issued',status:'issued',total:300000,allocated:100000,
+      returnedAmount:25000,dueDate:'2026-10-20'},
+    draft:{id:'draft',status:'draft',total:800000,allocated:0},
+    fully:{id:'fully',status:'issued',total:200,allocated:200},
+  },bills:{pending:{id:'pending',status:'issued',total:70000,allocated:0,dueDate:'2026-11-10'}},
+  receipts:{r1:{id:'r1',date:'2026-10-21',total:100000}},payments:{},historical:{debtor:12345}};
+  const pending=accountingOutstandingOverview(data,today);
+  assert.equal(pending.receivable,175000);
+  assert.equal(pending.payable,70000);
+  assert.equal(pending.receivableCount,1);
+  assert.equal(pending.overdueReceivableCount,1);
+  assert.equal(pending.overduePayableCount,0);
+  assert.equal(pending.invalidReceivable,0);
+  const cash=accountingSettlementOverview(data,today);
+  assert.equal(cash.received,100000);
+  const html=renderToStaticMarkup(React.createElement(AccountingVitreaHome,{
+    view:{...data,accounts:{},parties:{}},currency:'RIAL',today,
+    canDraft:true,disabled:false,onNavigate:()=>{},onNewInvoice:()=>{}}));
+  assert.match(html,/مبالغ در انتظار تسویه/);
+  assert.match(html,/۱۷۵٬۰۰۰ ریال/);
+  assert.match(html,/۷۰٬۰۰۰ ریال/);
+  assert.match(html,/این مبالغ وجه دریافت یا پرداخت‌شده نیستند/);
+  assert.match(html,/فاکتور با سررسید گذشته/);
+  assert.match(html,/دسترسی مستقیم به کارهای حسابداری/);
+  assert.match(html,/role="region" tabindex="0"/);
+});
+
+test('unrepresentable or malformed outstanding values fail closed and never appear as zero',()=>{
+  const huge=Number.MAX_SAFE_INTEGER;
+  const data={invoices:{a:{id:'a',status:'issued',total:huge,allocated:0},
+    b:{id:'b',status:'issued',total:100,allocated:0}},
+  bills:{bad:{id:'bad',status:'issued',total:123,allocated:undefined},
+    over:{id:'over',status:'issued',total:100,allocated:110}}};
+  const pending=accountingOutstandingOverview(data,today);
+  assert.equal(pending.receivable,null);
+  assert.equal(pending.payable,null);
+  assert.equal(pending.invalidPayable,2);
+  assert.equal(pending.receivableCount,2);
+  const html=renderToStaticMarkup(React.createElement(AccountingVitreaHome,{
+    view:{...data,accounts:{},parties:{},receipts:{},payments:{}},
+    currency:'RIAL',today,canDraft:false,disabled:false,onNavigate:()=>{}}));
+  assert.match(html,/مبلغ بخشی از اسناد صادرشده معتبر یا قابل جمع دقیق نیست/);
+  assert.match(html,/نامشخص/);
 });
 
 test('malformed monetary and date records are counted as omitted, not added',()=>{
