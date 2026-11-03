@@ -83,7 +83,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
      <div className="settings-density__quick-grid" aria-label="تنظیمات پرکاربرد">
       <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3>
         <p>تم فعلی من: روی همین دستگاه و حساب کاربری. این همان تنظیم دکمهٔ تغییر تم در پنل کناری است.</p>
-        <div className="theme-picks" aria-label="تم فعلی من">
+        <div className="theme-picks" role="group" aria-label="تم فعلی من">
           <button type="button" className={(effectiveTheme||settings.theme)!=='dark'?'selected':''}
             aria-pressed={(effectiveTheme||settings.theme)!=='dark'} onClick={()=>onThemeChange?.('light')}>
             <Sun size={19}/> روشن {(effectiveTheme||settings.theme)!=='dark'&&<Check size={16}/>}</button>
@@ -92,7 +92,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
             <Moon size={19}/> تاریک {(effectiveTheme||settings.theme)==='dark'&&<Check size={16}/>}</button>
         </div>
         <p>پیش‌فرض مشترک برای کاربران بدون انتخاب شخصی، فقط توسط مدیر قابل تغییر است.</p>
-        <div className="theme-picks" aria-label="تم پیش‌فرض مشترک کاربران">
+        <div className="theme-picks" role="group" aria-label="تم پیش‌فرض مشترک کاربران">
           <button type="button" className={settings.theme!=='dark'?'selected':''} disabled={!canManage}
             aria-pressed={settings.theme!=='dark'} onClick={()=>updateTheme('light')}>
             <Sun size={19}/> پیش‌فرض روشن {settings.theme!=='dark'&&<Check size={16}/>}</button>
