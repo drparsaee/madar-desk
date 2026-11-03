@@ -8,7 +8,7 @@ import {
   LayoutDashboard, LayoutGrid, ListChecks, LoaderCircle, Menu, MessageCircle,
   MoreHorizontal, Plus, Search, Settings2, ShieldCheck, Tag,
   Trash2, Users, X, Zap, Clock3, FolderOpen, BarChart3, RefreshCw,
-  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon, Palette
+  Eye, EyeOff, Wallet, GripVertical, FileInput, Sun, Moon, Palette, Table2
 } from 'lucide-react';
 import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} from './features.jsx';
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
@@ -57,6 +57,8 @@ import {CardDependencyPanel} from './card_dependency_panel.jsx';
 import {resolvedDisplayScope,isManagedFeatureVisible} from './managed_display.js';
 import {ClockWidget} from './clock_widget.jsx';
 import {LaneActionsMenu} from './board_lane_actions.jsx';
+import {BoardTableView} from './board_table_view.jsx';
+import {boardTableColumns,readBoardViewPreferences,saveBoardViewPreferences} from './board_table_preferences.js';
 import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
@@ -936,6 +938,18 @@ export default function App(){
   const visibleProjects=projects.filter(p=>workspaceProjectIds.has(p.id));
   const activeBoard=(workspaceBoards.find(b=>b.id===boardId&&b.projectId===selected)
                      ||(selected==='all'?null:workspaceBoards.find(b=>b.projectId===selected)))||null;
+  const boardViewScope=activeBoard?.id||'workspace:'+(activeWorkspaceId||'legacy');
+  const boardViewIdentity=lanStatus.user?.username||'local';
+  const boardViewColumns=useMemo(()=>boardTableColumns(activeBoard),[activeBoard?.id,activeBoard?.customFields]);
+  useEffect(()=>{
+    if(!data||!activeWorkspaceId)return;
+    const saved=readBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,boardViewColumns);
+    setMode(previous=>previous==='time'?previous:saved.mode);
+  },[activeBoard?.id,activeWorkspaceId,boardViewIdentity,!!data]);
+  const switchBoardDisplay=next=>{
+    setMode(next);
+    saveBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,{mode:next},boardViewColumns);
+  };
   const viewStages=activeBoard?activeBoardLists(activeBoard):stages;
   const canManage=lanStatus?.user?.role==='admin';
   const canViewStandalone=canManage||
@@ -1051,6 +1065,7 @@ export default function App(){
     if(destination){setSelected(destination.projectId);setBoardId(destination.id);}
     else if(selected==='all'&&visibleProjects[0])setSelected(visibleProjects[0].id);
     setMode('board');setFilter('all');
+    if(destination)saveBoardViewPreferences(localStorage,boardViewIdentity,destination.id,{mode:'board'},boardTableColumns(destination));
   };
   const navigateSearchLocation=result=>{
     const board=boards.find(item=>item.id===result.boardId);
@@ -1718,8 +1733,8 @@ export default function App(){
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
-          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>setMode('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
-          {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;
             const isCollapsed=collapsedLists[listKey]===true;
