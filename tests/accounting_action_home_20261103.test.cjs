@@ -160,7 +160,9 @@ test('custom layout reads only per-user-company storage key; invalid data restor
 test('integration is a single home insertion and mobile styles have keyboard targets',()=>{
   assert.match(workspace,/import AccountingActionHome from '\.\/accounting_action_home\.jsx'/);
   assert.match(workspace,/<AccountingActionHome view=\{view\} today=\{today\}/);
-  assert.match(workspace,/snapshot\.currentUser\.username\+'\|'\+view\.companyWorkspaceLabel/);
+  assert.match(workspace,/snapshot\.currentUser\.username\+'\|'\+view\.companyWorkspaceId/);
+  assert.match(workspace,/\^\[a-f0-9\]\{32\}\$/);
+  assert.doesNotMatch(workspace,/username\+'\|'\+view\.companyWorkspaceLabel/);
   assert.match(source,/onNavigate\(tab\)/);
   assert.match(css,/\.sac-ah :is\(button,summary,input\):focus-visible/);
   assert.match(css,/@media\(max-width:650px\)/);

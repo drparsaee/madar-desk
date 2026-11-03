@@ -63,7 +63,9 @@ test('settings remains reachable through compact More and advanced Ribbon with s
     tab:'settings',sections:[['overview','داشبورد'],['settings','تنظیمات حسابداری']],
     onNavigate:()=>{},onRefresh:()=>{},onExit:()=>{},disabled:false}));
   assert.match(html,/sac-nav-more-trigger/);
-  assert.match(html,/جست‌وجوی حسابداری \(Ctrl\+K\)/);
+  assert.match(html,/<button[^>]+aria-labelledby="[^"]+"[^>]+aria-keyshortcuts="Control\+K Meta\+K"/);
+  assert.match(html,/>جست‌وجو<\/span>/);
+  assert.match(html,/<kbd[^>]*>Ctrl\+K<\/kbd>/);
   assert.match(navSource,/data-accounting-tab="settings"/);
   assert.match(navSource,/onSearchSelect=null/);
   assert.match(navSource,/event\.key\.toLocaleLowerCase\('en-US'\)==='k'/);

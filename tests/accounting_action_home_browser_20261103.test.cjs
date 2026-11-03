@@ -47,6 +47,7 @@ for i,command in enumerate(commands):
 view=accounting_view(state,actor="root",accounts=accounts)
 view["financialReports"]=ledger_reports(view)
 view["companyWorkspaceLabel"]="QA Company One"
+view["companyWorkspaceId"]="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 print(json.dumps({"revision":len(commands),"view":view,
  "capabilities":{"canView":True,"canManage":False,"canDraft":False,"canAdmin":False},
  "currentUser":{"username":"synthetic.viewer","role":"viewer","jobTitle":""}},ensure_ascii=False))
@@ -179,6 +180,8 @@ test('actual Vite/Chrome dashboard: responsive themes, computed CTA contrast/siz
               const report=structuredClone(payload);
               report.view.companyWorkspaceLabel=sessionStorage.getItem('qa-company')||
                 report.view.companyWorkspaceLabel;
+              report.view.companyWorkspaceId=sessionStorage.getItem('qa-company-id')||
+                report.view.companyWorkspaceId;
               report.currentUser.username=sessionStorage.getItem('qa-user')||
                 report.currentUser.username;
               window.__qaFinancialView=JSON.stringify(report.view);
@@ -209,20 +212,24 @@ test('actual Vite/Chrome dashboard: responsive themes, computed CTA contrast/siz
               await checkbox.uncheck();
               assert.equal(await page.locator('.sac-ah-cards article').count(),5);
               const prefs=await page.evaluate(()=>localStorage.getItem(
-                'madar.accounting.home.v1.synthetic.viewer%7CQA%20Company%20One'));
+                'madar.accounting.home.v1.synthetic.viewer%7Caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));
               assert.ok(prefs&&JSON.parse(prefs).includes('reconciliation')===false,
                 'Only local UI card IDs should persist');
               await page.reload({waitUntil:'domcontentloaded'});
               await page.locator('.sac-ah-cards article').first().waitFor();
               assert.equal(await page.locator('.sac-ah-cards article').count(),5,
                 'Card visibility should survive reload for this same user/company');
-              await page.evaluate(()=>sessionStorage.setItem('qa-company','QA Company Two'));
+              await page.evaluate(()=>{
+                sessionStorage.setItem('qa-company','QA Company Two');
+                sessionStorage.setItem('qa-company-id','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+              });
               await page.reload({waitUntil:'domcontentloaded'});
               await page.locator('.sac-ah-cards article').first().waitFor();
               assert.equal(await page.locator('.sac-ah-cards article').count(),6,
                 'Different company label must not inherit first company cards');
               await page.evaluate(()=>{
                 sessionStorage.setItem('qa-company','QA Company One');
+                sessionStorage.setItem('qa-company-id','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
                 sessionStorage.setItem('qa-user','different.viewer');
               });
               await page.reload({waitUntil:'domcontentloaded'});

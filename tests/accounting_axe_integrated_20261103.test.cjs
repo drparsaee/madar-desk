@@ -10,9 +10,11 @@ const {spawnSync}=require('node:child_process');
 
 const root=path.resolve(__dirname,'..');
 const axePath=process.env.MADAR_UXQA_AXE_PATH||
-  path.join(root,'.qa-uxqa-tools','node_modules','axe-core','axe.min.js');
+  path.join(root,'node_modules','axe-core','axe.min.js');
 const playwrightPath=process.env.MADAR_UXQA_PLAYWRIGHT||
-  path.join(process.env.APPDATA||'','npm','node_modules','playwright');
+  [path.join(process.env.APPDATA||'','npm','node_modules','playwright'),
+    path.join(process.env.USERPROFILE||'','AppData','Roaming','npm','node_modules','playwright')]
+    .find(candidate=>fs.existsSync(path.join(candidate,'package.json')))||'playwright';
 const targetViewports=process.env.MADAR_UXQA_WIDTH?
   [Number(process.env.MADAR_UXQA_WIDTH)]:[390,560,768,1440];
 const targetThemes=process.env.MADAR_UXQA_THEME?

@@ -18,6 +18,11 @@
 .sac-root .sac-money-credit{color:#147d50;font-weight:750;direction:ltr;unicode-bidi:isolate}
 .sac-root .sac-money-neutral{color:#52616a;direction:ltr;unicode-bidi:isolate}
 .sac-root .sac-workflow-actions button{min-height:44px;min-width:44px}
+/* Rendered invoice field labels and inline Jalali hints must pass 4.5:1 in both themes. */
+:root[data-theme="light"] .sac-root .sac-invoice-editor .sac-field>span,
+:root[data-theme="light"] .sac-root .madar-jalali-field small{color:#33485c!important}
+:root[data-theme="dark"] .sac-root .sac-invoice-editor .sac-field>span,
+:root[data-theme="dark"] .sac-root .madar-jalali-field small{color:#e1edf8!important}
 .sac-root .sac-money-debit::before{content:'●';font-size:8px;margin-inline-end:5px}
 .sac-root .sac-money-credit::before{content:'●';font-size:8px;margin-inline-end:5px}
 .sac-root .sac-table-pagination{flex-wrap:wrap}
@@ -151,7 +156,13 @@
   background:var(--sac-paper);color:var(--sac-text);border:1px solid var(--sac-line);
   border-radius:12px;padding:10px 13px;margin:14px 0 0;
   box-shadow:0 -9px 24px #101f3842}
-.sac-wizard-sticky-amount{display:grid;gap:1px}
+.sac-wizard-sticky-amount{display:grid;gap:1px;min-width:0;position:relative;
+  z-index:1;align-self:stretch;align-content:center;padding:5px 9px;
+  background:#fff;border-radius:8px}
+.sac-wizard-sticky-amount>span,.sac-wizard-sticky-amount>small{color:#33485c}
+:root[data-theme="dark"] .sac-wizard-sticky-amount{background:#1d2532}
+:root[data-theme="dark"] .sac-wizard-sticky-amount>span,
+:root[data-theme="dark"] .sac-wizard-sticky-amount>small{color:#e1edf8}
 .sac-wizard-sticky-amount>span,.sac-wizard-sticky-amount>small{color:var(--sac-muted);font-size:11px}
 .sac-root.sac-invoice-wizard-guided .sac-wizard-heading-top>div:first-child>span,
 .sac-root.sac-invoice-wizard-guided .sac-wizard-step-hint,
@@ -191,3 +202,9 @@
   .sac-wizard-sticky-actions button{white-space:normal;max-width:180px}
   .sac-invoice-wizard-guided .sac-invoice-summary{padding:12px}
 }
+/* Explicit opaque backing prevents a mobile blue CTA from bleeding through a
+   visually overlapping sticky amount caption while preserving normal contrast. */
+:root[data-theme="light"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>span,
+:root[data-theme="light"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>small{color:#33485c}
+:root[data-theme="dark"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>span,
+:root[data-theme="dark"] .sac-root.sac-invoice-wizard-guided .sac-wizard-sticky-amount>small{color:#e1edf8}

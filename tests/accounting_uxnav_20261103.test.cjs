@@ -106,7 +106,8 @@ test('simple task navigation uses familiar routes; viewer sees no privileged qui
     canDraft:false,canManage:false,canAdmin:false});
   assert.match(html,/sac-simple-nav/);
   assert.match(html,/مسیرهای اصلی حسابداری/);
-  assert.match(html,/جست‌وجوی حسابداری \(Ctrl\+K\)/);
+  assert.match(html,/<button[^>]+aria-labelledby="[^"]+"[^>]+aria-keyshortcuts="Control\+K Meta\+K"/);
+  assert.match(html,/>جست‌وجو<\/span>/);
   assert.match(html,/aria-pressed="true">ساده<\/button>/);
   assert.match(html,/aria-pressed="false">پیشرفته<\/button>/);
   assert.match(html,/data-accounting-tab="overview"/);
@@ -131,7 +132,8 @@ test('manager and admin privileges are reflected only where authorized',()=>{
     canDraft:true,canManage:true,canAdmin:true});
   assert.doesNotMatch(contradictory,/ثبت پرداخت|فاکتور جدید|خرید جدید/);
   const noContext=render({searchView:null});
-  assert.match(noContext,/جست‌وجوی حسابداری/);
+  assert.match(noContext,/aria-keyshortcuts="Control\+K Meta\+K"/);
+  assert.match(noContext,/>جست‌وجو<\/span>/);
 });
 
 test('navigation CSS provides one visible mobile navigation row and explicit More',()=>{
