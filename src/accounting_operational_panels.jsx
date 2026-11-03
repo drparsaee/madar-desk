@@ -585,7 +585,8 @@ export function CompanyProfile({view,canManage,disabled,execute}){
           nationalId:form.nationalId,economicCode:form.economicCode,
           postalCode:form.postalCode,reason:form.reason.trim(),
           ...(form.postingUtcOffsetMinutes!==''&&form.postingUtcOffsetMinutes!==undefined?
-            {postingUtcOffsetMinutes:Number(form.postingUtcOffsetMinutes)}:{})});
+            {postingUtcOffsetMinutes:Number(form.postingUtcOffsetMinutes),
+             postingCalendarMode:'fixed-offset-no-dst'}:{})});
         if(result)setForm(x=>({...x,reason:''}));
       }}>
       {[

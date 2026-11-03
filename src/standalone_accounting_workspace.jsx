@@ -615,6 +615,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     pending=useRef(null);
   const today=T();
   const view=snapshot?.view;
+  const stockCostControl=view?.financialReports?.stockCostControl;
   const ledgerCurrency=view?.currency||'RIAL';
   const templateBridge=typeof api?.standaloneAccountingTemplateList==='function';
   const loadTemplateLibraries=async()=>{
@@ -2644,6 +2645,26 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             {!view.financialReports?<div role="alert" className="sac-alert error">
               این میزبان گزارش ترازسنجی‌شده ارائه نمی‌کند. گزارش ساختگی نمایش داده نمی‌شود.
             </div>:<>
+              {stockCostControl?.assessment==='incomplete'&&<div className="sac-alert error" role="alert">
+                <div>
+                  <strong>گزارش سود هنوز نهایی نیست.</strong>
+                  {' '}برای {stockCostControl.sales.length.toLocaleString('fa-IR')} ردیف فروش،
+                  خروج انبار/بهای تمام‌شده کامل ثبت نشده و برای {stockCostControl.purchases.length.toLocaleString('fa-IR')} ردیف خرید،
+                  ورود انبار یا ارزش‌گذاری ناتمام است.
+                  {stockCostControl.purchases.some(x=>x.reason==='valuation-policy-required')&&
+                    <p>حداقل یک خرید دارای مالیات یا تخفیف به سیاست تأییدشدهٔ تخصیص بهای موجودی نیاز دارد؛ هیچ ارزش فرضی ثبت نشده است.</p>}
+                  <ul>
+                    {stockCostControl.sales.slice(0,8).map((x,i)=><li key={'sale-'+i}>
+                      فروش <code dir="ltr">{x.documentId}</code>، کالا <code dir="ltr">{x.itemId}</code>:
+                      {' '}{x.unpostedQuantity.toLocaleString('fa-IR')} واحد ثبت‌نشده در خروج انبار
+                    </li>)}
+                    {stockCostControl.purchases.slice(0,8).map((x,i)=><li key={'buy-'+i}>
+                      خرید <code dir="ltr">{x.documentId}</code>، کالا <code dir="ltr">{x.itemId}</code>:
+                      {' '}{x.unpostedQuantity.toLocaleString('fa-IR')} واحد دریافت/ارزش‌گذاری‌نشده
+                    </li>)}
+                  </ul>
+                </div>
+              </div>}
               <Panel title="گزارش گردش حساب در بازه دلخواه"
                 description="مانده افتتاحیه قبل از شروع بازه، گردش بین دو تاریخ و مانده قطعی پایان بازه از تک‌تک سطرهای دفترکل محاسبه می‌شوند.">
                 <div className="sac-grid">
@@ -2688,12 +2709,18 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   </tr>)}/>
               </Panel>
               <div className="sac-columns">
-                <Panel title="صورت سود و زیان" description="درآمد و هزینه‌های ثبت‌شده؛ سندهای پیش‌نویس در محاسبه نیستند.">
+                <Panel title="صورت سود و زیان عملیاتی" description="درآمد و هزینهٔ واقعی ثبت‌شده؛ اسناد پیش‌نویس و انتقال حساب‌های سود و زیان هنگام بستن سال از گردش عملیاتی حذف شده‌اند. نتیجه قبل از تأیید بهای تمام‌شده سود قطعی نیست.">
                   <DataTable cols={['عنوان','مبلغ']} empty="گزارش در دسترس نیست." rows={[
                     ['درآمد',view.financialReports.profitLoss.revenue],
                     ['هزینه',view.financialReports.profitLoss.expense],
                     ['سود / زیان',view.financialReports.profitLoss.net],
                   ].map(([title,value])=><tr key={title}><td>{title}</td><td>{moneyText(value)}</td></tr>)}/>
+                  {view.financialReports.profitLossReconciliation&&<p role="status">
+                    تطبیق با سند بستن سال:
+                    {' '}{view.financialReports.profitLossReconciliation.reconciled?'برقرار است':'نیازمند بررسی حسابدار'}
+                    ؛ نتیجهٔ دفتر پس از انتقال بستن سال:
+                    {' '}{moneyText(view.financialReports.profitLossReconciliation.postCloseLedgerMovements.net)}
+                  </p>}
                 </Panel>
                 <Panel title="ترازنامه" description="دارایی‌ها برابر با بدهی، سرمایه و نتیجه انباشته کنترل می‌شود.">
                   <DataTable cols={['عنوان','مبلغ']} empty="گزارش در دسترس نیست." rows={[
