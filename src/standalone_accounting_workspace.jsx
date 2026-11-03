@@ -769,19 +769,46 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     return true;
   };
   const gotoTab=name=>{
-    if(busy||pendingRetry)return;
+    if(busy||pendingRetry)return false;
     if(name===tab&&name==='invoice'&&invoiceComposerOpen){
-      closeInvoiceComposer();
-      return;
+      return closeInvoiceComposer();
     }
-    if(name!==tab&&tab==='invoice'&&invoiceComposerOpen&&!closeInvoiceComposer())return;
+    if(name!==tab&&tab==='invoice'&&invoiceComposerOpen&&!closeInvoiceComposer())return false;
     if(name!==tab)setInvoiceComposerOpen(false);
     setTab(name);setCancelTarget('');setEditTarget('');
     setDetailTarget('');setReopenReason('');setCorrectionTarget('');
     setCorrectionReason('');setReturnTarget('');setReturnReason('');
     setReturnMode('full');setReturnQuantities({});
     setPartyEditing('');setPartyEditReason('');
-    setProformaEditing('');};
+    setProformaEditing('');return true;};
+  /** A global search hit opens only records already supplied by the host for this company.
+   * The same unsaved-invoice guard applies to record navigation as to menu clicks. */
+  const openSearchRecord=({kind,id,tab:destination})=>{
+    const locations={invoice:['invoices','invoice'],bill:['bills','bill'],
+      proforma:['proformas','proforma'],party:['parties','parties'],
+      account:['accounts','accounts'],journal:['journals','journal'],
+      receipt:['receipts','settlements'],payment:['payments','settlements']};
+    const spec=locations[kind];
+    if(!spec||destination!==spec[1]||typeof id!=='string')return;
+    const collection=view?.[spec[0]];
+    const record=Array.isArray(collection)?collection.find(item=>item?.id===id):
+      collection&&typeof collection==='object'?collection[id]:null;
+    if(!record||!gotoTab(destination))return;
+    if(kind==='invoice'||kind==='bill')setDetailTarget(id);
+    else if(kind==='account'){setAccountFilter(id);setSelectedHistoricAccount(id);}
+    else if(kind==='party')setPartyQuery(record.name||id);
+    else if(kind==='receipt'||kind==='payment'){
+      setForms(old=>({...old,settlement:{...old.settlement,
+        kind:kind==='payment'?'payment':'receipt',documentId:''}}));
+    }
+  };
+  const quickAccountingAction=action=>{
+    if(action==='purchase'){if(canManage||canDraft)gotoTab('bill');}
+    else if(action==='payment'&&canManage&&gotoTab('settlements')){
+      setForms(old=>({...old,settlement:{...old.settlement,
+        kind:'payment',documentId:''}}));
+    }
+  };
   const openQuickInvoice=()=>{
     if(tab==='invoice'&&invoiceComposerOpen&&hasUnsavedInvoice&&
       !window.confirm('فاکتور فعلی هنوز ذخیره نشده است. فاکتور تازه باز شود؟'))return;
@@ -1200,6 +1227,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     (wizardEnabled?' sac-invoice-wizard-guided':'')}
     aria-label="حسابداری مستقل مدار">
     <AccountingTopRibbon tab={tab} sections={SECTIONS}
+      searchView={view} onSearchSelect={openSearchRecord}
+      onQuickAction={quickAccountingAction}
       onNavigate={gotoTab} onNewInvoice={openQuickInvoice}
       onBack={()=>tab==='invoice'&&invoiceComposerOpen?
         closeInvoiceComposer():gotoTab('overview')}
