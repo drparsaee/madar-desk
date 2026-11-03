@@ -10,6 +10,8 @@ import ast
 import hashlib
 import importlib.util
 import json
+import re
+import subprocess
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location(
@@ -25,6 +27,13 @@ builder.QA = builder.RELEASE / "Madar-Desk-1.0.13-Setup-QA.exe"
 builder.PROD = builder.RELEASE / "Madar-Desk-1.0.13-Setup.exe"
 builder.QA_ROOT = builder.ROOT / ".qa-inno-v113-integrated"
 MANIFEST = builder.RELEASE / "Madar-Desk-1.0.13-Setup.release.json"
+QA_ACCEPTANCE = builder.RELEASE / "Madar-Desk-1.0.13-Setup-QA.acceptance.json"
+
+
+def artifact_sidecars() -> tuple[Path, ...]:
+    """An old hash receipt is also a partial release and must not be replaced."""
+    return tuple(builder.RELEASE / (path.name + ".sha256.txt")
+                 for path in (builder.PROGRAM, builder.QA, builder.PROD))
 
 
 def validate_source_metadata(package_path: Path, updater_path: Path,
@@ -56,28 +65,126 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def has_pe_header(path: Path) -> bool:
+    with path.open("rb") as stream:
+        return stream.read(2) == b"MZ"
+
+
+def source_git_commit(root: Path) -> str:
+    """Pin the exact committed release input, not a dirty working snapshot.
+
+    This is a source identity gate; it does NOT attest deterministic compilers.
+    """
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain=v1",
+             "--untracked-files=normal"],
+            check=True, capture_output=True, text=True, encoding="utf-8")
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
+            check=True, capture_output=True, text=True, encoding="utf-8")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("Cannot establish a clean committed release source") from exc
+    if status.stdout.strip():
+        raise RuntimeError("Release source has uncommitted or untracked files")
+    sha = head.stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("Release source commit is not a full Git SHA-1")
+    return sha
+
+
+def release_descriptor(source_commit: str) -> dict:
+    """Record digests for *all three* byte artifacts, including the QA binary."""
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise ValueError("A committed source revision is required")
+    return {
+        "schema": 2,
+        "version": builder.VERSION,
+        "sourceGitCommit": source_commit,
+        "asset": builder.PROD.name,
+        "installerSha256": digest(builder.PROD),
+        "installerBytes": builder.PROD.stat().st_size,
+        "qaInstaller": builder.QA.name,
+        "qaInstallerSha256": digest(builder.QA),
+        "qaInstallerBytes": builder.QA.stat().st_size,
+        "application": builder.PROGRAM.name,
+        "applicationSha256": digest(builder.PROGRAM),
+        "applicationBytes": builder.PROGRAM.stat().st_size,
+        "webview2PrerequisiteSha256": digest(builder.PREREQ),
+        "cumulativeFrom": ["1.0.5", "1.0.6", "1.0.7", "1.0.8", "1.0.9",
+                           "1.0.10", "1.0.11", "1.0.12"],
+        "profileMigration": "none; preserve all task, company accounting and Parsian test data",
+    }
+
+
+def verify_release_descriptor(descriptor: dict, *, source_commit: str | None = None) -> None:
+    """Fail closed before launching *either* QA binary.
+
+    SHA256 comparison demonstrates identity against the recorded manifest,
+    not independent publisher authenticity or deterministic rebuilds.
+    """
+    if not isinstance(descriptor, dict) or descriptor.get("schema") != 2 or \
+            descriptor.get("version") != "1.0.13":
+        raise RuntimeError("Unsupported or stale integrated release descriptor")
+    if descriptor.get("sourceGitCommit") is None or not re.fullmatch(
+            r"[0-9a-f]{40}", str(descriptor["sourceGitCommit"])):
+        raise RuntimeError("Missing committed build-source identity")
+    if source_commit is not None and descriptor["sourceGitCommit"] != source_commit:
+        raise RuntimeError("QA source revision differs from release build source")
+    if descriptor.get("cumulativeFrom", [])[-1:] != ["1.0.12"]:
+        raise RuntimeError("1.0.12 upgrade is absent from cumulative release scope")
+
+    for target, name_key, digest_key, size_key in (
+            (builder.PROGRAM, "application", "applicationSha256", "applicationBytes"),
+            (builder.QA, "qaInstaller", "qaInstallerSha256", "qaInstallerBytes"),
+            (builder.PROD, "asset", "installerSha256", "installerBytes")):
+        expected_hash = descriptor.get(digest_key)
+        if (descriptor.get(name_key) != target.name or
+                type(descriptor.get(size_key)) is not int or
+                descriptor[size_key] < 2 or
+                not isinstance(expected_hash, str) or
+                not re.fullmatch(r"[0-9a-f]{64}", expected_hash)):
+            raise RuntimeError("Invalid release artifact identity: " + target.name)
+        if not target.is_file() or target.stat().st_size != descriptor[size_key] or \
+                digest(target) != expected_hash or not has_pe_header(target):
+            raise RuntimeError("Release artifact failed SHA256/size/PE check: " + target.name)
+
+    if descriptor["installerSha256"] == descriptor["qaInstallerSha256"]:
+        raise RuntimeError("QA and production installers must be distinct")
+    prerequisite_hash = descriptor.get("webview2PrerequisiteSha256")
+    if (not isinstance(prerequisite_hash, str) or
+            not re.fullmatch(r"[0-9a-f]{64}", prerequisite_hash) or
+            not builder.PREREQ.is_file() or digest(builder.PREREQ) != prerequisite_hash):
+        raise RuntimeError("Signed WebView2 prerequisite differs from build input")
+
+
+def read_verified_release_descriptor(*, check_source: bool = True) -> dict:
+    if not MANIFEST.is_file():
+        raise FileNotFoundError("Integrated 1.0.13 release descriptor missing")
+    descriptor = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    verify_release_descriptor(descriptor, source_commit=(
+        source_git_commit(builder.ROOT) if check_source else None))
+    return descriptor
+
+
 def main() -> None:
     validate_source_metadata(builder.ROOT / "package.json",
                              builder.ROOT / "madar_update.py",
                              builder.ROOT / "package-lock.json")
     if builder.PROD.name != "Madar-Desk-1.0.13-Setup.exe":
         raise RuntimeError("Updater expects exact 1.0.13 setup filename")
-    if any(path.exists() for path in (builder.PROGRAM, builder.QA, builder.PROD, MANIFEST)):
+    if any(path.exists() for path in (
+            builder.PROGRAM, builder.QA, builder.PROD, MANIFEST, QA_ACCEPTANCE,
+            *artifact_sidecars())):
         raise FileExistsError("Immutable 1.0.13 release artifact already exists")
+    source_commit = source_git_commit(builder.ROOT)
     builder.main()  # Signed WebView2 prerequisite and fixed installer preflight.
     if not all(path.is_file() for path in (builder.PROGRAM, builder.QA, builder.PROD)):
         raise RuntimeError("Complete cumulative Windows application and installers required")
-    descriptor = {
-        "schema": 1,
-        "version": builder.VERSION,
-        "asset": builder.PROD.name,
-        "installerSha256": digest(builder.PROD),
-        "installerBytes": builder.PROD.stat().st_size,
-        "application": builder.PROGRAM.name,
-        "applicationSha256": digest(builder.PROGRAM),
-        "cumulativeFrom": ["1.0.5", "1.0.6", "1.0.7", "1.0.8", "1.0.9", "1.0.10", "1.0.11", "1.0.12"],
-        "profileMigration": "none; preserve all task, company accounting and Parsian test data",
-    }
+    if source_git_commit(builder.ROOT) != source_commit:
+        raise RuntimeError("Release source changed during packaging")
+    descriptor = release_descriptor(source_commit)
+    verify_release_descriptor(descriptor, source_commit=source_commit)
     with MANIFEST.open("x", encoding="utf-8") as output:
         json.dump(descriptor, output, indent=2, ensure_ascii=False)
         output.write("\n")
