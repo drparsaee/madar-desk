@@ -51,12 +51,12 @@ function InlineForm({title,children,onSubmit,canManage,disabled=false}){
     </form>
   </section>;
 }
-function Input({label,value,onChange,required=true,kind='text',options=null}){
+function Input({label,value,onChange,required=true,kind='text',options=null,readOnly=false}){
   return <label className="sac-field"><span>{label}</span>
-    {options?<select required={required} value={value} onChange={e=>onChange(e.target.value)}>
+    {options?<select required={required} disabled={readOnly} value={value} onChange={e=>onChange(e.target.value)}>
       {options}</select>:<input dir={kind==='number'?'ltr':undefined}
         inputMode={kind==='number'?'numeric':undefined}
-        required={required} value={value} onChange={e=>onChange(e.target.value)}/>}
+        required={required} readOnly={readOnly} value={value} onChange={e=>onChange(e.target.value)}/>}
   </label>;
 }
 function SolarDate({label,value,onChange,limit}){
@@ -172,13 +172,127 @@ export function LiveCheques({view,canManage,disabled,execute,today,unit}){
   </section>;
 }
 
-export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execute,today,unit}){
+const purchaseExactMax=1000000000000000n;
+const exactPurchaseSourceAmount=(value,name,{positive=false}={})=>{
+  if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0||
+      (positive&&value===0)||BigInt(value)>purchaseExactMax)
+    throw Error(name+' در اطلاعات فاکتور عدد صحیح معتبر نیست؛ سند نیازمند بررسی است.');
+  return BigInt(value);
+};
+const exactPurchaseInputAmount=(value,name)=>{
+  let number;
+  try{number=numberOf(value);}catch(error){throw Error(name+': '+error.message);}
+  if(BigInt(number)>purchaseExactMax)throw Error(name+' از سقف واحد ثبت حسابداری بیشتر است.');
+  return BigInt(number);
+};
+const purchaseHalfUp=(amount,part,whole)=>(amount*part*2n+whole)/(2n*whole);
+
+/** UI preflight only. The authenticated host/engine independently validates and posts. */
+export function previewExactPurchaseDiscountAllocation({bill,amounts,reference,reason,
+  itemId,quantity,taxTreatment,movements={},returns={}}){
+  const denied=message=>({ready:false,error:message,lines:[],fields:null});
+  try{
+    if(!bill||bill.status!=='issued'||!Array.isArray(bill.lines)||!bill.lines.length)
+      throw Error('برای تخصیص، فاکتور خرید صادرشده و ردیف‌های معتبر لازم است.');
+    const discount=exactPurchaseSourceAmount(bill.discount,'تخفیف فاکتور',{positive:true});
+    const tax=exactPurchaseSourceAmount(bill.tax,'مالیات فاکتور');
+    if(tax>0n&&taxTreatment!=='expense')
+      throw Error('مالیات خرید باید صریحاً به‌عنوان هزینه حساب ۵۲۰۰ تأیید شود؛ اعتبار بازیافتنی فرض نمی‌شود.');
+    if(!Array.isArray(amounts)||amounts.length!==bill.lines.length)
+      throw Error('سهم تخفیف همه ردیف‌ها، حتی خدمات، باید جداگانه وارد شود.');
+    const sourceLines=bill.lines.map((row,index)=>{
+      const count=exactPurchaseSourceAmount(row.quantity,'تعداد ردیف '+(index+1),{positive:true});
+      const price=exactPurchaseSourceAmount(row.unitPrice,'قیمت ردیف '+(index+1),{positive:true});
+      const gross=exactPurchaseSourceAmount(row.total,'ناخالص ردیف '+(index+1));
+      if(gross!==count*price)throw Error('ناخالص ردیف '+(index+1)+' با مقدار و قیمت ثبت‌شده تطابق ندارد.');
+      const allocated=exactPurchaseInputAmount(amounts[index],'تخفیف ردیف '+(index+1));
+      if(allocated>gross)throw Error('تخفیف ردیف '+(index+1)+' از مبلغ ناخالص همان ردیف بیشتر است.');
+      if(row.itemId&&gross-allocated<count)
+        throw Error('سهم تخفیف ردیف '+(index+1)+' بهای واحد موجودی را صفر می‌کند.');
+      return {lineIndex:index,amount:Number(allocated),gross:Number(gross),
+        net:Number(gross-allocated),quantity:Number(count),itemId:row.itemId||null};
+    });
+    const allocatedTotal=sourceLines.reduce((sum,line)=>sum+BigInt(line.amount),0n);
+    if(allocatedTotal!==discount)
+      throw Error('جمع تخفیف ردیف‌ها '+allocatedTotal.toLocaleString('fa-IR')+
+        ' است و باید دقیقاً برابر '+discount.toLocaleString('fa-IR')+' باشد.');
+    const cleanReference=String(reference??'').trim();
+    const cleanReason=String(reason??'').trim();
+    if(!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(cleanReference))
+      throw Error('شناسه مدرک تخصیص لازم است (۱ تا ۹۶ حرف/عدد لاتین، نقطه، خط یا دونقطه).');
+    if(!cleanReason||cleanReason.length>1000)
+      throw Error('دلیل مستند تخصیص تخفیف (۱ تا ۱۰۰۰ نویسه) لازم است.');
+    const existing=bill.receiptDiscountAllocation;
+    if(existing){
+      if(existing.allocationReference!==cleanReference||existing.allocationReason!==cleanReason||
+          !Array.isArray(existing.lineDiscounts)||
+          existing.lineDiscounts.length!==sourceLines.length||
+          sourceLines.some((line,i)=>existing.lineDiscounts[i]!==line.amount))
+        throw Error('تخصیص ثبت‌شده قبلی قابل تغییر نیست؛ فقط همان مقادیر تأییدشده مجازند.');
+    }
+    const match=sourceLines.filter(line=>line.itemId===itemId);
+    if(match.length!==1)throw Error('کالای انتخابی باید دقیقاً در یک ردیف فاکتور باشد.');
+    const selected=match[0],source=bill.lines[selected.lineIndex];
+    const requested=exactPurchaseInputAmount(quantity,'تعداد رسید');
+    if(requested<=0n)throw Error('تعداد رسید باید یک عدد صحیح مثبت باشد.');
+    const collection=Array.isArray(movements)?movements:Object.values(movements||{});
+    const linked=collection.filter(move=>move?.type==='inventory.receive'&&
+      move.billId===bill.id);
+    if(linked.some(move=>(move.discountAllocation||'')!=='per-line-exact'))
+      throw Error('رسید قبلی این فاکتور با سیاست تخصیص دیگری ثبت شده است.');
+    const returnedList=bill.returnedQuantities||[];
+    const returned=exactPurchaseSourceAmount(returnedList[selected.lineIndex]??0,
+      'تعداد برگشتی کالا');
+    const returnRecords=Array.isArray(returns)?returns:Object.values(returns||{});
+    if(!existing&&returnRecords.some(note=>note?.direction==='purchase'&&
+        note.documentId===bill.id))
+      throw Error('برای فاکتور دارای برگشت قبلی، ثبت نخستین تخصیص ردیفی مجاز نیست.');
+    if(tax>0n&&returned>0n)
+      throw Error('برگشت جزئی خرید مالیات‌دار بدون تخصیص مالیات ردیفیِ مستند پشتیبانی نمی‌شود.');
+    const lineQty=BigInt(selected.quantity),remainingQty=lineQty-returned;
+    if(remainingQty<=0n)throw Error('از کالای برگشت‌خورده، مقدار قابل دریافت باقی نمانده است.');
+    const prior=linked.filter(move=>move.itemId===itemId&&move.reversed!==true)
+      .reduce((sum,move)=>sum+exactPurchaseSourceAmount(move.quantity,'مقدار رسید قبلی'),0n);
+    if(prior+requested>remainingQty)
+      throw Error('مقدار رسید از باقی‌مانده خرید پس از برگشت بیشتر می‌شود.');
+    const priorReturnDiscount=purchaseHalfUp(BigInt(selected.amount),returned,lineQty);
+    const netRemaining=remainingQty*BigInt(source.unitPrice)-
+      (BigInt(selected.amount)-priorReturnDiscount);
+    const base=netRemaining/remainingQty,extra=netRemaining%remainingQty;
+    if(base<=0n)throw Error('ارزش‌گذاری این رسید شامل بهای واحد صفر است.');
+    const higher=([from,to])=>{
+      const upper=to<extra?to:extra;
+      return upper>from?upper-from:0n;
+    };
+    const highCount=higher([prior,prior+requested]);
+    const expectedValue=requested*base+highCount;
+    if(expectedValue>purchaseExactMax)
+      throw Error('ارزش رسید از سقف ثبت حسابداری بیشتر است.');
+    const fields={discountAllocation:'per-line-exact',
+      lineDiscounts:sourceLines.map(({lineIndex,amount})=>({lineIndex,amount})),
+      allocationReference:cleanReference,allocationReason:cleanReason};
+    return {ready:true,error:'',fields,lines:sourceLines,
+      allocatedTotal:Number(allocatedTotal),documentDiscount:Number(discount),
+      selectedLineIndex:selected.lineIndex,expectedReceiptValue:Number(expectedValue),
+      previousReceipts:Number(prior),availableQuantity:Number(remainingQty-prior),
+      expectedUnitCostLow:Number(base),expectedUnitCostHigh:Number(base+(extra?1n:0n)),
+      fixedByPreviousReceipt:!!existing};
+  }catch(error){return denied(error?.message||'تخصیص خرید قابل تأیید نیست.');}
+}
+
+export function LiveInventory({view,canManage,canAdmin=false,disabled,execute,today,unit}){
   const [warehouse,setWarehouse]=useState({warehouseId:'',name:''});
   const [reverseReason,setReverseReason]=useState({});
   const [form,setForm]=useState({type:'inventory.receive',warehouseId:'',itemId:'',
     quantity:'',postingDate:today,billId:'',invoiceId:'',unitCost:'',toWarehouseId:'',reason:'',
-    taxTreatment:'',discountAllocation:''});
-  const ch=(key,val)=>setForm(p=>({...p,[key]:val}));
+    taxTreatment:'',discountAllocation:'',lineDiscounts:[],allocationReference:'',
+    allocationReason:'',reviewAck:false});
+  useEffect(()=>{
+    if(!canAdmin)setForm(current=>current.discountAllocation==='per-line-exact'?{
+      ...current,discountAllocation:'',lineDiscounts:[],allocationReference:'',
+      allocationReason:'',reviewAck:false}:current);
+  },[canAdmin]);
+  const ch=(key,val)=>setForm(p=>({...p,[key]:val,reviewAck:false}));
   const warehouses=asList(view.warehouses),goods=asList(view.items).filter(a=>a.kind==='goods');
   const chosenBill=view.bills?.[form.billId]||null;
   const taxedPurchase=!!chosenBill&&chosenBill.tax>0;
@@ -186,6 +300,16 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
   const discountSingleLine=discountedPurchase&&chosenBill.lines?.length===1;
   const discountExact=discountSingleLine&&Number.isSafeInteger(chosenBill.lines[0]?.quantity)&&
     chosenBill.lines[0].quantity>0&&chosenBill.discount%chosenBill.lines[0].quantity===0;
+  const storedAllocation=chosenBill?.receiptDiscountAllocation||null;
+  const exactAmounts=storedAllocation?storedAllocation.lineDiscounts?.map(String):form.lineDiscounts;
+  const exactReference=storedAllocation?.allocationReference??form.allocationReference;
+  const exactReason=storedAllocation?.allocationReason??form.allocationReason;
+  const exactMode=form.type==='inventory.receive'&&discountedPurchase&&
+    form.discountAllocation==='per-line-exact';
+  const exactReview=exactMode&&canAdmin?previewExactPurchaseDiscountAllocation({
+    bill:chosenBill,amounts:exactAmounts,reference:exactReference,reason:exactReason,
+    itemId:form.itemId,quantity:form.quantity,taxTreatment:form.taxTreatment,
+    movements:view.stockMovements,returns:view.returns}):null;
   const stock=warehouses.flatMap(w=>Object.entries(view.stock?.[w.id]||{}).map(([itemId,b])=>
     ({id:w.id+':'+itemId,warehouseId:w.id,itemId,qty:b.quantity,value:b.value})));
   const movements=asList(view.stockMovements);
@@ -230,7 +354,8 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
           'item.stock.enable',{itemId:g.id})}>فعال‌سازی {g.name}</button>)}
     </section>}
     <InlineForm title="ثبت رسید، حواله، انتقال و اصلاح موجودی" canManage={canManage}
-      disabled={disabled} onSubmit={async()=>{
+      disabled={disabled||(exactMode&&(!canAdmin||!exactReview?.ready||!form.reviewAck))}
+      onSubmit={async()=>{
         const fields={warehouseId:form.warehouseId,itemId:form.itemId,
           quantity:numberOf(form.quantity),postingDate:form.postingDate};
         if(form.type==='inventory.receive'){
@@ -240,10 +365,19 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
             fields.taxTreatment='expense';
           }
           if(discountedPurchase){
-            if(!discountExact)throw Error('تخصیص تخفیف چندردیفی یا غیرصحیح هنوز مجاز نیست؛ رسید ثبت نمی‌شود.');
-            if(form.discountAllocation!=='single-line-uniform')
-              throw Error('تخصیص مساوی و صحیح تخفیف هر واحد باید صریحاً تأیید شود.');
-            fields.discountAllocation='single-line-uniform';
+            if(form.discountAllocation==='single-line-uniform'){
+              if(!discountExact)throw Error('مسیر ساده فقط برای خرید تک‌ردیفی با تخفیف صحیح هر واحد مجاز است.');
+              fields.discountAllocation='single-line-uniform';
+            }else if(form.discountAllocation==='per-line-exact'){
+              if(!canAdmin)throw Error('تخصیص تخفیف ردیفی فقط با دسترسی مدیر مجاز است.');
+              const verified=previewExactPurchaseDiscountAllocation({
+                bill:chosenBill,amounts:exactAmounts,reference:exactReference,reason:exactReason,
+                itemId:form.itemId,quantity:form.quantity,taxTreatment:form.taxTreatment,
+                movements:view.stockMovements,returns:view.returns});
+              if(!verified.ready||!form.reviewAck)
+                throw Error(verified.error||'بررسی و تأیید تخصیص ردیفی لازم است.');
+              Object.assign(fields,verified.fields);
+            }else throw Error('سیاست تخصیص تخفیف باید صریحاً انتخاب شود.');
           }
         }
         if(form.type==='inventory.issue')fields.invoiceId=form.invoiceId;
@@ -255,7 +389,7 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
         if(['inventory.opening','inventory.transfer','inventory.adjust'].includes(form.type))
           fields.reason=form.reason.trim();
         const ok=await sendCommand(execute,form.type,fields);
-        if(ok)setForm(s=>({...s,quantity:'',reason:''}));
+        if(ok)setForm(s=>({...s,quantity:'',reason:'',reviewAck:false}));
       }}>
       <Input label="نوع عملیات" value={form.type} onChange={v=>ch('type',v)} options={<>
         {canAdmin&&<option value="inventory.opening">موجودی افتتاحیه با سرمایه</option>}
@@ -273,7 +407,9 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
       <SolarDate label="تاریخ ثبت" value={form.postingDate}
         onChange={v=>ch('postingDate',v)} limit={today}/>
       {form.type==='inventory.receive'&&<Input label="فاکتور خرید قطعی"
-        value={form.billId} onChange={v=>setForm(s=>({...s,billId:v,taxTreatment:'',discountAllocation:''}))}
+        value={form.billId} onChange={v=>setForm(s=>({...s,billId:v,taxTreatment:'',
+          discountAllocation:'',lineDiscounts:[],allocationReference:'',
+          allocationReason:'',reviewAck:false}))}
         options={opt(asList(view.bills).filter(d=>d.status==='issued'),'انتخاب خرید')}/>}
       {form.type==='inventory.receive'&&taxedPurchase&&<>
         <Input label="تعیین تکلیف مالیات خرید" value={form.taxTreatment}
@@ -284,14 +420,53 @@ export function LiveInventory({view,canManage,canAdmin=canManage,disabled,execut
         <Err>این انتخاب فقط هزینه‌کرد مالیات خرید را تأیید می‌کند؛ اعتبار مالیات بر ارزش افزوده ادعا یا محاسبه نمی‌شود.</Err>
       </>}
       {form.type==='inventory.receive'&&discountedPurchase&&(
-        discountExact?<>
+        <>
           <Input label="تخصیص تخفیف خرید در ارزش موجودی" value={form.discountAllocation}
             onChange={v=>ch('discountAllocation',v)} options={<>
               <option value="">تأیید صریح تخصیص تخفیف لازم است</option>
-              <option value="single-line-uniform">تخصیص یکسان تخفیف به هر واحد کالای تنها ردیف</option>
+              {discountExact&&!storedAllocation&&<option value="single-line-uniform">تخصیص یکسان تخفیف به هر واحد کالای تنها ردیف</option>}
+              {canAdmin&&<option value="per-line-exact">تخصیص مستندِ مبلغ تخفیف برای تمام ردیف‌ها (فقط مدیر)</option>}
             </>}/>
-          <Err>فقط خرید تک‌ردیفی با تخفیف صحیح به‌ازای هر واحد پشتیبانی می‌شود؛ ارزش موجودی خالص و گردش حساب‌ها ثبت می‌شود.</Err>
-        </>:<Err>این خرید تخفیف چندردیفی یا تقسیم غیرصحیح دارد؛ تخصیص ارزش قابل اتکا نیست و رسید انبار مجاز نیست.</Err>
+          {canAdmin?<Err>فقط خرید تک‌ردیفی با سهم صحیح در مسیر ساده مجاز است. تخفیف چندردیفی یا تقسیم غیرصحیح نیازمند تخصیص تک‌تک ردیف‌ها و مدرک قابل پیگیری است؛ هیچ مبلغی خودکار بین ردیف‌ها تقسیم نمی‌شود.</Err>:
+            <Err>تخفیف چندردیفی یا تقسیم غیرصحیح فقط با ثبت سیاست ردیفی توسط مدیر ممکن است. حسابدار نمی‌تواند این سیاست را ایجاد یا تغییر دهد.</Err>}
+          {exactMode&&canAdmin&&<section className="sac-panel" aria-label="تخصیص دقیق تخفیف خرید">
+            <h4>تخصیص صریح تخفیف فاکتور به تک‌تک ردیف‌ها</h4>
+            {storedAllocation&&<Err>این تخصیص قبلاً برای همین فاکتور ثبت شده و قفل است؛ برای رسیدهای بعدی همان مبالغ و مدرک اصلی به‌کار می‌روند.</Err>}
+            <Err>تخفیف کل فاکتور: {money(chosenBill.discount,unit)}. برای هر ردیف، حتی خدمات و ردیف بدون تخفیف، مبلغ دقیق سند تأمین‌کننده را وارد کنید (صفر نیز باید صریح باشد).</Err>
+            <div className="sac-table-wrap"><table>
+              <thead><tr><th>ردیف فاکتور</th><th>تعداد</th><th>ناخالص</th><th>سهم تخفیف ({unit})</th></tr></thead>
+              <tbody>{chosenBill.lines.map((line,index)=><tr key={index}>
+                <td>{index+1}. {line.description||view.items?.[line.itemId]?.name||'ردیف خرید'} {line.itemId?'('+line.itemId+')':'(خدمت)'}</td>
+                <td>{line.quantity?.toLocaleString('fa-IR')||'—'}</td>
+                <td>{money(line.total,unit)}</td>
+                <td><label className="sac-field"><span>تخفیف ردیف {index+1}</span>
+                  <input type="text" inputMode="numeric" required
+                    aria-label={'تخفیف ردیف '+(index+1)}
+                    readOnly={!!storedAllocation}
+                    value={exactAmounts?.[index]??''}
+                    onChange={event=>setForm(s=>({
+                      ...s,lineDiscounts:chosenBill.lines.map((_,i)=>i===index?
+                        event.target.value:(s.lineDiscounts?.[i]??'')),reviewAck:false}))}/>
+                </label></td>
+              </tr>)}</tbody>
+            </table></div>
+            <Input label="شناسه مدرک تخصیص تأمین‌کننده (حروف/اعداد لاتین)"
+              value={exactReference} readOnly={!!storedAllocation}
+              onChange={v=>ch('allocationReference',v)}/>
+            <Input label="علت و مبنای مستند تخصیص تخفیف"
+              value={exactReason} readOnly={!!storedAllocation}
+              onChange={v=>ch('allocationReason',v)}/>
+            {storedAllocation&&<Err>اطلاعات بالا از سند ثبت‌شده نمایش داده می‌شود و قابل تغییر نیست.</Err>}
+            {exactReview?.ready?<div role="status" className="sac-audit-notice">
+              <strong>پیش‌نمایش بدون ثبت:</strong> جمع سهم تخفیف تمام ردیف‌ها {money(exactReview.allocatedTotal,unit)} از {money(exactReview.documentDiscount,unit)}؛ ردیف کالای انتخابی {exactReview.selectedLineIndex+1}؛ موجودی قابل دریافت {exactReview.availableQuantity.toLocaleString('fa-IR')} واحد؛ ارزش همین رسید {money(exactReview.expectedReceiptValue,unit)}؛ بهای واحدها {money(exactReview.expectedUnitCostLow,unit)} تا {money(exactReview.expectedUnitCostHigh,unit)}. مبلغ مالیاتِ خرید به‌صورت هزینه در حساب ۵۲۰۰ باقی می‌ماند؛ این پیش‌نمایش سند تأمین‌کننده یا اعتبار مالیاتی را تأیید نمی‌کند.
+            </div>:<p role="alert" className="sac-alert error">{exactReview?.error}</p>}
+            <Err>برای این سیاست، برگشت جزئی خرید مالیات‌دار تا ارائه تخصیص مالیات ردیفیِ مستند در هسته مسدود است. این صفحه هیچ اعتبار VAT یا حق استردادی ایجاد نمی‌کند.</Err>
+            <label className="sac-field"><span><input type="checkbox" checked={form.reviewAck}
+              disabled={!exactReview?.ready||disabled}
+              onChange={event=>setForm(s=>({...s,reviewAck:event.target.checked}))}/>
+              مبالغ تمام ردیف‌ها، مرجع و دلیل سند را با تأیید مسئول حسابداری بررسی کردم.</span></label>
+          </section>}
+        </>
       )}
       {form.type==='inventory.issue'&&<Input label="فاکتور فروش قطعی"
         value={form.invoiceId} onChange={v=>ch('invoiceId',v)}
