@@ -19,3 +19,11 @@ test('incomplete remote identity fails closed instead of sharing unknown namespa
   assert.equal(plannerIdentity({mode:'client',url:'https://a.example',user:{}}),null);
   assert.notEqual(plannerIdentity({mode:'solo',user:{username:'a'}}),plannerIdentity({mode:'solo',user:{username:'b'}}));
 });
+
+test('browser identity format is stable and compatible with native storage',()=>{
+  assert.equal(plannerIdentity({mode:'solo'}),'["solo","local"]');
+  assert.equal(plannerIdentity({mode:'server',user:{username:'owner'}}),'["server","owner"]');
+  assert.equal(plannerIdentity({mode:'client',url:'http://127.0.0.1:48370',
+    fingerprint:'',user:{username:'alice'}}),
+  '["client","http://127.0.0.1:48370","","alice"]');
+});

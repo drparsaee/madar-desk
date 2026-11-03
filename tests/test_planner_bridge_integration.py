@@ -41,6 +41,17 @@ class PlannerBridgeIntegrationTests(unittest.TestCase):
                 first.plannerWrite("solo", {"version": 2, "inbox": [], "entries": []})
             self.assertEqual(Bridge().plannerRead("solo"), state)
 
+    def test_native_bridge_accepts_frontend_solo_and_remote_account_identity(self):
+        state = {"version": 1, "inbox": [], "entries": []}
+        solo = '["solo","local"]'
+        remote = '["client","http://127.0.0.1:48370","","alice"]'
+        with isolated_bridge_profile():
+            bridge = Bridge()
+            self.assertIsNone(bridge.plannerRead(solo))
+            self.assertEqual(bridge.plannerWrite(solo, state), state)
+            self.assertEqual(Bridge().plannerRead(solo), state)
+            self.assertIsNone(bridge.plannerRead(remote))
+
 
 if __name__ == "__main__":
     unittest.main()

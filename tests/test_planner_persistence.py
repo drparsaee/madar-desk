@@ -41,6 +41,48 @@ class PlannerPersistenceTests(unittest.TestCase):
         self.assertFalse(self.store.folder.exists())
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_browser_generated_account_namespaces_save_without_any_loss_or_collision(self):
+        # These are the literal JSON.stringify values passed by App.jsx.
+        identities = [
+            '["solo","local"]',
+            '["solo","alice"]',
+            '["server","owner"]',
+            '["client","http://127.0.0.1:48370","","alice"]',
+            '["client","http://127.0.0.1:48371","","alice"]',
+            '["client","https://host.example","' + "a" * 64 + '","alice"]',
+            '["client","https://host.example/' + "long-" * 120 + '","","alice"]',
+        ]
+        self.store.write("solo", planner("old-legacy"))
+        self.store.write("[legacy]", planner("old-bracket-legacy"))
+        self.store.write("[1,2]", planner("old-array-shaped-legacy"))
+        for index, identity in enumerate(identities):
+            self.assertIsNone(self.store.read(identity), identity)
+            self.assertEqual(self.store.write(identity, planner(f"private-{index}")),
+                             planner(f"private-{index}"))
+        self.assertEqual(self.store.read("solo"), planner("old-legacy"))
+        self.assertEqual(self.store.read("[legacy]"), planner("old-bracket-legacy"))
+        self.assertEqual(self.store.read("[1,2]"), planner("old-array-shaped-legacy"))
+        self.assertEqual(len({self.store._paths(identity)[0] for identity in identities}), len(identities))
+        for index, identity in enumerate(identities):
+            self.assertEqual(PlannerPersistence(self.root).read(identity),
+                             planner(f"private-{index}"))
+
+    def test_malformed_structured_account_is_rejected_before_writing(self):
+        invalid = [
+            '["solo"]', '["unknown","local"]', '["client","https://host","alice"]',
+            '["client","file:///secret","","alice"]', '["client","","","alice"]',
+            '["client","https://host","",null]', '["solo",12]',
+            '{"mode":"solo","username":"local"}', '["solo",""]',
+            '["solo","bad\\nname"]', '["solo","\\ud800"]',
+            '["client","https://host","", "alice", "extra"]',
+            '["client","https://host","",' + '"x"' * 2100 + ']',
+            '["solo","' + "a" * 4100 + '"]',
+        ]
+        for account in invalid:
+            with self.subTest(account=account[:60]), self.assertRaises(ValueError):
+                self.store.write(account, planner("never-written"))
+        self.assertFalse(self.store.folder.exists())
+
     def test_round_trip_survives_new_process_store_instance_and_separates_accounts(self):
         expected = planner()
         self.assertEqual(self.store.write("solo", expected), expected)

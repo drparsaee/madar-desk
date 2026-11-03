@@ -93,7 +93,7 @@ export function emptyPlanner() {
 }
 
 export function storageKey(accountId) {
-  if (typeof accountId !== 'string' || !accountId.trim() || accountId.length > 120) {
+  if (typeof accountId !== 'string' || !accountId.trim() || accountId.length > 4096) {
     throw Error('شناسه حساب محلی مشخص نیست.');
   }
   return PREFIX + encodeURIComponent(accountId.trim());

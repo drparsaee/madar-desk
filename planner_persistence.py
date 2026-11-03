@@ -26,7 +26,9 @@ import time
 SCHEMA_VERSION = 1
 MAX_STATE_BYTES = 32 * 1024 * 1024
 MAX_ACCOUNT_CHARS = 120
+MAX_STRUCTURED_ACCOUNT_CHARS = 4096
 _ID = re.compile(r"[A-Za-z0-9_.:-]{1,120}\Z")
+_PLANNER_URL = re.compile(r"https?://[^\s]+\Z", flags=re.IGNORECASE)
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _TIME = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d\Z")
 _FREQUENCIES = frozenset(("none", "daily", "weekly", "monthly"))
@@ -51,12 +53,57 @@ def _account(account_id: str) -> str:
     if not isinstance(account_id, str):
         raise ValueError("Planner account ID must be a string")
     identity = account_id.strip()
-    if (not identity or len(identity) > MAX_ACCOUNT_CHARS or
-            identity in (".", "..") or ".." in identity or
-            any(char in identity for char in "/\\<>|\x00\"?*") or
-            any(ord(char) < 32 or ord(char) == 127 for char in identity)):
-        raise ValueError("Invalid Planner account ID")
-    return identity
+    # Preserve *all* pre-existing valid plain names, including legacy names
+    # beginning with '['. JSON.stringify namespaces contain quoted strings,
+    # which the legacy validator never accepted, so the formats cannot clash.
+    legacy = (bool(identity) and len(identity) <= MAX_ACCOUNT_CHARS and
+              identity not in (".", "..") and ".." not in identity and
+              not any(char in identity for char in "/\\<>|\x00\"?*") and
+              not any(ord(char) < 32 or ord(char) == 127 for char in identity))
+    if legacy:
+        try:
+            identity.encode("utf8")
+        except UnicodeEncodeError:
+            raise ValueError("Invalid Planner account ID") from None
+        return identity
+    # The React UI has always sent JSON.stringify(['solo'|'server', user])
+    # or JSON.stringify(['client', hostUrl, tlsFingerprint, user]). The native
+    # store hashes the complete namespace into a filename; it does NOT place
+    # any of these characters in an OS path. Accept only those structured
+    # forms without renaming them, preserving existing browser storage keys.
+    if identity.startswith("["):
+        if len(identity) > MAX_STRUCTURED_ACCOUNT_CHARS:
+            raise ValueError("Invalid Planner account ID")
+        try:
+            parts = json.loads(identity, parse_constant=lambda _: None)
+        except (ValueError, TypeError):
+            raise ValueError("Invalid Planner account ID") from None
+        if not isinstance(parts, list) or len(parts) not in (2, 4) or any(
+                not isinstance(part, str) for part in parts):
+            raise ValueError("Invalid Planner account ID")
+        if len(parts) == 2:
+            mode, username = parts
+            valid = (mode in ("solo", "server") and bool(username.strip()) and
+                     len(username) <= MAX_ACCOUNT_CHARS)
+        else:
+            mode, url, fingerprint, username = parts
+            valid = (mode == "client" and 0 < len(url) <= 3072 and
+                     _PLANNER_URL.fullmatch(url) is not None and
+                     len(fingerprint) <= 256 and bool(username.strip()) and
+                     len(username) <= MAX_ACCOUNT_CHARS)
+        if not valid:
+            raise ValueError("Invalid Planner account ID")
+        try:
+            for index, part in enumerate(parts):
+                if (not part and not (len(parts) == 4 and index == 2)) or any(
+                        ord(char) < 32 or ord(char) == 127 for char in part):
+                    raise ValueError("Invalid Planner account ID")
+                part.encode("utf8")
+            identity.encode("utf8")
+        except UnicodeEncodeError:
+            raise ValueError("Invalid Planner account ID") from None
+        return identity
+    raise ValueError("Invalid Planner account ID")
 
 
 def _valid_date(value: object, *, optional: bool = False) -> bool:
