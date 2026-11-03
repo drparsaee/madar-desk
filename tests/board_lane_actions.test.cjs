@@ -27,7 +27,8 @@ test('all lane actions are scoped by saved stage id and admin grants',()=>{
   assert.match(app,/onArchive=\{activeBoard\?/);
   assert.match(app,/updateBoardListArchive\(stage\.id\)/);
   assert.match(source,/role="dialog"/);
-  assert.match(source,/onSave\?\.\(\{color:e\.target\.value\}\)/);
+  assert.match(source,/<CommonColorOptions value=\{stage\.color\} disabled=\{!onSave\}/);
+  assert.match(source,/onChange=\{color=>onSave\?\.\(\{color\}\)\}/);
   assert.match(source,/document\.addEventListener\('pointerdown',close,true\)/);
 });
 test('inline add-list UI stays inside the board and validates input',()=>{

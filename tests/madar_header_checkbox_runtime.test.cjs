@@ -133,7 +133,7 @@ test('Chromium: compact user identity, centered native/custom checkmarks and red
                 animations:'disabled'});
             }
             if(width===1440&&theme==='light'&&reducedMotion==='no-preference'){
-              await drawer.locator('.drawer-top button').click();
+              await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
               const checklist=page.locator('.kanban .inline-checklist').first();
               await checklist.waitFor({state:'visible'});
               await checklist.locator('.checklist-toggle').click();
