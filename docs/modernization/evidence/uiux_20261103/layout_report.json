@@ -1,0 +1,1687 @@
+{
+  "baseline": "Madar Desk 1.0.11 / 53dcd69",
+  "mode": "Chromium headless with synthetic read-only API, built Vite page",
+  "testedAt": "2026-11-03T09:55:25.320Z",
+  "steps": [
+    {
+      "checkpoint": "desktop/overview",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "داشبورد",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": true
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "داشبورد",
+            "selected": true
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "selected": false
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 25,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 11,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          },
+          {
+            "text": "",
+            "label": "نمایش گزارش کامل گردش‌ها",
+            "width": 33,
+            "height": 32
+          },
+          {
+            "text": "همه",
+            "label": null,
+            "width": 40,
+            "height": 29
+          },
+          {
+            "text": "دریافت‌ها",
+            "label": null,
+            "width": 61,
+            "height": 29
+          },
+          {
+            "text": "پرداخت‌ها",
+            "label": null,
+            "width": 63,
+            "height": 29
+          },
+          {
+            "text": "برگشت‌شده",
+            "label": null,
+            "width": 70,
+            "height": 29
+          },
+          {
+            "text": "مشاهده همه در بخش دریافت و پرداخت",
+            "label": null,
+            "width": 201,
+            "height": 27
+          },
+          {
+            "text": "ماه جاری",
+            "label": null,
+            "width": 62,
+            "height": 34
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1223,
+        "bodyClientHeight": 618,
+        "mainWidth": 1440,
+        "tables": [
+          {
+            "scrollWidth": 1334,
+            "clientWidth": 1334
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "nav/invoice",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "فاکتورهای فروش",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": true
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "فاکتورهای فروش",
+            "selected": true
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          },
+          {
+            "text": "صورتحساب‌های خرید",
+            "selected": false
+          },
+          {
+            "text": "کارهای پیمانکاران",
+            "selected": false
+          },
+          {
+            "text": "ثبت فاکتور جدید",
+            "selected": false
+          }
+        ],
+        "controlCount": 10,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 16,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 8,
+        "undersizedButtons": [
+          {
+            "text": "صفحه اصلی",
+            "label": null,
+            "width": 71,
+            "height": 28
+          },
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 34,
+            "height": 41
+          },
+          {
+            "text": "مشاهده جزئیات",
+            "label": null,
+            "width": 93,
+            "height": 33
+          },
+          {
+            "text": "PDF",
+            "label": null,
+            "width": 40,
+            "height": 33
+          },
+          {
+            "text": "تسویه",
+            "label": null,
+            "width": 48,
+            "height": 33
+          },
+          {
+            "text": "خروجی PNG",
+            "label": null,
+            "width": 132,
+            "height": 33
+          },
+          {
+            "text": "خروجی Excel",
+            "label": null,
+            "width": 132,
+            "height": 33
+          },
+          {
+            "text": "خروجی RTF",
+            "label": null,
+            "width": 132,
+            "height": 33
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 705,
+        "bodyClientHeight": 705,
+        "mainWidth": 1440,
+        "tables": [
+          {
+            "scrollWidth": 1346,
+            "clientWidth": 1346
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "nav/purchase",
+      "status": "NOT_FOUND"
+    },
+    {
+      "checkpoint": "nav/parties",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "اشخاص",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": true
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "اشخاص",
+            "selected": true
+          },
+          {
+            "text": "کالا، انبار و کاردکس",
+            "selected": false
+          },
+          {
+            "text": "مشخصات شرکت",
+            "selected": false
+          }
+        ],
+        "controlCount": 4,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 5,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 1,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 684,
+        "bodyClientHeight": 603,
+        "mainWidth": 1440,
+        "tables": [
+          {
+            "scrollWidth": 1334,
+            "clientWidth": 1334
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "nav/reports",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "گزارش‌های مالی",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": true
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "گزارش‌های مالی",
+            "selected": true
+          },
+          {
+            "text": "سوابق انتقالی پارسیان",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 2,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 1,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 603,
+        "bodyClientHeight": 603,
+        "mainWidth": 1440,
+        "tables": [],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "nav/bank",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "صندوق، بانک و مغایرت",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": true
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "دریافت، پرداخت و اقساط",
+            "selected": false
+          },
+          {
+            "text": "صندوق، بانک و مغایرت",
+            "selected": true
+          },
+          {
+            "text": "خزانه و چک",
+            "selected": false
+          }
+        ],
+        "controlCount": 16,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 5,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 1,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1615,
+        "bodyClientHeight": 603,
+        "mainWidth": 1440,
+        "tables": [
+          {
+            "scrollWidth": 1334,
+            "clientWidth": 1334
+          },
+          {
+            "scrollWidth": 1368,
+            "clientWidth": 1368
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "nav/ledger",
+      "status": "FAIL",
+      "error": "locator.waitFor: Timeout 1200ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.sac-ribbon-tools').getByRole('button', { name: 'صورتحساب‌های خرید', exact: true }) to be visible\u001b[22m\n"
+    },
+    {
+      "checkpoint": "nav/migration",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "سوابق انتقالی پارسیان",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": true
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "گزارش‌های مالی",
+            "selected": false
+          },
+          {
+            "text": "سوابق انتقالی پارسیان",
+            "selected": true
+          }
+        ],
+        "controlCount": 1,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 2,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 1,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 603,
+        "bodyClientHeight": 603,
+        "mainWidth": 1440,
+        "tables": [],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "responsive/1024",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1024,
+          "height": 844
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1024,
+          "height": 844
+        },
+        "heading": "داشبورد",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": true
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "داشبورد",
+            "selected": true
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "selected": false
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 25,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 11,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          },
+          {
+            "text": "",
+            "label": "نمایش گزارش کامل گردش‌ها",
+            "width": 33,
+            "height": 32
+          },
+          {
+            "text": "همه",
+            "label": null,
+            "width": 40,
+            "height": 29
+          },
+          {
+            "text": "دریافت‌ها",
+            "label": null,
+            "width": 61,
+            "height": 29
+          },
+          {
+            "text": "پرداخت‌ها",
+            "label": null,
+            "width": 63,
+            "height": 29
+          },
+          {
+            "text": "برگشت‌شده",
+            "label": null,
+            "width": 70,
+            "height": 29
+          },
+          {
+            "text": "مشاهده همه در بخش دریافت و پرداخت",
+            "label": null,
+            "width": 201,
+            "height": 27
+          },
+          {
+            "text": "ماه جاری",
+            "label": null,
+            "width": 62,
+            "height": 34
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1652,
+        "bodyClientHeight": 562,
+        "mainWidth": 1024,
+        "tables": [
+          {
+            "scrollWidth": 929,
+            "clientWidth": 929
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "responsive/768",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 768,
+          "height": 844
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 768,
+          "height": 844
+        },
+        "heading": "داشبورد",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": true
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "داشبورد",
+            "selected": true
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "selected": false
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 25,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 11,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          },
+          {
+            "text": "",
+            "label": "نمایش گزارش کامل گردش‌ها",
+            "width": 33,
+            "height": 32
+          },
+          {
+            "text": "همه",
+            "label": null,
+            "width": 40,
+            "height": 29
+          },
+          {
+            "text": "دریافت‌ها",
+            "label": null,
+            "width": 61,
+            "height": 29
+          },
+          {
+            "text": "پرداخت‌ها",
+            "label": null,
+            "width": 63,
+            "height": 29
+          },
+          {
+            "text": "برگشت‌شده",
+            "label": null,
+            "width": 70,
+            "height": 29
+          },
+          {
+            "text": "مشاهده همه در بخش دریافت و پرداخت",
+            "label": null,
+            "width": 201,
+            "height": 27
+          },
+          {
+            "text": "ماه جاری",
+            "label": null,
+            "width": 62,
+            "height": 34
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": true,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1639,
+        "bodyClientHeight": 562,
+        "mainWidth": 768,
+        "tables": [
+          {
+            "scrollWidth": 688,
+            "clientWidth": 688
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "responsive/560",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 560,
+          "height": 844
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 560,
+          "height": 844
+        },
+        "heading": "داشبورد",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": true
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "داشبورد",
+            "selected": true
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "selected": false
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 25,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 11,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          },
+          {
+            "text": "",
+            "label": "نمایش گزارش کامل گردش‌ها",
+            "width": 33,
+            "height": 32
+          },
+          {
+            "text": "همه",
+            "label": null,
+            "width": 40,
+            "height": 29
+          },
+          {
+            "text": "دریافت‌ها",
+            "label": null,
+            "width": 61,
+            "height": 29
+          },
+          {
+            "text": "پرداخت‌ها",
+            "label": null,
+            "width": 63,
+            "height": 29
+          },
+          {
+            "text": "برگشت‌شده",
+            "label": null,
+            "width": 70,
+            "height": 29
+          },
+          {
+            "text": "مشاهده همه در بخش دریافت و پرداخت",
+            "label": null,
+            "width": 201,
+            "height": 27
+          },
+          {
+            "text": "ماه جاری",
+            "label": null,
+            "width": 62,
+            "height": 34
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": true,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1988,
+        "bodyClientHeight": 572,
+        "mainWidth": 560,
+        "tables": [
+          {
+            "scrollWidth": 620,
+            "clientWidth": 500
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "responsive/390",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 390,
+          "height": 844
+        },
+        "heading": "داشبورد",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": true
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": false
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "داشبورد",
+            "selected": true
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "selected": false
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          }
+        ],
+        "controlCount": 0,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 25,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 11,
+        "undersizedButtons": [
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 35,
+            "height": 45
+          },
+          {
+            "text": "",
+            "label": "نمایش گزارش کامل گردش‌ها",
+            "width": 33,
+            "height": 32
+          },
+          {
+            "text": "همه",
+            "label": null,
+            "width": 40,
+            "height": 29
+          },
+          {
+            "text": "دریافت‌ها",
+            "label": null,
+            "width": 61,
+            "height": 29
+          },
+          {
+            "text": "پرداخت‌ها",
+            "label": null,
+            "width": 63,
+            "height": 29
+          },
+          {
+            "text": "برگشت‌شده",
+            "label": null,
+            "width": 70,
+            "height": 29
+          },
+          {
+            "text": "مشاهده همه در بخش دریافت و پرداخت",
+            "label": null,
+            "width": 201,
+            "height": 27
+          },
+          {
+            "text": "ماه جاری",
+            "label": null,
+            "width": 62,
+            "height": 34
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": true,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 2043,
+        "bodyClientHeight": 540,
+        "mainWidth": 390,
+        "tables": [
+          {
+            "scrollWidth": 620,
+            "clientWidth": 332
+          }
+        ],
+        "fieldLabelsContrast": []
+      }
+    },
+    {
+      "checkpoint": "invoice-composer/1440",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 1440,
+          "height": 900
+        },
+        "heading": "فاکتورهای فروش",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": true
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "فاکتورهای فروش",
+            "selected": true
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          },
+          {
+            "text": "صورتحساب‌های خرید",
+            "selected": false
+          },
+          {
+            "text": "کارهای پیمانکاران",
+            "selected": false
+          },
+          {
+            "text": "ثبت فاکتور جدید",
+            "selected": false
+          }
+        ],
+        "controlCount": 18,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 16,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 4,
+        "undersizedButtons": [
+          {
+            "text": "صفحه اصلی",
+            "label": null,
+            "width": 71,
+            "height": 28
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "label": null,
+            "width": 98,
+            "height": 28
+          },
+          {
+            "text": "بازگشت به فهرست فاکتورها",
+            "label": null,
+            "width": 196,
+            "height": 35
+          },
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 34,
+            "height": 41
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": false,
+        "ribbonToolsScroll": false,
+        "bodyScrollHeight": 1061,
+        "bodyClientHeight": 705,
+        "mainWidth": 1440,
+        "tables": [],
+        "fieldLabelsContrast": [
+          {
+            "text": "شماره داخلی فاکتور",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "مشتری",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "تاریخ سند",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "شمسی، سال/ماه/روز",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "سررسید پرداخت (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "شمسی، سال/ماه/روز",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "تخفیف (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "سیاست مالیاتی",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "مالیات (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "یادداشت (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "عنوان قالب ثبت اقلام",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "نحوه فراخوانی قالب",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "فراخوانی قالب ذخیره‌شده",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "شرح",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "تعداد",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "قیمت واحد (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "سرفصل حساب",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "قلم کاتالوگ (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          }
+        ]
+      }
+    },
+    {
+      "checkpoint": "invoice-composer/390",
+      "data": {
+        "title": "مدار | حسابداری مستقل",
+        "lang": "fa",
+        "htmlDir": "rtl",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "rootDir": "rtl",
+        "rootSize": {
+          "width": 390,
+          "height": 844
+        },
+        "heading": "فاکتورهای فروش",
+        "navbar": [
+          {
+            "text": "عمومی",
+            "active": false
+          },
+          {
+            "text": "فاکتورها و سفارش‌ها",
+            "active": true
+          },
+          {
+            "text": "اشخاص و کالا",
+            "active": false
+          },
+          {
+            "text": "خزانه و پرداخت",
+            "active": false
+          },
+          {
+            "text": "حسابداری",
+            "active": false
+          },
+          {
+            "text": "گزارش‌ها و سوابق",
+            "active": false
+          },
+          {
+            "text": "تنظیمات و مدیریت",
+            "active": false
+          }
+        ],
+        "ribbonActions": [
+          {
+            "text": "فاکتورهای فروش",
+            "selected": true
+          },
+          {
+            "text": "پیش‌فاکتور مستقل",
+            "selected": false
+          },
+          {
+            "text": "صورتحساب‌های خرید",
+            "selected": false
+          },
+          {
+            "text": "کارهای پیمانکاران",
+            "selected": false
+          },
+          {
+            "text": "ثبت فاکتور جدید",
+            "selected": false
+          }
+        ],
+        "controlCount": 18,
+        "unlabelledControlCount": 0,
+        "unlabelledControls": [],
+        "buttonCount": 16,
+        "unlabelledButtonCount": 0,
+        "unlabelledButtons": [],
+        "undersizedButtonCount": 4,
+        "undersizedButtons": [
+          {
+            "text": "صفحه اصلی",
+            "label": null,
+            "width": 71,
+            "height": 28
+          },
+          {
+            "text": "فاکتورهای فروش",
+            "label": null,
+            "width": 98,
+            "height": 28
+          },
+          {
+            "text": "بازگشت به فهرست فاکتورها",
+            "label": null,
+            "width": 334,
+            "height": 35
+          },
+          {
+            "text": "×",
+            "label": "بستن پیام موفقیت",
+            "width": 34,
+            "height": 41
+          }
+        ],
+        "horizontalOverflow": false,
+        "ribbonTabsScroll": true,
+        "ribbonToolsScroll": true,
+        "bodyScrollHeight": 1688,
+        "bodyClientHeight": 585,
+        "mainWidth": 390,
+        "tables": [],
+        "fieldLabelsContrast": [
+          {
+            "text": "شماره داخلی فاکتور",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "مشتری",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "تاریخ سند",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "شمسی، سال/ماه/روز",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(247, 250, 252)",
+            "contrast": 1.62
+          },
+          {
+            "text": "سررسید پرداخت (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "شمسی، سال/ماه/روز",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "تخفیف (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "سیاست مالیاتی",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "مالیات (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "یادداشت (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(255, 255, 255)",
+            "contrast": 1.7
+          },
+          {
+            "text": "عنوان قالب ثبت اقلام",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "نحوه فراخوانی قالب",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "فراخوانی قالب ذخیره‌شده",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(244, 248, 247)",
+            "contrast": 1.59
+          },
+          {
+            "text": "شرح",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "تعداد",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "قیمت واحد (ریال)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "سرفصل حساب",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          },
+          {
+            "text": "قلم کاتالوگ (اختیاری)",
+            "fg": "rgb(186, 200, 217)",
+            "bg": "rgb(249, 252, 251)",
+            "contrast": 1.65
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "visuals": [
+    "01-overview-1440.png",
+    "02-invoices-1440.png",
+    "03-overview-768.png",
+    "03-overview-390.png",
+    "04-invoice-composer-1440.png",
+    "05-invoice-composer-390.png"
+  ],
+  "accessibility": [
+    {
+      "checkpoint": "desktop/overview",
+      "status": "MEASURED",
+      "violations": [],
+      "incomplete": 2,
+      "passes": 25
+    },
+    {
+      "checkpoint": "desktop/invoice-list",
+      "status": "MEASURED",
+      "violations": [],
+      "incomplete": 2,
+      "passes": 24
+    },
+    {
+      "checkpoint": "mobile/overview-390",
+      "status": "MEASURED",
+      "violations": [
+        {
+          "id": "scrollable-region-focusable",
+          "impact": "serious",
+          "description": "Scrollable region must have keyboard access",
+          "affected": 1,
+          "nodes": [
+            {
+              "target": [
+                ".sac-vtr-table-scroll"
+              ],
+              "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+            }
+          ]
+        }
+      ],
+      "incomplete": 2,
+      "passes": 24
+    },
+    {
+      "checkpoint": "desktop/invoice-composer",
+      "status": "MEASURED",
+      "violations": [],
+      "incomplete": 2,
+      "passes": 25
+    },
+    {
+      "checkpoint": "mobile/invoice-composer-390",
+      "status": "MEASURED",
+      "violations": [],
+      "incomplete": 2,
+      "passes": 24
+    }
+  ],
+  "navLabels": [
+    "داشبورد",
+    "مشخصات شرکت",
+    "پیش‌فاکتور مستقل",
+    "فاکتورهای فروش",
+    "صورتحساب‌های خرید",
+    "کارهای پیمانکاران",
+    "اشخاص",
+    "سوابق انتقالی پارسیان",
+    "خزانه و چک",
+    "کالا، انبار و کاردکس",
+    "دریافت، پرداخت و اقساط",
+    "صندوق، بانک و مغایرت",
+    "حساب‌ها و دفترکل",
+    "سند دستی و برگشت",
+    "گزارش‌های مالی",
+    "حقوق و مالیات",
+    "سال مالی و بستن دوره"
+  ],
+  "keyboardTab": {
+    "tag": "SELECT",
+    "outer": "<select required=\"\"><option value=\"\">انتخاب طرف‌حساب</option><option value=\"CUSTOMER-QA\">مشتری آزمایشی (CUSTOMER-QA)</option></select>"
+  }
+}
