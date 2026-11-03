@@ -330,6 +330,8 @@ test('Vitrea UI runtime smoke: RTL, dark, navigation and isolated accounting',
         },{once:true});
       },accountingEmpty);
       await finance.goto(new URL('accounting.html',base).href,{waitUntil:'domcontentloaded',timeout:18000});
+      // Switch from the default task-centric novice shell to the retained expert Ribbon.
+      await finance.locator('.sac-nav-mode button:nth-child(2)').click();
       await finance.locator('.sac-ribbon-tabs').waitFor({state:'visible'});
       try{await finance.locator('.sac-vtr-home').waitFor({state:'visible'});}
       catch(error){

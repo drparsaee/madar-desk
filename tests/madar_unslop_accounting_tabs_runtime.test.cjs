@@ -21,7 +21,7 @@ const groups=[
   ['اشخاص و کالا',['اشخاص','کالا، انبار و کاردکس','مشخصات شرکت']],
   ['خزانه و پرداخت',['دریافت، پرداخت و اقساط','صندوق، بانک و مغایرت','خزانه و چک']],
   ['حسابداری',['حساب‌ها و دفترکل','سند دستی و برگشت','سال مالی و بستن دوره']],
-  ['گزارش‌ها و سوابق',['گزارش‌های مالی','مهاجرت و سوابق']],
+  ["گزارش‌ها و سوابق",["گزارش‌های مالی"]],
   ['تنظیمات و مدیریت',['تنظیمات حسابداری','حقوق و مالیات']],
 ];
 const port=()=>new Promise((resolve,reject)=>{
@@ -32,7 +32,7 @@ const port=()=>new Promise((resolve,reject)=>{
     server.close(error=>error?reject(error):resolve(selected));
   });
 });
-test('Unslop graphite/blue theme keeps all 18 accounting screens reachable in both themes',
+test('Unslop graphite/blue theme keeps all 17 viewer-permitted accounting screens reachable in both themes',
   {skip:!runnable,timeout:115000},async()=>{
     const {preview}=await import('vite');
     const {chromium}=require(playwright);
@@ -58,6 +58,9 @@ test('Unslop graphite/blue theme keeps all 18 accounting screens reachable in bo
           {waitUntil:'domcontentloaded',timeout:20000});
         await page.locator('.sac-root').waitFor({state:'visible'});
         await page.locator('.sac-header h1').waitFor({state:'visible'});
+        // Novice navigation is default in 1.0.13. Explicitly open the retained professional Ribbon.
+        await page.locator('.sac-nav-mode button:nth-child(2)').click();
+        await page.locator('.sac-ribbon-tabs').waitFor({state:'visible'});
         let count=0;
         for(const [group,sections] of groups){
           for(const label of sections){
@@ -89,7 +92,7 @@ test('Unslop graphite/blue theme keeps all 18 accounting screens reachable in bo
             count++;
           }
         }
-        assert.equal(count,18,'Expected all eighteen independent accounting tabs');
+        assert.equal(count,17,'Viewer must see 17 allowed tabs, not admin-only migration');
         assert.deepEqual(errors,[]);
         await context.close();
       }
