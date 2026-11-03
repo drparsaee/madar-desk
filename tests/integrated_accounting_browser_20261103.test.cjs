@@ -96,6 +96,13 @@ test('built accounting: safe Settings update, Ctrl+K, dark invoice contrast, nar
       await search.fill('گزارش');
       await page.keyboard.press('Enter');
       assert.equal(await page.locator('.sac-simple-nav [data-accounting-tab="reports"][aria-current="page"]').count(),1);
+      // Real host-scoped record search must open the exact issued invoice, not just its list.
+      await page.locator('.sac-nav-search-trigger').click();
+      await page.locator('.sac-global-search-dialog input[role=combobox]').fill('QA-INV-001');
+      await page.keyboard.press('Enter');
+      await page.locator('.sac-document-detail').waitFor();
+      assert.match(await page.locator('.sac-document-detail').textContent(),/QA-INV-001/);
+      assert.equal(await page.locator('.sac-simple-nav [data-accounting-tab="invoice"][aria-current="page"]').count(),1);
 
       await page.locator('.sac-simple-nav [data-accounting-tab="invoice"]').click();
       await page.locator('.sac-nav-quick-actions [data-accounting-action="invoice"]').click();
