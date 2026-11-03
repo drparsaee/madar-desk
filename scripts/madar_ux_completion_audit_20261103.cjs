@@ -14,11 +14,21 @@ const {observation,assessAxe,assessContrast,assessTouch,summarize}=
 
 const root=path.resolve(__dirname,'..');
 const outDir=path.join(root,'.qa-uxqa-20261103');
+const packagedAxe=path.join(root,'node_modules','axe-core','axe.min.js');
+const legacyAxe=path.join(root,'.qa-uxqa-tools','node_modules','axe-core','axe.min.js');
 const axePath=process.env.MADAR_UXQA_AXE_PATH||
-  path.join(root,'.qa-uxqa-tools','node_modules','axe-core','axe.min.js');
-const widths=[390,560,768,1440];
-const themes=['dark','light'];
-const report={format:2,baseline:'7d45c11643f7d9082221750e97e3ad673161e7fe',
+  (fs.existsSync(packagedAxe)?packagedAxe:legacyAxe);
+const widths=process.env.MADAR_UXQA_WIDTHS?
+  process.env.MADAR_UXQA_WIDTHS.split(',').map(Number):[390,560,768,1440];
+if(!widths.length||widths.some(width=>![390,560,768,1440].includes(width))||
+    new Set(widths).size!==widths.length)
+  throw Error('MADAR_UXQA_WIDTHS must contain distinct supported widths: 390,560,768,1440');
+const themes=process.env.MADAR_UXQA_THEMES?
+  process.env.MADAR_UXQA_THEMES.split(','):['dark','light'];
+if(!themes.length||themes.some(theme=>!['dark','light'].includes(theme))||
+    new Set(themes).size!==themes.length)
+  throw Error('MADAR_UXQA_THEMES must contain distinct dark,light values');
+const report={format:3,baseline:'25a99ae9b32229968255f5187d1639586a48ea03',
   runUTC:new Date().toISOString(),scope:'Synthetic accounting UI, Chromium + axe 4.14.0',
   matrix:[],checks:[],errors:[],limitations:[],toolchain:{}};
 const save=()=>{
@@ -34,6 +44,8 @@ const errorText=error=>String(error?.message||error).slice(0,650);
 function playwrightModule(){
   const tries=[process.env.MADAR_UXQA_PLAYWRIGHT,
     path.join(process.env.APPDATA||'', 'npm','node_modules','playwright'),
+    path.join(process.env.USERPROFILE||'','AppData','Roaming','npm',
+      'node_modules','playwright'),
     'playwright'];
   for(const location of tries){if(!location)continue;try{return require(location);}catch{}}
   throw Error('Playwright missing; supply MADAR_UXQA_PLAYWRIGHT or install globally');
@@ -57,8 +69,19 @@ function freePort(){return new Promise((resolve,reject)=>{
 
 function pageMetrics(){
   const visible=el=>{
-    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
-    return !!(r.width&&r.height&&s.display!=='none'&&s.visibility!=='hidden');
+    const r=el.getBoundingClientRect();
+    // A zero/1px clipped floating-label placeholder is not rendered content.
+    // Likewise children of a closed <details> are not visible, even when
+    // getBoundingClientRect() reports an old positive geometry in Chromium.
+    if(r.width<4||r.height<4)return false;
+    for(let ancestor=el;ancestor;ancestor=ancestor.parentElement){
+      const s=getComputedStyle(ancestor);
+      if(ancestor.hidden||s.display==='none'||s.visibility==='hidden'||
+          s.visibility==='collapse'||s.contentVisibility==='hidden')return false;
+      if(ancestor.tagName==='DETAILS'&&!ancestor.open&&
+          !ancestor.querySelector(':scope > summary')?.contains(el))return false;
+    }
+    return true;
   };
   const color=text=>{
     const values=String(text).match(/\d+(?:\.\d+)?/g);
@@ -71,11 +94,17 @@ function pageMetrics(){
     return .2126*linear[0]+.7152*linear[1]+.0722*linear[2];
   };
   const contrast=el=>{
-    const fg=color(getComputedStyle(el).color);
+    const textStyle=getComputedStyle(el);
+    const fg=color(textStyle.color);
     let ancestor=el,bg=null,unresolved=false;
+    if(textStyle.color.startsWith('rgba(')||
+      textStyle.webkitTextFillColor!==textStyle.color||
+      textStyle.backgroundClip==='text')unresolved=true;
     while(ancestor&&ancestor.nodeType===1){
       const style=getComputedStyle(ancestor);
       if(style.backgroundImage!=='none')unresolved=true;
+      if(Number(style.opacity)<1||style.mixBlendMode!=='normal'||
+        style.filter!=='none'||style.backdropFilter!=='none')unresolved=true;
       const alpha=(style.backgroundColor.match(/[\d.]+/g)||[])[3];
       if(alpha!==undefined&&Number(alpha)<1)unresolved=true;
       if(style.backgroundColor!=='transparent'&&alpha!=='0'&&alpha!==0&&
@@ -86,9 +115,9 @@ function pageMetrics(){
     }
     if(unresolved||!fg||!bg)return null;
     const a=light(fg),b=light(bg);
-    return Math.round((Math.max(a,b)+.05)/(Math.min(a,b)+.05)*100)/100;
+    return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
   };
-  const labels=[...document.querySelectorAll(
+  const candidates=[...document.querySelectorAll(
     '.sac-invoice-editor label.sac-field>span,.sac-invoice-editor .sac-field>span,'+
     '.sac-invoice-editor .sac-panel-title p,.sac-vtr-due-title h3,'+
     '.sac-vtr-due-item strong,.sac-vtr-due-item small,'+
@@ -97,8 +126,19 @@ function pageMetrics(){
     '.sac-wizard-section-title,.sac-wizard-impact-warning,'+
     '.sac-invoice-summary-note,.sac-wizard-sticky-amount>span,'+
     '.sac-wizard-sticky-amount>small')].filter(visible);
-  const samples=labels.map(el=>({text:(el.textContent||'').trim().slice(0,55),
-    ratio:contrast(el)}));
+  const directText=el=>[...el.childNodes].some(node=>
+    node.nodeType===Node.TEXT_NODE&&node.textContent.trim());
+  // A wrapping span may contain an inline <small> with a distinct ink color
+  // (the Jalali hint does). Measure the actual text-bearing child, not a
+  // misleading inherited foreground from its parent wrapper.
+  const labels=[...new Set(candidates.flatMap(el=>directText(el)?[el]:
+    [...el.querySelectorAll('*')].filter(child=>visible(child)&&directText(child))))];
+  const samples=labels.map(el=>{
+    window.__uxqaContrastIdCounter=(window.__uxqaContrastIdCounter||0)+1;
+    const uid='r'+window.__uxqaContrastIdCounter;
+    el.setAttribute('data-uxqa-contrast-id',uid);
+    return {uid,text:(el.textContent||'').trim().slice(0,55),ratio:contrast(el)};
+  });
   const targets=[...document.querySelectorAll(
     '.sac-ribbon-quick button,.sac-vtr-cta,.sac-vtr-due-actions button,'+
     '.sac-invoice-commandbar-actions button,.sac-workflow-actions button,'+
@@ -147,6 +187,191 @@ function pageMetrics(){
         label:b.textContent?.trim()?.slice(0,50)})),
     searchTrigger:!!document.querySelector('[data-accounting-action="search"]'),
     simpleNav:!!document.querySelector('.sac-ux-simple .sac-simple-nav')};
+}
+
+/**
+ * Evaluate real rendered text-background pixels, including nested alpha layers
+ * and gradients. A first image shows text; in the second only glyph paint is
+ * transparent (backgrounds, filters and layout remain intact); the third
+ * verifies restoration and raster stability. The CSS foreground is compared
+ * with EVERY background pixel where the glyph actually painted, never just the
+ * midpoint of a gradient. Unknown geometry, color, coverage or repaint blocks.
+ *
+ * Use this only against the synthetic Chromium UI, never operational records.
+ */
+async function measureRenderedContrast(page,uid){
+  const selector='[data-uxqa-contrast-id="'+uid+'"]';
+  let maskApplied=false;
+  try{
+    const meta=await page.evaluate(async name=>{
+      const el=document.querySelector('[data-uxqa-contrast-id="'+name+'"]');
+      if(!el)return {error:'target disappeared before raster audit'};
+      if(!el.textContent?.trim())return {error:'no text to measure'};
+      el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+      await document.fonts.ready;
+      const rect=el.getBoundingClientRect();
+      const styles=getComputedStyle(el);
+      for(let ancestor=el;ancestor;ancestor=ancestor.parentElement){
+        const paint=getComputedStyle(ancestor);
+        if(Number(paint.opacity)<1||paint.mixBlendMode!=='normal'||
+            paint.filter!=='none'||paint.backdropFilter!=='none')
+          return {error:'group opacity/filter/blend changes text ink; unsupported exact compositing'};
+      }
+      if(styles.visibility==='hidden'||styles.display==='none'||
+          rect.width<4||rect.height<4||
+          rect.left<-0.5||rect.top<-0.5||
+          rect.right>innerWidth+0.5||rect.bottom>innerHeight+0.5)
+        return {error:'text bounding rectangle is not fully visible after scrolling',
+          rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},
+          viewport:{width:innerWidth,height:innerHeight}};
+      const midpoint=document.elementFromPoint((rect.left+rect.right)/2,
+        (rect.top+rect.bottom)/2);
+      if(!midpoint||(midpoint!==el&&!el.contains(midpoint)))
+        return {error:'text centre is occluded by another element'};
+      if(styles.backgroundClip==='text'&&styles.backgroundImage!=='none')
+        return {error:'foreground is an image clipped to text, not a solid CSS color'};
+      const rgbOf=style=>{
+        const canvas=document.createElement('canvas');
+        canvas.width=canvas.height=1;
+        const ctx=canvas.getContext('2d',{willReadFrequently:true});
+        if(!ctx)return null;
+        try{ctx.clearRect(0,0,1,1);ctx.fillStyle=style;ctx.fillRect(0,0,1,1);
+          return [...ctx.getImageData(0,0,1,1).data];}
+        catch{return null;}
+      };
+      const fill=styles.webkitTextFillColor&&styles.webkitTextFillColor!=='currentcolor'?
+        styles.webkitTextFillColor:styles.color;
+      const foreground=rgbOf(fill);
+      if(!foreground||foreground[3]===0)return {error:'unsupported or transparent CSS foreground',fill};
+      const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+      let current,textNodes=0;
+      while((current=walker.nextNode())){
+        if(!current.textContent.trim())continue;
+        textNodes++;
+        const parentStyle=getComputedStyle(current.parentElement);
+        const childFill=parentStyle.webkitTextFillColor&&
+          parentStyle.webkitTextFillColor!=='currentcolor'?
+          parentStyle.webkitTextFillColor:parentStyle.color;
+        const childForeground=rgbOf(childFill);
+        if(!childForeground||childForeground.some((value,index)=>
+          Math.abs(value-foreground[index])>1))
+          return {error:'mixed foreground colors inside text target',fill,childFill};
+      }
+      if(!textNodes)return {error:'target has no visible text nodes'};
+      return {rect:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom},
+        viewport:{width:innerWidth,height:innerHeight},foreground,fill,textNodes};
+    },uid);
+    if(meta.error)return {ratio:null,method:'rendered-glyph-pixels',reason:meta.error,meta};
+    // Let synchronous nested scrolling and font rasterisation settle before
+    // comparing the three screenshots. Instability still blocks after this.
+    await page.evaluate(()=>new Promise(resolve=>
+      requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const screenshotOptions={animations:'disabled',caret:'hide',scale:'css'};
+    const before=await page.screenshot(screenshotOptions);
+    await page.evaluate(name=>{
+      if(document.getElementById('uxqa-text-only-mask'))
+        throw Error('An earlier raster mask is still present');
+      const style=document.createElement('style');
+      style.id='uxqa-text-only-mask';
+      const target='[data-uxqa-contrast-id="'+name+'"]';
+      style.textContent=target+','+target+' *,'+target+'::before,'+
+        target+'::after,'+target+' *::before,'+target+' *::after{'+
+        '-webkit-text-fill-color:transparent!important;text-shadow:none!important}';
+      document.head.appendChild(style);
+    },uid);
+    maskApplied=true;
+    const background=await page.screenshot(screenshotOptions);
+    await page.evaluate(()=>document.getElementById('uxqa-text-only-mask')?.remove());
+    maskApplied=false;
+    const restored=await page.screenshot(screenshotOptions);
+    const measured=await page.evaluate(async ({before,background,restored,meta})=>{
+      const decode=async b64=>{
+        const image=new Image();
+        image.src='data:image/png;base64,'+b64;
+        await image.decode();
+        const canvas=document.createElement('canvas');
+        canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+        const ctx=canvas.getContext('2d',{willReadFrequently:true});
+        if(!ctx)throw Error('No canvas pixel context');
+        ctx.drawImage(image,0,0);
+        return {width:canvas.width,height:canvas.height,
+          pixels:ctx.getImageData(0,0,canvas.width,canvas.height).data};
+      };
+      const original=await decode(before),masked=await decode(background),
+        again=await decode(restored);
+      if([masked,again].some(item=>item.width!==original.width||
+          item.height!==original.height)||
+          original.width!==meta.viewport.width||original.height!==meta.viewport.height)
+        return {ratio:null,reason:'screenshots do not match CSS viewport geometry'};
+      const {rect,foreground}=meta;
+      const l=Math.max(0,Math.floor(rect.left)),t=Math.max(0,Math.floor(rect.top));
+      const r=Math.min(original.width,Math.ceil(rect.right));
+      const b=Math.min(original.height,Math.ceil(rect.bottom));
+      if(l>=r||t>=b)return {ratio:null,reason:'empty raster text rectangle'};
+      const luminance=rgb=>{
+        const linear=rgb.map(channel=>{
+          const x=channel/255;
+          return x<=.04045?x/12.92:((x+.055)/1.055)**2.4;
+        });
+        return .2126*linear[0]+.7152*linear[1]+.0722*linear[2];
+      };
+      let glyphPixels=0,unstablePixels=0,alphaPixels=0,minRatio=Infinity;
+      let minPixel=null,gradientMin=Infinity,gradientMax=-Infinity;
+      const fgAlpha=foreground[3]/255;
+      for(let y=t;y<b;y++)for(let x=l;x<r;x++){
+        const index=(y*original.width+x)*4;
+        const originalPixel=original.pixels,backgroundPixel=masked.pixels,
+          restoredPixel=again.pixels;
+        const instability=Math.max(...[0,1,2].map(channel=>
+          Math.abs(originalPixel[index+channel]-restoredPixel[index+channel])));
+        if(instability>5)unstablePixels++;
+        const glyphDelta=Math.max(...[0,1,2].map(channel=>
+          Math.abs(originalPixel[index+channel]-backgroundPixel[index+channel])));
+        if(glyphDelta<10)continue;
+        glyphPixels++;
+        if(originalPixel[index+3]<254||backgroundPixel[index+3]<254||
+          restoredPixel[index+3]<254){alphaPixels++;continue;}
+        const backdrop=[...backgroundPixel.slice(index,index+3)];
+        const composite=backdrop.map((value,channel)=>
+          foreground[channel]*fgAlpha+value*(1-fgAlpha));
+        const bgL=luminance(backdrop),fgL=luminance(composite);
+        const ratio=(Math.max(bgL,fgL)+.05)/(Math.min(bgL,fgL)+.05);
+        if(ratio<minRatio){minRatio=ratio;minPixel={x,y,background:backdrop};}
+        gradientMin=Math.min(gradientMin,bgL);
+        gradientMax=Math.max(gradientMax,bgL);
+      }
+      if(unstablePixels>2)return {ratio:null,reason:'screenshot changed after removing text mask',
+        glyphPixels,unstablePixels};
+      if(alphaPixels)return {ratio:null,reason:'transparent screenshot pixels prevent reliable compositing',
+        glyphPixels,alphaPixels};
+      if(glyphPixels<8||!Number.isFinite(minRatio))return {ratio:null,
+        reason:'too few changed glyph pixels to support contrast measurement',glyphPixels};
+      return {ratio:minRatio,method:'rendered-glyph-pixels',glyphPixels,
+        minPixel,backgroundLuminanceRange:[gradientMin,gradientMax],
+        screenshotRestored:true,foreground};
+    },{before:before.toString('base64'),background:background.toString('base64'),
+      restored:restored.toString('base64'),meta});
+    return measured;
+  }catch(error){
+    return {ratio:null,method:'rendered-glyph-pixels',reason:String(error.message||error).slice(0,220)};
+  }finally{
+    if(maskApplied)await page.evaluate(()=>
+      document.getElementById('uxqa-text-only-mask')?.remove()).catch(()=>{});
+  }
+}
+
+async function resolveRenderedContrast(page,samples){
+  if(!Array.isArray(samples))return [];
+  const results=[];
+  for(const sample of samples){
+    if(Number.isFinite(sample.ratio)){
+      results.push({...sample,method:'opaque-css-background'});
+      continue;
+    }
+    const measured=await measureRenderedContrast(page,sample.uid);
+    results.push({...sample,...measured});
+  }
+  return results;
 }
 
 async function axeScan(page){
@@ -287,11 +512,14 @@ async function main(){
       add('UX-02',axeResult.status,axeResult.reason,{scope:stageScope,
         severe:axeResult.severe,incomplete:axeResult.incomplete});
       const colorViolations=scan.violations.filter(v=>v.id==='color-contrast');
-      const contrast=assessContrast(metrics.labels);
+      const renderedLabels=await resolveRenderedContrast(page,metrics.labels);
+      const contrast=assessContrast(renderedLabels);
       add('UX-01',colorViolations.length?'FAIL':contrast.status,
         colorViolations.length?'axe-core found text color contrast violations':contrast.reason,
-        {scope:stageScope,colorViolations,unresolved:contrast.unresolved?.slice(0,8),
-          failures:contrast.failures?.slice(0,8)});
+        {scope:stageScope,colorViolations,measuredSamples:renderedLabels.length,
+          rasterSamples:renderedLabels.filter(item=>item.method==='rendered-glyph-pixels').length,
+          unresolved:contrast.unresolved,failures:contrast.failures,
+          rendered:renderedLabels});
       const touch=assessTouch(metrics.targets);
       add('UX-06',touch.status,touch.reason,{scope:stageScope,count:touch.measured,
         failures:touch.failures?.slice(0,12)});
@@ -389,6 +617,7 @@ async function main(){
         const {page,errors}=session;
         const overview=await page.evaluate(pageMetrics);
         const overviewAxe=await axeScan(page);
+        const overviewContrast=await resolveRenderedContrast(page,overview.labels);
         // Advanced Ribbon remains available on desktop; compact mobile
         // deliberately retains More instead of rendering a second wide row.
         await page.locator('.sac-nav-mode').getByRole('button',{name:'پیشرفته'}).click();
@@ -402,6 +631,7 @@ async function main(){
         await openInvoice(page);
         const composer=await page.evaluate(pageMetrics);
         const composerAxe=await axeScan(page);
+        const composerContrast=await resolveRenderedContrast(page,composer.labels);
         const scrollInfo=await page.evaluate(()=>{
           const body=document.querySelector('.sac-body');
           const before=body?.scrollTop||0;
@@ -420,6 +650,7 @@ async function main(){
         await page.waitForTimeout(80);
         const composerAfterScroll=await page.evaluate(pageMetrics);
         const entry={scope,overview,composer,composerMidScroll,composerAfterScroll,scrollInfo,
+          contrast:{overview:overviewContrast,composer:composerContrast},
           axe:{overview:overviewAxe,composer:composerAxe},errors};
         report.matrix.push(entry);
         for(const [screen,measured,scan] of [['overview',overview,overviewAxe],['composer',composer,composerAxe]]){
@@ -438,9 +669,10 @@ async function main(){
           add('UX-06',touch.status,touch.reason,{scope:sample,
             count:touch.measured,failures:touch.failures?.slice(0,16)});
         }
-        const contrast=assessContrast([...overview.labels,...composer.labels]);
+        const contrast=assessContrast([...overviewContrast,...composerContrast]);
         add('UX-01',contrast.status,contrast.reason,{scope,samples:contrast.sampleCount,
-          failures:contrast.failures?.slice(0,16),unresolved:contrast.unresolved?.slice(0,16)});
+          rendered:overviewContrast.concat(composerContrast),
+          failures:contrast.failures,unresolved:contrast.unresolved});
         if(composer.invoiceForm&&composer.saveVisibleInViewport&&
           composerMidScroll.saveVisibleInViewport&&composerAfterScroll.saveVisibleInViewport&&
           composer.composerActionCount>=1)
@@ -474,6 +706,8 @@ async function main(){
           add('UX-05','FAIL','Guided wizard navigation or state preservation failed',
             {scope:scope+'/wizard',error:errorText(error)});
           add('UX-09','FAIL','Guided wizard navigation or review warning failed',
+            {scope:scope+'/wizard',error:errorText(error)});
+          add('UX-01','BLOCKED','Guided invoice stages not completely contrast-audited',
             {scope:scope+'/wizard',error:errorText(error)});
           add('UX-02','BLOCKED','Guided wizard step scans stopped before all four stages',
             {scope:scope+'/wizard',error:errorText(error)});
@@ -690,6 +924,16 @@ async function main(){
         add('UX-08','BLOCKED','Restricted role search/navigation scenario failed: '+errorText(error),{role});
       }finally{await restricted.context.close();}
     }
+    // Subset runs are useful for diagnosis, never evidence of full 8-scope
+    // acceptance. Explicitly report every missing viewport/theme as blocked.
+    const seen=new Set(report.matrix.map(entry=>entry.scope));
+    for(const theme of ['dark','light'])for(const width of [390,560,768,1440]){
+      const scope=theme+'/'+width;
+      if(seen.has(scope))continue;
+      for(const id of ['UX-01','UX-02','UX-06'])
+        add(id,'BLOCKED','Viewport/theme intentionally not measured in this run',
+          {scope,requestedWidths:widths,requestedThemes:themes});
+    }
     report.limitations.push('Synthetic JS capability flags test UI only; server ACL, host persistence, and real user-role data filtering were not exercised.');
     report.limitations.push('axe incomplete and calculated foreground/background ambiguity require human review; no claim of full WCAG compliance.');
   }finally{
@@ -698,10 +942,12 @@ async function main(){
   }
 }
 
-(async()=>{
+if(require.main===module)(async()=>{
   try{await main();}
   catch(error){report.errors.push({scope:'harness',error:errorText(error)});
     for(const id of ['UX-01','UX-02','UX-03','UX-04','UX-05','UX-06','UX-07','UX-08','UX-09','UX-10'])
       add(id,'BLOCKED','Harness could not fully execute: '+errorText(error));}
   finally{save();if(report.summary.overall!=='PASS')process.exitCode=1;}
 })();
+
+module.exports={measureRenderedContrast,resolveRenderedContrast,pageMetrics};
