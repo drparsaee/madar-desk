@@ -47,39 +47,68 @@ class LanLoginResourceLimits(unittest.TestCase):
         port = self.service.start()
         self.addCleanup(self.service.stop)
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        body = json.dumps({"username": "synthetic-owner",
-                           "password": "x" * 70000}).encode()
         try:
             with patch("lan.verify_password", return_value=False) as verify:
-                conn.request("POST", "/api/login", body=body,
-                             headers={"Content-Type": "application/json"})
+                # Test the *declared* length limit without sending a body the
+                # server must reject before it reads. Unread bytes can trigger
+                # Winsock 10053 when the handler closes the socket.
+                conn.putrequest("POST", "/api/login")
+                conn.putheader("Content-Type", "application/json")
+                conn.putheader("Content-Length", "70000")
+                conn.endheaders()
                 response = conn.getresponse()
                 status = response.status
-                json.loads(response.read())
+                result = json.loads(response.read())
                 verify.assert_not_called()
         finally:
             conn.close()
         self.assertEqual(status, 413)
+        self.assertIn("error", result)
         self.assertFalse(self.service.sessions)
 
     def test_unauthenticated_nonlogin_post_is_rejected_before_json_parse(self):
         port = self.service.start()
         self.addCleanup(self.service.stop)
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        # The body is deliberately malformed and larger than the login budget.
-        # Authorization must fail before a non-login endpoint parses it.
-        body = b"{" + b"x" * 70000
+        # Declare an oversized JSON request but do not transmit body bytes:
+        # a 403 must arrive before the handler reads/parses any JSON.
+        # The old 70 KB unread body intermittently caused Windows TCP aborts.
+        # Sending no body also makes a regression in auth-before-read fail
+        # (the client times out waiting), rather than silently succeeding.
         try:
-            conn.request("POST", "/api/state", body=body,
-                         headers={"Content-Type": "application/json",
-                                  "Authorization": "Bearer invalid-synthetic-token"})
+            conn.putrequest("POST", "/api/state")
+            conn.putheader("Content-Type", "application/json")
+            conn.putheader("Content-Length", "70001")
+            conn.putheader("Authorization", "Bearer invalid-synthetic-token")
+            conn.endheaders()
             response = conn.getresponse()
             status = response.status
-            response.read()
+            result = json.loads(response.read())
         finally:
             conn.close()
         self.assertEqual(status, 403)
+        self.assertEqual(result, {"error": "جلسه ورود معتبر نیست. دوباره وارد شوید."})
         self.assertFalse(self.service.sessions)
+
+    def test_authenticated_malformed_json_is_rejected_after_bounded_read(self):
+        token = self.service.authenticate(
+            "synthetic-owner", "synthetic-password-2026")["token"]
+        port = self.service.start()
+        self.addCleanup(self.service.stop)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            # The complete one-byte body is read; no residual request bytes
+            # can race the 400 JSON response on Windows.
+            conn.request("POST", "/api/state", body=b"{",
+                         headers={"Content-Type": "application/json",
+                                  "Authorization": "Bearer " + token})
+            response = conn.getresponse()
+            status = response.status
+            result = json.loads(response.read())
+        finally:
+            conn.close()
+        self.assertEqual(status, 400)
+        self.assertIn("error", result)
 
     def test_authenticated_post_still_decodes_json_and_applies_profile(self):
         token = self.service.authenticate("synthetic-owner", "synthetic-password-2026")["token"]

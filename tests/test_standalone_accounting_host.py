@@ -339,14 +339,29 @@ class StandaloneLanTests(unittest.TestCase):
                               token=self.tokens["admin"],
                               data={"command": {}, "expectedRevision": True})
         self.assertEqual(status, 400)
+        # A completely transmitted invalid JSON body must still be rejected
+        # after successful authorization and body parsing.
+        invalid_json = Request(
+            f"http://127.0.0.1:{self.service.port}/api/standalone-accounting",
+            data=b"{", method="POST",
+            headers={"Authorization": "Bearer " + self.tokens["admin"],
+                     "Content-Type": "application/json"})
+        with self.assertRaises(HTTPError) as rejected:
+            urlopen(invalid_json, timeout=4)
+        self.assertEqual(rejected.exception.code, 400)
+        self.assertIn("error", json.loads(rejected.exception.read()))
         self.assertEqual(FakeStandaloneStore.instances, [])
 
     def test_http_unauthenticated_post_rejects_even_malformed_payload(self):
         self.service.start()
         self.addCleanup(self.service.stop)
-        status, _ = self.http("/api/standalone-accounting", method="POST",
-                              data={"command": {}, "expectedRevision": True})
+        # POST with no body is invalid JSON and must be denied on missing
+        # authorization before body validation. Avoid a nonempty unread body:
+        # early 403 plus server-side close may surface as WinError 10053.
+        status, result = self.http("/api/standalone-accounting", method="POST",
+                                   data=None)
         self.assertEqual(status, 403)
+        self.assertEqual(result, {"error": "جلسه ورود معتبر نیست. دوباره وارد شوید."})
         self.assertEqual(FakeStandaloneStore.instances, [])
 
     def test_http_get_and_post_do_not_touch_tasks_or_finance(self):
