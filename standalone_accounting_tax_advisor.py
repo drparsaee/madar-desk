@@ -49,11 +49,21 @@ def preflight_einvoice(invoice:dict[str,Any],company:dict[str,Any],*,
                 continue
             check(line.get('productServiceId'),f'lines.{i}.productServiceId',
                   'شناسه کالا/خدمت برای نگاشت سامانه مؤدیان مشخص نیست')
-            for amount_key in ('quantity','unitPrice'):
+            amounts={}
+            # The accounting domain stores whole-unit quantities and rial
+            # amounts as bounded integers. Floats (including NaN/Infinity)
+            # are never an exact or portable representation of these values.
+            for amount_key, cap in (('quantity',1_000_000),('unitPrice',10**15)):
                 value=line.get(amount_key)
-                if isinstance(value,bool) or not isinstance(value,(int,float)) or value<=0:
+                if type(value) is not int or not 0<value<=cap:
                     issues.append({'severity':'blocker','field':f'lines.{i}.{amount_key}',
-                                   'message':'مقدار مثبت و معتبر لازم است'})
+                                   'message':'مقدار صحیح مثبت در محدوده مجاز لازم است'})
+                else:
+                    amounts[amount_key]=value
+            if (len(amounts)==2 and
+                    amounts['quantity']*amounts['unitPrice']>10**15):
+                issues.append({'severity':'blocker','field':f'lines.{i}.lineTotal',
+                               'message':'مبلغ ردیف از محدوده مجاز بیشتر است'})
     kind=invoice.get('kind','original')
     if kind not in ('original','amendment','cancellation','return'):
         issues.append({'severity':'blocker','field':'invoice.kind','message':'نوع سند ناشناخته است'})

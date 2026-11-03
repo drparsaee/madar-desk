@@ -7,7 +7,7 @@ entire returned state. No IO, database, filesystem, or implicit tax rules.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import re
@@ -385,7 +385,7 @@ def _proforma_transition(p, command, now):
     elif kind == "proforma.accept":
         if status != "sent":
             raise ValueError("Only a sent proforma may be accepted")
-        if record["validUntil"] is not None and now[:10] > record["validUntil"]:
+        if record["validUntil"] is not None and _company_today(p, now) > record["validUntil"]:
             raise ValueError("Expired proforma cannot be accepted")
         record["status"] = "accepted"
     elif kind == "proforma.reject":
@@ -405,7 +405,7 @@ def _proforma_transition(p, command, now):
         invoice_date = _date(command["documentDate"])
         if invoice_date < record["documentDate"]:
             raise ValueError("Invoice cannot predate its proforma")
-        if invoice_date > now[:10]:
+        if invoice_date > _company_today(p, now):
             raise ValueError("Cannot convert proforma into a future-dated invoice")
         invoice_command = {"type": "invoice.create", "eventId": command["eventId"],
                            "invoiceId": invoice_id, "partyId": record["partyId"],
@@ -518,11 +518,26 @@ def _contractor_bill(p, command):
 
 def _posting_date(p, posting_date, now):
     day = _date(posting_date)
-    if day > now[:10]:
+    if day > _company_today(p, now):
         raise ValueError("Posting in future is refused")
     if p["closedThrough"] is not None and day <= p["closedThrough"]:
         raise ValueError("Posting in closed period is refused")
     return day
+
+
+def _company_today(p, now):
+    """Ledger's explicit fixed UTC offset; absent on all historical ledgers.
+
+    Never infer the company offset from the host OS or browser locale. A
+    fixed offset is suitable only for businesses that have deliberately
+    configured it; seasonal timezone changes require a separate policy.
+    """
+    profile = p.get("companyProfile") or {}
+    offset = profile.get("postingUtcOffsetMinutes")
+    if offset is None:
+        return now[:10]  # Historical UTC/host-time behavior remains replayable.
+    instant = datetime.fromisoformat(now.replace("Z", "+00:00"))
+    return instant.astimezone(timezone(timedelta(minutes=offset))).date().isoformat()
 
 
 def _line(account_id, *, debit=0, credit=0, party_id=None):
@@ -901,7 +916,8 @@ def _run(p, command, role, now, *, finance_edit=False):
         return {"accountId": account_id}
     if kind == "company.profile.set":
         _object(command, ("type", "eventId", "legalName", "address", "phone",
-                          "nationalId", "economicCode", "postalCode", "reason"))
+                          "nationalId", "economicCode", "postalCode", "reason"),
+                ("postingUtcOffsetMinutes", "postingCalendarMode"))
         reason = _text(command["reason"], "company edit reason", limit=1000)
         details = {"legalName": _text(command["legalName"], "legal name", limit=300)}
         for field, cap in (("address", 1000), ("phone", 40),
@@ -911,6 +927,21 @@ def _run(p, command, role, now, *, finance_edit=False):
             if type(val) is not str or len(val)>cap or any(ord(ch)<32 or ord(ch)==127 for ch in val):
                 raise ValueError("Invalid company profile " + field)
             details[field] = val.strip()
+        # Opt-in company calendar rule. Existing event chains (and profiles
+        # without this value) retain their original UTC-boundary behavior.
+        if "postingUtcOffsetMinutes" in command:
+            if command.get("postingCalendarMode") != "fixed-offset-no-dst":
+                raise ValueError("Company calendar requires explicit fixed-offset no-DST policy")
+            minutes = command["postingUtcOffsetMinutes"]
+            if type(minutes) is not int or not -720 <= minutes <= 840 or minutes % 15:
+                raise ValueError("Company posting UTC offset must be quarter-hour minutes")
+            details["postingUtcOffsetMinutes"] = minutes
+            details["postingCalendarMode"] = "fixed-offset-no-dst"
+        elif "postingCalendarMode" in command:
+            raise ValueError("Company calendar policy requires a fixed UTC offset")
+        elif p["companyProfile"] and "postingUtcOffsetMinutes" in p["companyProfile"]:
+            details["postingUtcOffsetMinutes"] = p["companyProfile"]["postingUtcOffsetMinutes"]
+            details["postingCalendarMode"] = p["companyProfile"]["postingCalendarMode"]
         history = deepcopy(p["companyProfile"].get("history", [])) if p["companyProfile"] else []
         if p["companyProfile"] and all(p["companyProfile"][k] == details[k]
                                        for k in details):
@@ -1057,7 +1088,7 @@ def _run(p, command, role, now, *, finance_edit=False):
         reason = _text(command["reason"], "correction reason", limit=1000)
         replacement_day = _date(command["documentDate"])
         reversal_day = _date(command["postingDate"])
-        if replacement_day < old["documentDate"] or replacement_day > now[:10]:
+        if replacement_day < old["documentDate"] or replacement_day > _company_today(p, now):
             raise ValueError("Replacement date must be between original date and today")
         if replacement_day > reversal_day:
             raise ValueError("Replacement draft cannot postdate correction")
@@ -1262,7 +1293,8 @@ def _run(p, command, role, now, *, finance_edit=False):
         try:
             return apply_extended(p, command, now, helpers={
                 "object": _object, "id": _id, "text": _text, "int": _int,
-                "date": _date, "posting_date": _posting_date, "account": _account,
+                "date": _date, "posting_date": _posting_date,
+                "company_today": _company_today, "account": _account,
                 "party": _party, "post": _post, "line": _line,
                 "settle": _settle, "add": _add, "max": MAX_TOMAN,
             })
@@ -1272,7 +1304,7 @@ def _run(p, command, role, now, *, finance_edit=False):
     if kind == "period.close":
         _object(command, ("type", "eventId", "throughDate"))
         day = _date(command["throughDate"])
-        if day > now[:10] or (p["closedThrough"] is not None and day <= p["closedThrough"]):
+        if day > _company_today(p, now) or (p["closedThrough"] is not None and day <= p["closedThrough"]):
             raise ValueError("Invalid period close boundary")
         p["closedThrough"] = day
         return {"closedThrough": day}

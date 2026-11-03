@@ -573,7 +573,7 @@ def apply_extended(p, c, now, *, helpers):
         object_(c, ("type", "eventId", "throughDate", "reason"),
                 ("startDate", "periodId"))
         close_day = date_(c["throughDate"])
-        if close_day > now[:10] or (p["closedThrough"] and close_day <= p["closedThrough"]):
+        if close_day > h["company_today"](p, now) or (p["closedThrough"] and close_day <= p["closedThrough"]):
             raise ValueError("Invalid or already closed fiscal year")
         if "startDate" in c:
             start = date_(c["startDate"])
@@ -645,7 +645,7 @@ def apply_extended(p, c, now, *, helpers):
             if held >= gross:
                 raise ValueError("Withholding cannot consume all gross payroll")
             _required_reason(h, c)
-            day = posting(p, now[:10], now)
+            day = posting(p, h["company_today"](p, now), now)
             lines = [line("5400", debit=gross),
                      line("2300", credit=gross-held)]
             if held:

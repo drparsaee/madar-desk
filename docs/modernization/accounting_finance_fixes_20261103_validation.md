@@ -1,0 +1,13 @@
+# Accounting finance fixes: validation and release gate
+
+## Baseline and focused checks
+
+- Baseline from `5f1c2a9225f6cdbf31b003ca7034b93c9ae2fd89` (unchanged source), `python -m unittest tests.test_accounting_reporting tests.test_accounting_extended_operations tests.test_standalone_accounting_tax_advisor`: **19 tests OK**.
+- Before the final explicit no-DST gate, the narrow targeted group produced **31 tests OK**. After adding the no-DST gate, a focused run produced **32 tests OK**; after adding the administrator-access test the final adjacent suite below was run. Coverage includes changed P&L on fiscal close, after-close reconciliation, cross-year periods, both UTC/local instant representations, negative timezone offsets, replay and invalid offset rejection, unsupported DST policy rejection, NaN/Infinity/float/type/overflow preflight, missing vs posted/reversed COGS and explicit taxed/discounted receipt alert.
+- Final adjacent finance modules: `python -m unittest tests.test_accounting_core tests.test_accounting_partial_returns tests.test_accounting_reporting tests.test_accounting_extended_operations tests.test_accounting_company_posting_offset tests.test_standalone_accounting_tax_advisor tests.test_standalone_financial_report_host tests.test_standalone_finance_acl_comprehensive tests.test_standalone_accounting_authorization_contract` → **99 tests, OK (expected failures=2)**.
+- Disposable app-data environment: `APPDATA` and `LOCALAPPDATA` directed to `madar-worker10-...` under user TEMP for discovery suites. `python -m unittest discover -s tests -p 'test_accounting*.py'` → **130 tests OK**. `python -m unittest discover -s tests -p 'test_standalone_accounting*.py'` → **191 tests OK (expected failures=2)**. Some tests intentionally log backup rejection/failure scenarios; the runner exit code was 0. Suite counts overlap, so they are not summed into a unique-test total.
+- `git diff --check`: exit 0 after substantive source patches.
+
+## Remaining checks and acceptance
+
+This worker does **not** claim GUI/installer/LAN two-device acceptance, Iranian tax compliance, historic inventory completion, a validated recoverable input-tax policy or live data migration. The integration agent must consume the new `stockCostControl` warnings in a visible user-facing surface, align frontend `standaloneToday()` and document defaults with the explicit company fixed-offset policy, warn that DST/IANA zones are unsupported, expose administrator company offset controls safely and run merged regression before using the term *released*. FIN-02 (tax/discount warehouse valuation) and FIN-05 (input tax recoverability) remain blocked by approved-accounting-policy prerequisites; no amounts were inferred.
