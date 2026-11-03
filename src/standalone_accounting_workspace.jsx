@@ -22,6 +22,7 @@ import {buildAccountingStructuredExport} from './accounting_structured_invoice_e
 import {formatAccountingJalali,parseAccountingJalali,displayAccountingDate} from './accounting_jalali_dates.js';
 import AccountingJalaliField from './accounting_jalali_field.jsx';
 import AccountingManagementDashboard from './accounting_management_dashboard.jsx';
+import AccountingActionHome from './accounting_action_home.jsx';
 import {accountingPeriodRows} from './accounting_period_report.js';
 import {LiveCheques,LiveInventory,BankReconciliation,
   InstalmentPlans,PayrollAndTax,FiscalYearClose,
@@ -102,7 +103,7 @@ export function accountingSettlementCsv(entries,parties={},accounts={},unit='ر�
 }
 
 export function AccountingVitreaHome({view,currency,today,canDraft,canSettle=false,
-  disabled,onNavigate,onNewInvoice}){
+  disabled,onNavigate,onNewInvoice,preferenceKey=''}){
   const [filter,setFilter]=useState('all');
   const overview=useMemo(()=>accountingSettlementOverview(view,today),[view,today]);
   const parties=view.parties||{},accounts=view.accounts||{};
@@ -125,6 +126,9 @@ export function AccountingVitreaHome({view,currency,today,canDraft,canSettle=fal
   });
   const periodTitle=`${overview.earliest} تا ${overview.latest} (ماه میلادی)`;
   return <div className="sac-vtr-home" aria-label="نمای دریافت و پرداخت حسابداری">
+    <AccountingActionHome view={view} today={today} canDraft={canDraft}
+      canSettle={canSettle} disabled={disabled} preferenceKey={preferenceKey}
+      onNavigate={onNavigate} onNewInvoice={onNewInvoice}/>
     <header className="sac-vtr-hero">
       <div className="sac-vtr-heading"><span className="sac-vtr-eyebrow">MADAR / FINANCIAL FLOWS</span>
         <h2>دریافت‌ها و پرداخت‌ها</h2><p>گردش ثبت‌شدهٔ دفتر جاری، بدون محاسبهٔ تسویهٔ بانکی تأییدنشده</p></div>
@@ -1408,6 +1412,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           {tab==='overview'&&<>
             <AccountingVitreaHome view={view} currency={ledgerCurrency} today={today}
               canDraft={canManage||canDraft} canSettle={canManage} disabled={busy||pendingRetry}
+              preferenceKey={snapshot?.currentUser?.username&&view?.companyWorkspaceLabel?
+                snapshot.currentUser.username+'|'+view.companyWorkspaceLabel:''}
               onNavigate={gotoTab} onNewInvoice={openQuickInvoice}/>
             <details className="sac-vtr-management-details"><summary>گزارش‌های تحلیلی و یادآورهای مدیریتی</summary>
               <AccountingManagementDashboard view={view} currency={ledgerCurrency}
