@@ -50,8 +50,8 @@ class Cumulative112SourceContract(unittest.TestCase):
         from madar_update import CURRENT_VERSION
         self.assertEqual((package["version"],lock["version"],
                           lock["packages"][""]["version"],CURRENT_VERSION),
-                         ("1.0.12",)*4)
-        self.assertIn("build_integrated_v112.py",package["scripts"]["dist:rc"])
+                         ("1.0.13",)*4)
+        self.assertIn("build_integrated_v113.py",package["scripts"]["dist:rc"])
         source = (SCRIPTS / "madar-update.iss").read_text(encoding="utf8")
         self.assertIn('DestDir: "{app}\\versions\\{#MadarVersion}"',source)
         self.assertIn("Madar-Upgrade-Preflight.ps1",source)

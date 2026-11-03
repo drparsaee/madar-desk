@@ -140,8 +140,8 @@ class Cumulative110SourceContract(unittest.TestCase):
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual((package["version"], lock["version"],
                           lock["packages"][""]["version"], madar_update.CURRENT_VERSION),
-                         ("1.0.12",) * 4)
-        self.assertIn("scripts/build_integrated_v112.py", package["scripts"]["dist:rc"])
+                         ("1.0.13",) * 4)
+        self.assertIn("scripts/build_integrated_v113.py", package["scripts"]["dist:rc"])
         self.assertEqual(package["scripts"]["dist"], "npm run dist:rc")
         self.assertTrue(BUILD_110.is_file())
 
