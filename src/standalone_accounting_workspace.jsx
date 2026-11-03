@@ -21,6 +21,7 @@ import {DEFAULT_PRINT_TEMPLATE,validatePrintTemplate,buildCustomPrintExport}
 import {buildAccountingStructuredExport} from './accounting_structured_invoice_export.js';
 import {formatAccountingJalali,parseAccountingJalali,displayAccountingDate} from './accounting_jalali_dates.js';
 import AccountingJalaliField from './accounting_jalali_field.jsx';
+import {InvoiceWizardNavigation,INVOICE_WIZARD_STEPS} from './accounting_invoice_wizard.jsx';
 import AccountingManagementDashboard from './accounting_management_dashboard.jsx';
 import {accountingPeriodRows} from './accounting_period_report.js';
 import {LiveCheques,LiveInventory,BankReconciliation,
@@ -340,6 +341,41 @@ export function buildStandaloneInvoiceCommand({kind,documentId,partyId,documentD
     ...(note.trim()?{note:note.trim()}:{})}};
 }
 
+/** Inline guidance only; final submission still goes through the authoritative
+ * buildStandaloneInvoiceCommand and the host's finance role and revision gates. */
+export function invoiceWizardIssues({document,rows,accounts={},items={},today,
+  kind='invoice',tax='0',correctionTarget='',correctionReason='',correctionDate=''}){
+  const issues=['','','','',''];
+  if(!validId(document?.documentId)||!validId(document?.partyId)||
+      !validStandaloneDate(document?.documentDate,today)){
+    issues[0]='شماره سند، مشتری و تاریخ معتبر را تکمیل کنید.';
+  }
+  if(correctionTarget&&(!validText(correctionReason,1000)||
+    !validStandaloneDate(correctionDate,today))){
+    issues[0]='تاریخ برگشت قطعی و علت اصلاح سند صادرشده الزامی و باید معتبر باشند.';
+  }
+  if(!Array.isArray(rows)||rows.length<1||rows.length>1000||
+    rows.some(row=>{
+      const qty=parse(row?.quantity),price=parse(row?.unitPrice,true);
+      const account=row?.accountId||(kind==='invoice'?'4000':'5000');
+      return !validText(row?.description)||qty===null||qty>1000000||
+        price===null||!validId(account)||
+        accounts[account]?.kind!==(kind==='invoice'?'revenue':'expense')||
+        (row?.itemId&&(!validId(row.itemId)||items[row.itemId]?.active!==true));
+    })){
+    issues[1]='شرح، تعداد، قیمت و سرفصل معتبر برای همه ردیف‌ها الزامی است.';
+  }
+  const total=previewAccountingTotal(rows,document?.discount,tax);
+  if(!total||total.total<=0)issues[2]='تخفیف، مالیات یا جمع اقلام معتبر نیست؛ مبلغ نهایی باید مثبت باشد.';
+  const due=document?.dueDate;
+  if((due&&(!validStandaloneDate(due,'9999-12-31')||due<document.documentDate))||
+    typeof document?.note!=='string'||document.note.length>1000||
+    /[\x00-\x1f\x7f]/.test(document.note)){
+    issues[3]='سررسید باید پس از تاریخ سند باشد؛ توضیحات را نیز بررسی کنید.';
+  }
+  return issues;
+}
+
 /** Sales quote only. No task/card/project ID and no posting command. */
 export function buildStandaloneProformaCommand({proformaId,partyId,documentDate,validUntil='',
   lines,discount='0',tax='0',note='',eventId,accounts={},items={},today=standaloneToday(),
@@ -513,6 +549,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   onSwitchCompany=null,onManageUsers=null,canDraft=canManage,canAdmin=canManage}){
   const [tab,setTab]=useState('overview');
   const [invoiceComposerOpen,setInvoiceComposerOpen]=useState(false);
+  const [invoiceWizardMode,setInvoiceWizardMode]=useState('guided');
+  const [invoiceWizardStep,setInvoiceWizardStep]=useState(0);
+  const [invoiceWizardChecked,setInvoiceWizardChecked]=useState({});
+  const [invoiceWizardError,setInvoiceWizardError]=useState('');
   const [invoiceListSearch,setInvoiceListSearch]=useState('');
   const [invoiceListStatus,setInvoiceListStatus]=useState('all');
   const [snapshot,setSnapshot]=useState(null);
@@ -721,6 +761,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       'اطلاعات واردشده در فاکتور هنوز ذخیره نشده است. بدون ذخیره به فهرست بازگردیم؟'))return false;
     setInvoiceComposerOpen(false);setEditTarget('');setCorrectionTarget('');
     setCorrectionReason('');setPartyQuery('');setRows([makeLine()]);reset('document');
+    setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     return true;
   };
   const gotoTab=name=>{
@@ -745,6 +786,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     setRows([makeLine()]);setEditTarget('');setCorrectionTarget('');
     setPartyQuery('');
     setCorrectionReason('');setInvoiceComposerOpen(true);setTab('invoice');
+    setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
   };
   useEffect(()=>{
     if(tab!=='invoice'||!invoiceComposerOpen)return;
@@ -959,8 +1001,61 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const manualUpdate=(idx,key,val)=>setManualRows(p=>p.map((l,i)=>i===idx?{...l,[key]:val}:l));
   const blocked=!canManage||busy||pendingRetry;
   const draftBlocked=(!canManage&&!canDraft)||busy||pendingRetry;
+  const wizardEnabled=tab==='invoice'&&invoiceComposerOpen&&invoiceWizardMode==='guided';
+  const wizardIssues=invoiceWizardIssues({document:forms.document,rows,
+    accounts,items,today,kind:docKind,tax:documentTax,
+    correctionTarget,correctionReason,correctionDate});
+  const showWizardStep=(index,{keepError=false}={})=>{
+    setInvoiceWizardStep(index);if(!keepError)setInvoiceWizardError('');
+    window.requestAnimationFrame(()=>{
+      document.querySelector('.sac-body')?.scrollTo({top:0,behavior:'instant'});
+      document.getElementById('sac-wizard-panel-'+INVOICE_WIZARD_STEPS[index].id)
+        ?.querySelector('input:not([type=hidden]),select,textarea,button')?.focus();
+    });
+  };
+  const goWizardStep=index=>{
+    if(busy||pendingRetry||index<0||index>=INVOICE_WIZARD_STEPS.length)return;
+    if(index>invoiceWizardStep){
+      const checked={...invoiceWizardChecked};
+      for(let i=0;i<index;i++){
+        checked[i]=true;
+        if(wizardIssues[i]){
+          setInvoiceWizardChecked(checked);setInvoiceWizardError(wizardIssues[i]);
+          showWizardStep(i,{keepError:true});return;
+        }
+      }
+      setInvoiceWizardChecked(checked);
+    }
+    showWizardStep(index);
+  };
+  const validateInvoiceSubmission=()=>{
+    if(wizardEnabled){
+      setInvoiceWizardChecked({0:true,1:true,2:true,3:true});
+      const index=wizardIssues.findIndex(Boolean);
+      if(index!==-1){
+        setInvoiceWizardError(wizardIssues[index]);showWizardStep(index,{keepError:true});
+        return false;
+      }
+    }
+    const preflight=buildStandaloneInvoiceCommand({
+      kind:docKind,...forms.document,tax:documentTax,
+      documentId:editTarget||forms.document.documentId,lines:rows,
+      eventId:'UX-INVOICE-PREFLIGHT',accounts,items,today,
+    });
+    if(preflight.error){
+      setInvoiceWizardError(preflight.error);
+      if(wizardEnabled)showWizardStep(4,{keepError:true});
+      return false;
+    }
+    if(correctionTarget&&!window.confirm(
+      'این اصلاحیه سند قطعی قبلی را برگشت می‌دهد و پیش‌نویس جایگزین می‌سازد. '+
+      'پس از ثبت، سند اصلی قابل ویرایش مستقیم نیست. ادامه می‌دهید؟'))return false;
+    setInvoiceWizardError('');
+    return true;
+  };
   const startEditingDocument=d=>{
     setInvoiceComposerOpen(true);
+    setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     setEditTarget(d.id);
     setCorrectionTarget('');
     setForms(p=>({...p,document:{
@@ -973,6 +1068,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   };
   const startCorrectingDocument=d=>{
     setInvoiceComposerOpen(true);
+    setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     const prefix=(docKind==='invoice'?'INV':'BILL')+'-COR';
     const year=formatAccountingJalali(today,{digits:'ascii'}).slice(0,4);
     const newNumber=nextAccountingNumber(currentDocs,prefix,year);
@@ -1096,7 +1192,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   };
 
   return <div dir="rtl" className={'sac-root'+(tab==='invoice'?' sac-invoice-work-mode':
-    tab==='overview'?' sac-overview-work-mode sac-vtr-overview':'')}
+    tab==='overview'?' sac-overview-work-mode sac-vtr-overview':'')+
+    (wizardEnabled?' sac-invoice-wizard-guided':'')}
     aria-label="حسابداری مستقل مدار">
     <AccountingTopRibbon tab={tab} sections={SECTIONS}
       onNavigate={gotoTab} onNewInvoice={openQuickInvoice}
@@ -1510,7 +1607,14 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   <td>{d.status==='issued'?(docKind==='invoice'?
                     debitText(d.total-d.allocated-(d.returnedAmount||0)):
                     creditText(d.total-d.allocated-(d.returnedAmount||0))):'—'}</td>
-                  <td><span className={'sac-pill '+d.status}>{STATES[d.status]||d.status}</span></td>
+                  <td><span className={'sac-pill '+d.status}>{STATES[d.status]||d.status}</span>
+                    <small className="sac-invoice-next-action">{d.status==='draft'?
+                      'گام بعدی: بازبینی و تأیید؛ بدون ثبت دفترکل':
+                      d.status==='approved'?'گام بعدی: صدور قطعی و ثبت دفترکل':
+                      d.status==='issued'?(d.total>d.allocated+(d.returnedAmount||0)?
+                        'سند قطعی؛ گام بعدی: تسویه و کنترل انبار':
+                        'تسویه‌شده؛ مشاهده و خروجی سند در دسترس است'):
+                      'وضعیت سند را در جزئیات بررسی کنید'}</small></td>
                   <td className="sac-actions">
                     <button type="button" onClick={()=>{
                       setDetailTarget(d.id);setReopenReason('');setTaxPreflight(null);
@@ -1520,13 +1624,28 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     {canManage&&d.status==='draft'&&!d.contractorJobIds&&<button type="button"
                       disabled={busy} onClick={()=>startEditingDocument(d)}>ویرایش پیش‌نویس</button>}
                     {canManage&&d.status==='draft'&&<button type="button" disabled={busy}
-                      onClick={()=>void execute(id=>({command:{type:docKind+'.approve',
-                        eventId:id,[docKind+'Id']:d.id}}),'سند تأیید شد؛ هنوز صادر نشده است.')}>تأیید</button>}
+                      onClick={()=>{
+                        if(!window.confirm('پیش‌نمایش تأیید: '+d.id+' به مبلغ '+moneyText(d.total)+
+                          ' تأیید می‌شود. هنوز سندی در دفترکل ثبت نخواهد شد. ادامه می‌دهید؟'))return;
+                        void execute(id=>({command:{type:docKind+'.approve',
+                          eventId:id,[docKind+'Id']:d.id}}),
+                          'سند تأیید شد؛ هنوز صادر نشده است.');
+                      }}>تأیید</button>}
                     {canManage&&d.status==='approved'&&<button type="button"
                       disabled={busy||!validPostingDate(issueDate)||issueDate<d.documentDate}
-                      onClick={()=>void execute(id=>({command:{type:docKind+'.issue',
-                        eventId:id,[docKind+'Id']:d.id,postingDate:issueDate}}),
-                        'سند صادر و در دفترکل ثبت شد.')}>صدور سند</button>}
+                      onClick={()=>{
+                        if(!window.confirm('پیش‌نمایش صدور قطعی: سند '+d.id+' به مبلغ '+
+                          moneyText(d.total)+' با تاریخ '+displayAccountingDate(issueDate)+
+                          ' در دفترکل ثبت می‌شود. کنترل خروج انبار و بهای تمام‌شده '+
+                          'به صورت جداگانه الزامی است. ادامه می‌دهید؟'))return;
+                        void execute(id=>({command:{type:docKind+'.issue',
+                          eventId:id,[docKind+'Id']:d.id,postingDate:issueDate}}),
+                          'سند صادر و در دفترکل ثبت شد.');
+                      }}>صدور سند</button>}
+                    {d.status==='approved'&&(!validPostingDate(issueDate)||issueDate<d.documentDate)&&
+                      <small className="sac-invoice-next-action" role="status">
+                        برای صدور، تاریخ معتبر را در «تنظیمات بیشتر چاپ و صدور» مشخص کنید.
+                      </small>}
                     {d.status==='issued'&&d.total>d.allocated+(d.returnedAmount||0)&&<button type="button" onClick={()=>{
                       setForms(p=>({...p,settlement:{...p.settlement,
                         kind:docKind==='invoice'?'receipt':'payment',documentId:d.id}}));
@@ -1772,7 +1891,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             {(canManage||canDraft)&&(tab==='bill'||invoiceComposerOpen)&&<Panel compact={tab==='invoice'} title={correctionTarget?'اصلاح فاکتور '+correctionTarget:
               editTarget?'ویرایش فاکتور '+editTarget:tab==='invoice'?'ثبت فاکتور جدید':'ثبت صورتحساب خرید'}
               description="۱. مشتری و تاریخ را مشخص کنید. ۲. شرح، تعداد و قیمت اقلام را بنویسید. ۳. پیش‌نویس را ذخیره کنید.">
-              <form className="sac-invoice-editor" onSubmit={submit(async()=>{
+              <form className="sac-invoice-editor" noValidate={wizardEnabled} onSubmit={submit(async()=>{
+                if(!validateInvoiceSubmission())return;
                 if(await execute(id=>{
                   const built=buildStandaloneInvoiceCommand({
                     kind:docKind,...forms.document,tax:documentTax,
@@ -1797,8 +1917,16 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     reset('document');setRows([makeLine()]);setEditTarget('');
                     setCorrectionTarget('');setCorrectionReason('');
                     if(tab==='invoice')setInvoiceComposerOpen(false);
+                    setInvoiceWizardStep(0);setInvoiceWizardChecked({});
                   }
               })}>
+                {tab==='invoice'&&<InvoiceWizardNavigation
+                  step={invoiceWizardStep} mode={invoiceWizardMode}
+                  onModeChange={mode=>{setInvoiceWizardMode(mode);setInvoiceWizardError('');}}
+                  onStepChange={goWizardStep} disabled={busy||pendingRetry}
+                  hasUnsavedChanges={hasUnsavedInvoice}/>}
+                {tab==='invoice'&&invoiceWizardError&&<p role="alert"
+                  className="sac-wizard-alert">{invoiceWizardError}</p>}
                 {tab==='invoice'&&<div className="sac-invoice-commandbar"
                   role="toolbar" aria-label="عملیات سریع فاکتور">
                   <div className="sac-invoice-commandbar-title">
@@ -1823,7 +1951,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     </button>
                   </div>
                 </div>}
-                <div className="sac-grid">
+                <div className="sac-grid sac-wizard-block" data-invoice-step="0"
+                  id="sac-wizard-panel-document"
+                  hidden={wizardEnabled&&invoiceWizardStep!==0}>
                   <Field label="شماره داخلی فاکتور">{editTarget?
                     <input readOnly dir="ltr" value={editTarget}/>:
                     idInput('document','documentId','INV-001')}</Field>
@@ -1842,14 +1972,13 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}
                       placeholder="دلیل اصلاح سند صادرشده"/></Field>
                   </>}
+                  {wizardEnabled&&invoiceWizardChecked[0]&&wizardIssues[0]&&
+                    <p className="sac-wizard-field-error" role="alert">{wizardIssues[0]}</p>}
                 </div>
-                <details className="sac-disclosure">
-                  <summary>جزئیات بیشتر: تخفیف، مالیات، سررسید و توضیحات</summary>
+                <section className="sac-wizard-block sac-wizard-tax" data-invoice-step="2"
+                  id="sac-wizard-panel-tax" hidden={wizardEnabled&&invoiceWizardStep!==2}>
+                  <h3 className="sac-wizard-section-title">تخفیف و مالیات</h3>
                   <div className="sac-grid">
-                  <Field label="سررسید پرداخت (اختیاری)"><AccountingJalaliField
-                    max="9999-12-31" required={false}
-                    value={forms.document.dueDate||''}
-                    onChange={dueDate=>f('document','dueDate',dueDate)}/></Field>
                   <Field label={`تخفیف (${unitLabel})`}>{amountInput('document','discount')}</Field>
                   <Field label="سیاست مالیاتی"><select value={forms.document.taxRuleId}
                     onChange={e=>f('document','taxRuleId',e.target.value)}>
@@ -1866,15 +1995,37 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       readOnly={!!forms.document.taxRuleId} value={documentTax}
                       onChange={e=>f('document','tax',e.target.value)}/>
                   </Field>
-                  <Field label="یادداشت (اختیاری)" wide><input maxLength={1000}
-                    value={forms.document.note} onChange={e=>f('document','note',e.target.value)}/></Field>
                   </div>
-                </details>
-                <div className="sac-subheading"><h3>جدول ثبت کالا و خدمات</h3><button type="button"
+                  <p className="sac-wizard-note">محاسبهٔ مبلغ در این مرحله صرفاً پیش‌نمایش است؛
+                    تا ذخیره و تأیید و صدور جداگانه انجام نشود، درآمدی ثبت نمی‌شود.</p>
+                  {wizardEnabled&&invoiceWizardChecked[2]&&wizardIssues[2]&&
+                    <p role="alert" className="sac-wizard-field-error">{wizardIssues[2]}</p>}
+                </section>
+                <section className="sac-wizard-block sac-wizard-due" data-invoice-step="3"
+                  id="sac-wizard-panel-due" hidden={wizardEnabled&&invoiceWizardStep!==3}>
+                  <h3 className="sac-wizard-section-title">پرداخت و سررسید</h3>
+                  <p className="sac-wizard-note">در این مرحله فقط زمان پرداخت را مشخص می‌کنید.
+                    ثبت واقعی دریافت وجه پس از صدور سند، از بخش دریافت و پرداخت انجام می‌شود.</p>
+                  <div className="sac-grid">
+                    <Field label="سررسید پرداخت (اختیاری)"><AccountingJalaliField
+                      max="9999-12-31" required={false}
+                      value={forms.document.dueDate||''}
+                      onChange={dueDate=>f('document','dueDate',dueDate)}/></Field>
+                    <Field label="یادداشت (اختیاری)" wide><input maxLength={1000}
+                      value={forms.document.note} onChange={e=>f('document','note',e.target.value)}/></Field>
+                  </div>
+                  {wizardEnabled&&invoiceWizardChecked[3]&&wizardIssues[3]&&
+                    <p role="alert" className="sac-wizard-field-error">{wizardIssues[3]}</p>}
+                </section>
+                <div className="sac-subheading" data-invoice-step="1"
+                  hidden={wizardEnabled&&invoiceWizardStep!==1}><h3>جدول ثبت کالا و خدمات</h3><button type="button"
                   onClick={()=>addInvoiceRow()}>
                   <Plus size={15}/> افزودن ردیف</button></div>
-                <p className="sac-invoice-shortcuts">شرح، تعداد و قیمت را بنویسید. برای رفتن به سلول بعدی Enter بزنید.</p>
-                <details className="sac-disclosure sac-invoice-extras">
+                <p className="sac-invoice-shortcuts" data-invoice-step="1"
+                  hidden={wizardEnabled&&invoiceWizardStep!==1}>
+                  شرح، تعداد و قیمت را بنویسید. برای رفتن به سلول بعدی Enter بزنید.</p>
+                <details className="sac-disclosure sac-invoice-extras" data-invoice-step="1"
+                  hidden={wizardEnabled&&invoiceWizardStep!==1}>
                   <summary>ابزارهای بیشتر: جست‌وجوی کالا، قالب‌های آماده و میانبرها</summary>
                   <p className="sac-invoice-shortcuts">Tab / Shift+Tab: حرکت بین سلول‌ها | Ctrl+Insert: سطر جدید | Alt+Shift+D: کپی سطر | Ctrl+Delete: حذف سطر</p>
                 <div className="sac-catalog-search">
@@ -1928,7 +2079,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                 </div>}
                 </details>
                 <div className="sac-invoice-canvas">
-                <div className="sac-invoice-lines">
+                <div className="sac-invoice-lines sac-wizard-block" data-invoice-step="1"
+                  id="sac-wizard-panel-lines" hidden={wizardEnabled&&invoiceWizardStep!==1}>
                 <div className="sac-invoice-columns" aria-hidden="true">
                   <span>شرح کالا یا خدمات</span><span>تعداد</span><span>قیمت واحد</span>
                   <span>جمع ردیف</span><span>عملیات</span>
@@ -1984,12 +2136,19 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     <Plus size={15}/> افزودن ردیف
                   </button>
                 </div>
+                {wizardEnabled&&invoiceWizardChecked[1]&&wizardIssues[1]&&
+                  <p role="alert" className="sac-wizard-field-error">{wizardIssues[1]}</p>}
                 </div>
-                <aside className="sac-invoice-summary" aria-label="خلاصه مالی فاکتور">
+                <aside className="sac-invoice-summary sac-wizard-block" data-invoice-step="4"
+                  id="sac-wizard-panel-review" hidden={wizardEnabled&&invoiceWizardStep!==4}
+                  aria-label="خلاصه مالی فاکتور">
                   <div className="sac-invoice-summary-heading">
                     <span>خلاصه فاکتور</span>
                     <strong>{rows.length.toLocaleString('fa-IR')} ردیف</strong>
                   </div>
+                  <p className="sac-wizard-review-status">گام فعلی: {correctionTarget?
+                    'پیش‌نویس اصلاحی':editTarget?'ویرایش پیش‌نویس':'ایجاد پیش‌نویس'}.
+                    تأیید و صدور سند، عملیات جداگانه در فهرست فاکتورها هستند.</p>
                   <div className="sac-live-total" role="status">
                     <span><span>جمع اقلام</span><b>{documentPreview?moneyText(documentPreview.subtotal):'—'}</b></span>
                     <span><span>تخفیف</span><b>{documentPreview?moneyText(documentPreview.discount):'—'}</b></span>
@@ -1998,6 +2157,11 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   </div>
                   <p className="sac-invoice-summary-note">مبالغ بر اساس مقادیر همین فرم محاسبه می‌شوند؛
                     ذخیره پیش‌نویس به معنی صدور قطعی نیست.</p>
+                  <p className="sac-wizard-impact-warning" role="note">
+                    {correctionTarget?
+                      'هشدار: ثبت اصلاحیه، سند صادرشدهٔ قبلی را برگشت می‌دهد و یک پیش‌نویس جدید می‌سازد. پیش از ادامه، مبلغ و طرف حساب را بازبینی کنید.':
+                      'پس از ذخیرهٔ پیش‌نویس، مدیر می‌تواند آن را تأیید کند؛ صدور نهایی، دفترکل را تغییر می‌دهد. وضعیت خروج انبار و بهای تمام‌شده باید جداگانه کنترل شود.'}
+                  </p>
                   <button type="submit" className="sac-primary sac-summary-save"
                     disabled={draftBlocked|| (!!correctionTarget&&
                       (!validText(correctionReason,1000)||!validPostingDate(correctionDate)||
@@ -2006,6 +2170,28 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                   </button>
                 </aside>
                 </div>
+                {wizardEnabled&&<div className="sac-wizard-sticky-footer"
+                  role="group" aria-label="وضعیت و اقدامات مرحله فعلی فاکتور">
+                  <div className="sac-wizard-sticky-amount">
+                    <span>مبلغ نهایی · {unitLabel}</span>
+                    <strong dir="auto">{documentPreview?moneyText(documentPreview.total):'نامشخص'}</strong>
+                    <small>پیش‌نویس ذخیره‌نشده · مرحله {(invoiceWizardStep+1).toLocaleString('fa-IR')}/۵</small>
+                  </div>
+                  <div className="sac-wizard-sticky-actions">
+                    {invoiceWizardStep>0&&<button type="button"
+                      disabled={busy||pendingRetry} onClick={()=>goWizardStep(invoiceWizardStep-1)}>
+                      قبلی
+                    </button>}
+                    {invoiceWizardStep<4?<button key="wizard-next" type="button" className="sac-primary"
+                      disabled={busy||pendingRetry}
+                      onClick={event=>{event.preventDefault();goWizardStep(invoiceWizardStep+1);}}>
+                      ادامه: {INVOICE_WIZARD_STEPS[invoiceWizardStep+1].title}
+                    </button>:<button key="wizard-save" type="submit" className="sac-primary"
+                      disabled={draftBlocked}>{
+                        correctionTarget?'ثبت اصلاحیه':editTarget?'ذخیره ویرایش':'ذخیره پیش‌نویس'
+                      }</button>}
+                  </div>
+                </div>}
                 <div className="sac-form-actions"><Action disabled={draftBlocked||
                   (!!correctionTarget&&(!validText(correctionReason,1000)||
                     !validPostingDate(correctionDate)||

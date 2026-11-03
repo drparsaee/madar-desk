@@ -1,0 +1,107 @@
+{
+  "baseline": "6bf687b4 + isolated UX-05/06/09",
+  "mode": "synthetic read-only host",
+  "checks": [
+    {
+      "name": "touch controls stage 1 / customer",
+      "value": 13
+    },
+    {
+      "name": "invalid customer stays at first step",
+      "value": true
+    },
+    {
+      "name": "touch controls stage 2 / lines",
+      "value": 25
+    },
+    {
+      "name": "touch controls stage 3 / tax",
+      "value": 12
+    },
+    {
+      "name": "touch controls stage 4 / due",
+      "value": 11
+    },
+    {
+      "name": "commands before explicit save",
+      "value": []
+    },
+    {
+      "name": "five stages move without financial commands",
+      "value": true
+    },
+    {
+      "name": "touch controls stage 5 / review",
+      "value": 9
+    },
+    {
+      "name": "390px no viewport overflow and sticky summary",
+      "value": {
+        "width": 390,
+        "overflow": false,
+        "note": "گام فعلی: ایجاد پیش‌نویس. تأیید و صدور سند، عملیات جداگانه در فهرست فاکتورها هستند.",
+        "amount": "۱۵۹٬۰۰۰ ریال",
+        "footer": {
+          "x": 30,
+          "y": 685,
+          "width": 330,
+          "height": 92,
+          "top": 685,
+          "right": 360,
+          "bottom": 777,
+          "left": 30
+        }
+      }
+    },
+    {
+      "name": "keyboard focus after wizard navigation",
+      "value": {
+        "tag": "BUTTON",
+        "label": "۴پرداخت و موعد"
+      }
+    },
+    {
+      "name": "single explicit save attempts draft only; failed host leaves edited state intact",
+      "value": true
+    },
+    {
+      "name": "draft confirmation gates approval; no ledger issue command",
+      "value": true
+    },
+    {
+      "name": "approved and issued states present correct next action and explicit issue preview",
+      "value": true
+    },
+    {
+      "name": "issued invoice correction explicitly previews reversal and requires confirmation",
+      "value": true
+    },
+    {
+      "name": "draft-only role cannot approve or issue through the UI",
+      "value": true
+    }
+  ],
+  "axe": [
+    {
+      "label": "guided-390",
+      "violations": [],
+      "incomplete": 3
+    },
+    {
+      "label": "professional-1440",
+      "violations": [],
+      "incomplete": 2
+    },
+    {
+      "label": "guided-1440",
+      "violations": [],
+      "incomplete": 2
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "invoice-guided-390.png",
+    "invoice-professional-1440.png",
+    "invoice-guided-1440.png"
+  ]
+}
