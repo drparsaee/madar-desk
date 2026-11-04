@@ -166,7 +166,9 @@ export function AdvancedFilters({tasks=[],users=[],stages=[],priorities=[],value
    catch{setSaveError('حذف فیلتر ذخیره نشد. فضای ذخیره‌سازی را بررسی کنید.');}
  };
  return <div className="advanced-filter">
-   <button className={'filter-toggle '+(open?'selected':'')} onClick={()=>setOpen(v=>!v)} aria-expanded={open}><Filter size={16}/> فیلترهای پیشرفته</button>
+   <button className={'filter-toggle '+(open?'selected':'')} onClick={()=>setOpen(v=>!v)}
+     aria-label="فیلترهای پیشرفته" title="فیلترهای پیشرفته" aria-expanded={open}>
+     <Filter size={16}/> فیلترهای پیشرفته</button>
    {open&&<section className="filter-popover">
      <div className="filter-header"><strong><Filter size={16}/> فیلتر و جست‌وجو</strong><button onClick={()=>setOpen(false)} aria-label="بستن"><X size={16}/></button></div>
      <div className="filter-grid">

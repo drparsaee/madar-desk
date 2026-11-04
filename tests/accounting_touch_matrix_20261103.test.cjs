@@ -9,7 +9,13 @@ const {spawnSync}=require('node:child_process');
 
 const root=path.resolve(__dirname,'..');
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const playwrightPath=path.join(process.env.APPDATA||'','npm','node_modules','playwright');
+// The safe-suite isolates APPDATA. Resolve the separately installed test
+// toolchain by an explicit QA path or the unchanged Windows USERPROFILE;
+// never require a mutable app-data directory to contain Playwright.
+const playwrightPath=process.env.MADAR_UXQA_PLAYWRIGHT||
+  [path.join(process.env.APPDATA||'','npm','node_modules','playwright'),
+    path.join(process.env.USERPROFILE||'','AppData','Roaming','npm','node_modules','playwright')]
+    .find(candidate=>fs.existsSync(path.join(candidate,'package.json')))||'playwright';
 const fixtureCode=`
 import json
 from accounting_core import empty_rial_accounting_state,apply_accounting_command,accounting_view

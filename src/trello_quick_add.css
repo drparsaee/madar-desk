@@ -30,6 +30,12 @@
   outline-offset:1px;
   border-radius:11px;
 }
+.lane-quick-add__error {
+  margin:0;
+  color:var(--vs-danger,#9d2638);
+  font-size:11px;
+  line-height:1.75;
+}
 .lane-quick-add__actions {display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .lane-quick-add__save {
   display:inline-flex;align-items:center;gap:6px;

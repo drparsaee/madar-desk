@@ -87,14 +87,15 @@ export default function AccountingNavigationShell({tab,sections=[],groups=[],gro
   };
   const quick=action=>{
     if(disabled)return;
-    setMoreOpen(false);
     if(action==='invoice'){
-      if(permittedDraft)onNewInvoice();
+      if(permittedDraft&&onNewInvoice()!==false)setMoreOpen(false);
+      return;
     }else if(action==='payment'){
       if(permittedManage){if(onQuickAction)onQuickAction('payment');else navigate('settlements');}
     }else if(action==='purchase'){
       if(permittedDraft){if(onQuickAction)onQuickAction('purchase');else navigate('bill');}
     }else if(action==='reports')navigate('reports');
+    setMoreOpen(false);
   };
   const searchSelect=result=>{
     if(result.type==='section')return navigate(result.tab);

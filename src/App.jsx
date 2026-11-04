@@ -491,7 +491,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   </aside></div>;
 }
 
-function DrivePanel({data,onClose,onRestore,isClient=false}){
+function DrivePanel({data,onClose,onRestore,onRestoreStart,onRestoreFinished,isClient=false}){
   const [id,setId]=useState(data.settings.googleClientId||'');
   const [connected,setConnected]=useState(false);
   const [backups,setBackups]=useState([]);
@@ -524,10 +524,31 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
     return()=>{mounted=false;clearInterval(timer);};
   },[]);
   const operation=async(name,fn)=>{setBusy(name);setMessage('');try{await fn();}catch(e){setMessage(e.message||String(e));}finally{setBusy('');}};
+  const guardedRestore=async load=>{
+    // Acquire the restore barrier before any host call; release it only after
+    // the restored state was accepted or the outcome was marked uncertain.
+    onRestoreStart?.();
+    let outcome='failed';
+    try{
+      const state=await load();
+      if(state==null){outcome='cancel';return;}
+      // A native backup restore returns the raw stored document, which does
+      // not contain the host-issued __localRevision required by saveState CAS.
+      // Read back from the authoritative host AFTER restoration, still under
+      // the exclusive restore barrier. Never allow the next edit to save with
+      // a missing/stale token or assume a successful host mutation on read fail.
+      const authoritative=await (typeof api.getStateForUi==='function'?
+        api.getStateForUi():api.getState());
+      if(!authoritative||typeof authoritative!=='object')
+        throw Error('بازخوانی نسخه بازیابی‌شده از میزبان معتبر نیست.');
+      onRestore(authoritative);
+      outcome='applied';
+    }finally{onRestoreFinished?.(outcome);}
+  };
   const fetchBackups=async()=>{const items=await api.driveList();setBackups(items);};
   const connect=()=>operation('connect',async()=>{await api.driveConnect(id.trim());setConnected(true);setMessage('حساب Google Drive متصل شد.');await fetchBackups();});
   const upload=()=>operation('upload',async()=>{await api.driveUpload();await fetchBackups();setMessage('نسخه پشتیبان با موفقیت در Google Drive ذخیره شد.');});
-  const restore=()=>operation('restore',async()=>{const restored=await api.driveRestore(restoreId);onRestore(restored);});
+  const restore=()=>operation('restore',async()=>guardedRestore(()=>api.driveRestore(restoreId)));
   const selectFolder=()=>operation('folder',async()=>{
     const result=await api.chooseDriveFolder();
     if(!result.canceled){setFolder(await api.driveFolderStatus());setFolderFiles(await api.driveFolderList());setMessage('پوشه ذخیره‌سازی انتخاب شد. همگام‌سازی اینترنتی این پوشه را برنامه Google Drive for desktop انجام می‌دهد.');}
@@ -562,14 +583,14 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
         {folder.configured&&<p className="backup-easy-quick__path" role="status">پوشه انتخاب‌شده: <span dir="ltr">{folder.folder}</span> · {folder.available?'در دسترس':'در دسترس نیست'}</p>}
         {!!localBackups.length&&<div className="backup-easy-recent"><strong>آخرین نسخه‌های محلی</strong>{localBackups.slice(0,3).map(item=><div key={item.name}><small dir="ltr">{item.name}</small><button disabled={!!busy} onClick={()=>operation('restore-local',async()=>{
           if(!window.confirm('این نسخه اطلاعات فعلی را جایگزین می‌کند. پیش از بازیابی، از اطلاعات فعلی نسخه ایمنی گرفته می‌شود. ادامه می‌دهید؟'))return;
-          onRestore(await api.restoreLocalBackup(item.name));
+          await guardedRestore(()=>api.restoreLocalBackup(item.name));
         })}>بازیابی</button></div>)}</div>}
         <p className="backup-easy-limitation">این‌ها پشتیبان کامل همه اجزای مدار نیستند؛ به‌ویژه فایل‌های پیوست، حساب‌های LAN و اطلاعات شخصی برنامه‌ریز پوشش جداگانه دارند.</p>
       </section>
       {message&&<div className="inline-message" role="status">{message}</div>}
       <details className="backup-easy-more"><summary><Settings2 size={17}/> روش‌های بیشتر، بازیابی و تنظیمات پیشرفته <ChevronDown size={16}/></summary><div className="backup-easy-more__content">
       <div className="cloud-state"><span className={'connection-dot '+(connected?'online':'')}/><span>{connected?'حساب Google Drive متصل است':'هنوز به حساب Google متصل نشده‌ای'}</span><small>{isDesktop?'برنامه ویندوز':'حالت پیش‌نمایش'}</small></div>
-      <div className="drive-simple"><strong><Cloud size={18}/> اتصال ساده با Google Drive for desktop</strong><p>۱. برنامه رسمی Google Drive for desktop را روی هر سیستم نصب و با حساب Google یکسان وارد شو. ۲. یک پوشه همگام‌شده برای مدار انتخاب کن. ۳. نسخه‌های بازیابی بدون تنظیم OAuth Client ID داخل همان پوشه نگهداری می‌شوند.</p><div className="drive-simple-actions"><button disabled={!!busy} className="btn primary" onClick={selectFolder}><FolderOpen size={17}/> انتخاب پوشه همگام‌شده</button>{folder.configured&&<button disabled={!!busy||!folder.available} className="btn secondary" onClick={folderBackup}><CloudUpload size={17}/> ذخیره نسخه حالا</button>}{folder.configured&&<button disabled={!!busy} className="btn secondary" onClick={()=>operation('list-folder',async()=>setFolderFiles(await api.driveFolderList()))}><RefreshCw size={15}/> فهرست نسخه‌ها</button>}</div>{folder.configured&&<div className="drive-path"><span className={folder.available?'positive':'warning'}>{folder.available?'پوشه در دسترس است':'پوشه در دسترس نیست'}</span><code dir="ltr">{folder.folder}</code></div>}{folderFiles.length>0&&<div className="drive-folder-files"><strong>نسخه‌های موجود در پوشه</strong>{folderFiles.slice(0,12).map(file=><div key={file.name}><small dir="ltr" title={file.name}>{file.name}</small><button disabled={!!busy} onClick={()=>operation('restore-folder',async()=>{if(!window.confirm('این نسخه جایگزین اطلاعات محلی می‌شود و از نسخه فعلی بکاپ ایمن گرفته خواهد شد. ادامه می‌دهید؟'))return;onRestore(await api.driveFolderRestore(file.name));})}>بازیابی</button></div>)}</div>}<small>Google Drive for desktop باید فایل‌ها را واقعاً با اینترنت همگام کند. این روش جایگزین سرور مشترک چندکاربره نیست؛ هنگامی که سرور قطع باشد، ویرایش‌ها در کلاینت صف می‌شوند و پس از اتصال دوباره با بررسی تعارض اعمال خواهند شد. فایل‌های SMB منتقل نمی‌شوند.</small></div>
+      <div className="drive-simple"><strong><Cloud size={18}/> اتصال ساده با Google Drive for desktop</strong><p>۱. برنامه رسمی Google Drive for desktop را روی هر سیستم نصب و با حساب Google یکسان وارد شو. ۲. یک پوشه همگام‌شده برای مدار انتخاب کن. ۳. نسخه‌های بازیابی بدون تنظیم OAuth Client ID داخل همان پوشه نگهداری می‌شوند.</p><div className="drive-simple-actions"><button disabled={!!busy} className="btn primary" onClick={selectFolder}><FolderOpen size={17}/> انتخاب پوشه همگام‌شده</button>{folder.configured&&<button disabled={!!busy||!folder.available} className="btn secondary" onClick={folderBackup}><CloudUpload size={17}/> ذخیره نسخه حالا</button>}{folder.configured&&<button disabled={!!busy} className="btn secondary" onClick={()=>operation('list-folder',async()=>setFolderFiles(await api.driveFolderList()))}><RefreshCw size={15}/> فهرست نسخه‌ها</button>}</div>{folder.configured&&<div className="drive-path"><span className={folder.available?'positive':'warning'}>{folder.available?'پوشه در دسترس است':'پوشه در دسترس نیست'}</span><code dir="ltr">{folder.folder}</code></div>}{folderFiles.length>0&&<div className="drive-folder-files"><strong>نسخه‌های موجود در پوشه</strong>{folderFiles.slice(0,12).map(file=><div key={file.name}><small dir="ltr" title={file.name}>{file.name}</small><button disabled={!!busy} onClick={()=>operation('restore-folder',async()=>{if(!window.confirm('این نسخه جایگزین اطلاعات محلی می‌شود و از نسخه فعلی بکاپ ایمن گرفته خواهد شد. ادامه می‌دهید؟'))return;await guardedRestore(()=>api.driveFolderRestore(file.name));})}>بازیابی</button></div>)}</div>}<small>Google Drive for desktop باید فایل‌ها را واقعاً با اینترنت همگام کند. این روش جایگزین سرور مشترک چندکاربره نیست؛ هنگامی که سرور قطع باشد، ویرایش‌ها در کلاینت صف می‌شوند و پس از اتصال دوباره با بررسی تعارض اعمال خواهند شد. فایل‌های SMB منتقل نمی‌شوند.</small></div>
       <div className="drive-peer">
         <strong><Users size={17}/> تبادل آزمایشی تغییرات هنگام قطع میزبان</strong>
         <p>دو رایانه با همان حساب LAN، پوشه Drive همگام‌شده یکسان و کد جفت‌سازی مشترک می‌توانند تغییرات کارت‌های متفاوت را در زمان قطعی مبادله کنند. تعارض یک کارت متوقف و گزارش می‌شود. رمز جفت‌سازی در پوشه Drive ذخیره نمی‌شود.</p>
@@ -586,8 +607,8 @@ function DrivePanel({data,onClose,onRestore,isClient=false}){
       {!connected&&<details className="drive-advanced"><summary>روش پیشرفته اتصال مستقیم Google API (اختیاری)</summary><div className="settings-field"><label>Google OAuth Desktop Client ID</label><input dir="ltr" placeholder="12345-....apps.googleusercontent.com" value={id} onChange={e=>setId(e.target.value)}/><p>فقط برای ساخت پشتیبان از Google API. یک‌بار باید از Google Cloud Console شناسه Desktop Client خودتان را تعریف کنید. واردکردن همان ایمیل بدون مجوز اپلیکیشن کافی نیست.</p><button className="btn secondary" disabled={!!busy||!id.trim()} onClick={connect}>{busy==='connect'?<LoaderCircle className="spin" size={16}/>:<Cloud size={16}/>} اتصال API Google</button></div></details>}
       {connected&&<><div className="cloud-actions"><button className="btn primary" disabled={!!busy} onClick={upload}><CloudUpload size={17}/> ذخیره پشتیبان جدید</button><button className="btn secondary" disabled={!!busy} onClick={()=>operation('list',fetchBackups)}><CloudDownload size={17}/> نمایش نسخه‌ها</button></div><div className="backup-list"><h4>نسخه‌های موجود در Drive</h4>{backups.length?backups.map(b=><div className="backup-row" key={b.id}><div><FileText size={17}/><div><strong>{shortDate(b.createdAt)} · {new Date(b.createdAt).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'})}</strong><small>{b.name}</small></div></div><button onClick={()=>setRestoreId(b.id)}>بازیابی</button></div>):<p>نسخه‌ای یافت نشد. برای شروع یک پشتیبان جدید بساز.</p>}</div><button className="subtle-action" onClick={()=>operation('disconnect',async()=>{await api.driveDisconnect();setConnected(false);setBackups([]);})}>قطع اتصال Google</button></>}
       {!!restoreId&&<div className="warning-strip"><strong>جایگزینی اطلاعات محلی</strong><p>اطلاعات فعلی با نسخه انتخاب‌شده جایگزین می‌شود. ابتدا یک کپی محلی از اطلاعات فعلی ذخیره خواهد شد.</p><div><button onClick={()=>setRestoreId('')} className="btn secondary">انصراف</button><button disabled={!!busy} className="btn primary" onClick={restore}>تأیید بازیابی</button></div></div>}
-      <div className="local-backups"><button className="btn secondary" onClick={()=>operation('export',async()=>{const result=await api.exportBackup();if(!result.canceled)setMessage('فایل پشتیبان ذخیره شد.');})}><Download size={16}/> خروجی JSON</button><button className="btn secondary" onClick={()=>operation('import',async()=>{if(!window.confirm('اطلاعات فعلی جایگزین شوند؟ یک کپی خودکار از داده‌های قبلی نگهداری می‌شود.'))return;const result=await api.importBackup();if(result.state)onRestore(result.state);})}><ArrowDownToLine size={16}/> ورود JSON</button></div>
-      <div className="local-backup-section"><h3><HardDriveDownload size={17}/> نسخه‌های پشتیبان روی این کامپیوتر</h3><div className="local-backups"><button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{const result=await api.createLocalBackup();setLocalBackups(await api.listLocalBackups());setMessage('پشتیبان ناقص اما اعتبارسنجی‌شده ایجاد شد: '+result.name);})}>ایجاد پشتیبان محلی</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('load-local',async()=>setLocalBackups(await api.listLocalBackups()))}>تازه‌سازی فهرست</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('attachments-backup',async()=>{const result=await api.attachmentBackup();setMessage('پشتیبان مجزای '+result.blobs+' فایل پیوست روی میزبان ایجاد شد: '+result.path);})}>بکاپ جداگانه پیوست‌ها</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('sqlite-export',async()=>{const result=await api.createUnifiedSqliteBackup();setMessage('خروجی آزمایشی SQLite یکپارچه ایجاد شد: '+result.path);})}>خروجی SQLite یکپارچه</button></div>{localBackups.map(item=><div className="backup-row" key={item.name}><div><FileText size={16}/><small dir="ltr">{item.name}</small></div><button disabled={!!busy||isClient} onClick={()=>operation('restore-local',async()=>{if(!window.confirm('این نسخه بازیابی و داده فعلی جایگزین شود؟ از داده فعلی نسخه ایمنی ساخته می‌شود.'))return;onRestore(await api.restoreLocalBackup(item.name));})}>بازیابی</button></div>)}</div>
+      <div className="local-backups"><button className="btn secondary" onClick={()=>operation('export',async()=>{const result=await api.exportBackup();if(!result.canceled)setMessage('فایل پشتیبان ذخیره شد.');})}><Download size={16}/> خروجی JSON</button><button className="btn secondary" onClick={()=>operation('import',async()=>{if(!window.confirm('اطلاعات فعلی جایگزین شوند؟ یک کپی خودکار از داده‌های قبلی نگهداری می‌شود.'))return;await guardedRestore(async()=>{const result=await api.importBackup();return result?.state??null;});})}><ArrowDownToLine size={16}/> ورود JSON</button></div>
+      <div className="local-backup-section"><h3><HardDriveDownload size={17}/> نسخه‌های پشتیبان روی این کامپیوتر</h3><div className="local-backups"><button className="btn primary" disabled={!!busy||isClient} onClick={()=>operation('local',async()=>{const result=await api.createLocalBackup();setLocalBackups(await api.listLocalBackups());setMessage('پشتیبان ناقص اما اعتبارسنجی‌شده ایجاد شد: '+result.name);})}>ایجاد پشتیبان محلی</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('load-local',async()=>setLocalBackups(await api.listLocalBackups()))}>تازه‌سازی فهرست</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('attachments-backup',async()=>{const result=await api.attachmentBackup();setMessage('پشتیبان مجزای '+result.blobs+' فایل پیوست روی میزبان ایجاد شد: '+result.path);})}>بکاپ جداگانه پیوست‌ها</button><button className="btn secondary" disabled={!!busy||isClient} onClick={()=>operation('sqlite-export',async()=>{const result=await api.createUnifiedSqliteBackup();setMessage('خروجی آزمایشی SQLite یکپارچه ایجاد شد: '+result.path);})}>خروجی SQLite یکپارچه</button></div>{localBackups.map(item=><div className="backup-row" key={item.name}><div><FileText size={16}/><small dir="ltr">{item.name}</small></div><button disabled={!!busy||isClient} onClick={()=>operation('restore-local',async()=>{if(!window.confirm('این نسخه بازیابی و داده فعلی جایگزین شود؟ از داده فعلی نسخه ایمنی ساخته می‌شود.'))return;await guardedRestore(()=>api.restoreLocalBackup(item.name));})}>بازیابی</button></div>)}</div>
       <aside role="note" className="warning-strip"><strong>محدوده واقعی پشتیبان‌ها</strong><p>خروجی JSON و Google Drive فقط اطلاعات اصلی کارها و بردها را منتقل می‌کنند. فایل SQLite محلی دامنه‌های ثبت‌شده در پایگاه داده را دارد، اما فایل‌های پیوست و حساب‌های LAN را شامل نمی‌شود. برنامه‌ریزی شخصی در حافظه همین دستگاه ذخیره می‌شود و در هیچ‌یک از این خروجی‌ها نیست. برای بازیابی گسترده همراه با پیوست‌ها از ابزار مستقل maintenance_recovery.py فقط پس از توقف کامل برنامه و نویسنده‌های شبکه استفاده کنید؛ آرشیو آن رمزنگاری نشده است.</p></aside>
       {storageStatus&&<section className="unified-storage-panel"><h3><HardDriveDownload size={17}/> ذخیره‌سازی یکپارچه SQLite</h3>
         <p className={storageStatus.mode==='sqlite'?'positive':'warning'}>وضعیت میزبان: {storageStatus.mode==='sqlite'?'SQLite فعال':'ذخیره‌سازی فایل‌های JSON'}{storageStatus.revision!=null?' · نسخه '+storageStatus.revision:''}</p>
@@ -761,6 +782,7 @@ export default function App(){
   const [cardContext,setCardContext]=useState(null);
   const [cardArchiveOpen,setCardArchiveOpen]=useState(false);
   const [adding,setAdding]=useState(null);
+  const [pendingQuickCardId,setPendingQuickCardId]=useState(null);
   const [collapsedLists,setCollapsedLists]=useState({});
   const [laneContextRequest,setLaneContextRequest]=useState(null);
   const laneContextSequence=useRef(0);
@@ -838,15 +860,27 @@ export default function App(){
   const initialBoardChosen=useRef(false);
   const dirty=useRef(false);
   const blocked=useRef(false);
+  // Forced authoritative reload must exclude local edits for its whole await.
+  const recoveryReload=useRef(false);
+  const backupRestorePreviouslyBlocked=useRef(false);
   const saving=useRef(false);
   const lastSaved=useRef('');
   const dataMutationEpoch=useRef(0);
+  const quickCardAttempt=useRef(null);
+  const latestData=useRef(null);
+  const latestUnsavedRecovery=useRef(null);
+  useEffect(()=>{latestData.current=data;},[data]);
   const cardUndo=useRef(emptyCardHistory(null));
   const clearCardUndo=()=>{cardUndo.current=emptyCardHistory(null);};
   const refresh=async(force=false)=>{
     if((dirty.current||saving.current||blocked.current)&&!force)return;
     const startEpoch=dataMutationEpoch.current;
     const fresh=normalize(await (api.getStateForUi?api.getStateForUi():api.getState()));
+    // Forced reload is authorized only against the state at the moment of
+    // confirmation. A new edit while the host read is pending must not be
+    // overwritten by the older, asynchronously returned server snapshot.
+    if(force&&dataMutationEpoch.current!==startEpoch)
+      throw new Error('هنگام بازخوانی، تغییر جدیدی ثبت شد. برای جلوگیری از حذف آن، جایگزینی سرور متوقف شد.');
     // A refresh issued before an edit must not publish a stale snapshot after
     // that edit, even if the save debounce has already cleared dirty.current.
     if(!force&&((dirty.current||saving.current||blocked.current)||
@@ -884,6 +918,18 @@ export default function App(){
       try{
         const result=await api.saveState(snapshot);
         lastSaved.current=JSON.stringify(snapshot);
+        const quick=quickCardAttempt.current;
+        if(quick&&snapshot.tasks.some(task=>task.id===quick.id)){
+          // The LAN client can accept a durable *local queue* without the
+          // server acknowledging it. Never mislabel queued data as synced.
+          quickCardAttempt.current=null;
+          setPendingQuickCardId(null);
+          setAdding(null);
+          setDraftTitle('');
+          setToast(result?.offline===true
+            ?'کارت در صف آفلاین ثبت شد؛ تأیید میزبان هنوز دریافت نشده است.'
+            :'کارت ذخیره شد؛ برای تکمیل جزئیات روی آن کلیک کنید.');
+        }
         if(result?.revision||result?.localRevision){
           setData(current=>({...current,...(result.revision?{__remoteRevision:result.revision}:{}),...(result.localRevision?{__localRevision:result.localRevision}:{})}));
           if(dirty.current)setData(current=>({...current}));
@@ -901,7 +947,31 @@ export default function App(){
         blocked.current=true;
         setPendingRecovery(true);
         setSavingError('ذخیره ناموفق بود: '+e.message+' | قبل از ادامه تغییرات، اتصال و داده‌ها را بررسی کن.');
-        try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(snapshot));}catch{}
+        const quick=quickCardAttempt.current;
+        if(quick){
+          setToast('ذخیره کارت موفق نبود؛ عنوان را حفظ کرده‌ایم.');
+          // The global blocked/recovery latch intentionally forbids another
+          // write. Do not also leave the composer stuck in a fake "saving"
+          // state: the user must be able to copy or explicitly close it.
+          quickCardAttempt.current=null;
+          setPendingQuickCardId(null);
+        }
+        // A quick card can be staged while an older save is in-flight. The
+        // rejected snapshot might predate it. Preserve the latest React state
+        // and the pending card, never silently recover only the older snapshot.
+        const recent=latestData.current?.tasks?latestData.current:snapshot;
+        const recovery=quick?.card&&!recent.tasks.some(t=>t.id===quick.card.id)
+          ?{...recent,tasks:[quick.card,...recent.tasks]}:recent;
+        // Keep a current exportable snapshot even when localStorage is full
+        // or unavailable. A stale key from another failed save is not safe.
+        latestUnsavedRecovery.current=recovery;
+        let recoveryStored=false;
+        try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(recovery));recoveryStored=true;}
+        catch{}
+        if(quick)setAdding(current=>current?{...current,error:recoveryStored
+          ?'ذخیره کارت رد شد؛ عنوان برای کپی حفظ شده و نسخهٔ بازیابی ثبت شده است. ابتدا از پنل بازیابی مشکل ذخیره را رفع کنید.'
+          :'ذخیره کارت رد شد و ثبت نسخهٔ بازیابی نیز ممکن نبود. عنوان در فرم باقی مانده است؛ قبل از خروج آن را کپی کنید.'}:current);
+        if(!recoveryStored)setSavingError('ذخیره انجام نشد و ثبت نسخهٔ بازیابی نیز ممکن نبود؛ متن‌های ذخیره‌نشده را پیش از خروج کپی کنید.');
       }finally{saving.current=false;}
     },320);
     return()=>clearTimeout(t);
@@ -938,6 +1008,24 @@ export default function App(){
   const toggleTheme=()=>chooseTheme(uiTheme==='dark'?'light':'dark');
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
   const tasks=data?.tasks||[];
+  useEffect(()=>{
+    if(!pendingQuickCardId)return;
+    if(!data?.tasks?.some(task=>task.id===pendingQuickCardId)){
+      // A stale board/anchor or an invalid legacy card can make the state
+      // updater refuse to add. Do not leave the global dirty latch set when
+      // React bailed out because it returned the identical state object.
+      const attempt=quickCardAttempt.current;
+      if(attempt?.id===pendingQuickCardId&&!attempt.dirtyBefore&&attempt.baseline===data&&
+         attempt.epoch===dataMutationEpoch.current&&!saving.current){
+        dirty.current=false;
+      }
+      quickCardAttempt.current=null;
+      setAdding(current=>current?{...current,error:
+        'کارت افزوده نشد. وضعیت برد یا اطلاعات قدیمی کارت‌ها مانع ثبت است؛ عنوان شما حفظ شد.'}:current);
+      setToast('افزودن کارت انجام نشد؛ عنوان واردشده حفظ شد.');
+      setPendingQuickCardId(null);
+    }
+  },[data,pendingQuickCardId]);
   const projects=data?.projects||[];
   const stages=data?.stages||DEFAULT_STAGES;
   const priorities=priorityDefs(data?.settings);
@@ -1075,10 +1163,18 @@ export default function App(){
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
   const change=(next,preserveCardUndo=false)=>{if(!canEdit)return;
+    if(recoveryReload.current){
+      setToast('بازخوانی اطلاعات در جریان است؛ پس از پایان آن دوباره ویرایش کنید.');
+      return;
+    }
     if(!preserveCardUndo)clearCardUndo();
     dataMutationEpoch.current++;dirty.current=true;setData(current=>{
+    if(recoveryReload.current)return current;
     const newState=typeof next==='function'?next(current):next;
-    if(blocked.current){try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}}
+    if(blocked.current){
+      latestUnsavedRecovery.current=newState;
+      try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}
+    }
     return newState;
   });setProfitVisible(false);};
   const reverseCardEdit=direction=>{
@@ -1372,7 +1468,12 @@ export default function App(){
   };
   const createTask=()=>{
     const title=draftTitle.trim().replace(/\s+/g,' ');
-    if(!title||!adding)return;
+    if(!title||!adding||!canEdit||blocked.current||pendingQuickCardId)return;
+    if(saving.current){
+      setAdding(current=>current?{...current,error:
+        'ذخیره تغییر قبلی هنوز تمام نشده است. عنوان شما حفظ شد؛ پس از پایان ذخیره دوباره اقدام کنید.'}:current);
+      return;
+    }
     const targetBoard=workspaceBoards.find(b=>b.id===adding.boardId&&b.projectId===adding.projectId);
     if(!targetBoard||!visibleProjects.some(p=>p.id===adding.projectId)){
       setToast('برای این فضای کاری ابتدا یک پروژه و برد انتخاب یا ایجاد کنید.');
@@ -1392,6 +1493,20 @@ export default function App(){
       priority:'medium',completed:false,dueDate:'',labels:[],checklist:[],reports:[],assignees:[],
       costEnabled:null,fileLinks:[],estimatedMinutes:0,actualMinutes:0,cost:0,
       createdAt:now(),updatedAt:now()};
+    const move={cardId:t.id,toBoardId:targetBoard.id,toListId:stage,
+      ...(placement==='before'||placement==='after'?{anchorCardId}:{}),placement};
+    // Fail before scheduling a state mutation; legacy host-valid IDs are
+    // visible but can be invalid for the strict ordering writer.
+    try{moveCardInState({...data,tasks:[t,...data.tasks]},move);}
+    catch{
+      setAdding(current=>current?{...current,error:
+        'ثبت کارت با ترتیب فعلی برد ممکن نیست. عنوان شما حفظ شد؛ اطلاعات کارت‌های قدیمی را بررسی کنید.'}:current);
+      setToast('کارت ثبت نشد؛ عنوان واردشده حفظ شد.');
+      return;
+    }
+    // A different unsaved edit may already own the dirty latch. A rejected
+    // no-op quick-add must never clear that edit's pending persistence.
+    const dirtyBefore=dirty.current;
     change(s=>{
       // The currently selected workspace and board must still own the list.
       const board=s.boards.find(b=>b.id===targetBoard.id&&b.workspaceId===activeWorkspaceId&&!b.archived);
@@ -1399,11 +1514,14 @@ export default function App(){
       if((placement==='before'||placement==='after')&&
         !s.tasks.some(item=>item.id===anchorCardId&&item.boardId===board.id&&item.listId===stage&&item.deleted!==true))return s;
       const next={...s,tasks:[t,...s.tasks]};
-      try{return moveCardInState(next,{cardId:t.id,toBoardId:board.id,toListId:stage,
-        ...(placement==='before'||placement==='after'?{anchorCardId}:{}),placement});}
+      try{return moveCardInState(next,move);}
       catch{return s;}
     });
-    setAdding(null);setDraftTitle('');setToast('کارت اضافه شد؛ برای تکمیل جزئیات روی آن کلیک کنید.');
+    // A card visible in React is NOT yet persisted. Keep its draft intact
+    // until api.saveState acknowledges the snapshot, or show a save error.
+    quickCardAttempt.current={id:t.id,card:t,baseline:data,
+      epoch:dataMutationEpoch.current,dirtyBefore};
+    setPendingQuickCardId(t.id);
   };
   const duplicateTask=template=>{
     const board=boards.find(b=>b.id===template.boardId);
@@ -1429,6 +1547,10 @@ export default function App(){
   };
   const openAdd=(status,placement='end',anchorCardId=null)=>{
     if(!canEdit)return;
+    if(pendingQuickCardId){
+      setToast('ابتدا نتیجهٔ ذخیره کارت قبلی مشخص شود.');
+      return;
+    }
     if(!workspaceBoards.length){
       setAdding(null);
       setToast('این فضای کاری هنوز برد ندارد؛ ابتدا پروژه و برد بسازید.');
@@ -1456,20 +1578,30 @@ export default function App(){
   const renderLaneComposer=stage=><form className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
     onSubmit={event=>{event.preventDefault();createTask();}}>
     <textarea autoFocus rows={3} maxLength={300} required
+      readOnly={!!pendingQuickCardId||blocked.current}
       aria-label="عنوان کارت جدید" placeholder="عنوان کارت را بنویسید…"
-      value={draftTitle} onChange={event=>setDraftTitle(event.target.value)}
+      value={draftTitle} onChange={event=>{
+        setDraftTitle(event.target.value);
+        setAdding(current=>current?.error?{...current,error:''}:current);
+      }}
       onKeyDown={event=>{
         if(event.key==='Escape'){
-          event.preventDefault();event.stopPropagation();setAdding(null);setDraftTitle('');
+          event.preventDefault();event.stopPropagation();
+          if(pendingQuickCardId)return;
+          setAdding(null);setDraftTitle('');
         }else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){
-          event.preventDefault();if(draftTitle.trim())createTask();
+          event.preventDefault();if(draftTitle.trim()&&!pendingQuickCardId)createTask();
         }
       }}/>
+    {adding?.error&&<p className="lane-quick-add__error" role="alert">{adding.error}</p>}
     <div className="lane-quick-add__actions">
-      <button type="submit" className="lane-quick-add__save" disabled={!draftTitle.trim()}>
-        <Plus size={15}/> افزودن کارت</button>
+      <button type="submit" className="lane-quick-add__save"
+        disabled={!draftTitle.trim()||!!pendingQuickCardId||blocked.current}>
+        <Plus size={15}/> {blocked.current?'ذخیره متوقف شد':
+          pendingQuickCardId?'در حال ذخیره کارت…':'افزودن کارت'}</button>
       <button type="button" className="lane-quick-add__cancel" title="انصراف"
-        aria-label="بستن افزودن کارت" onClick={()=>{setAdding(null);setDraftTitle('');}}><X size={19}/></button>
+        aria-label="بستن افزودن کارت" disabled={!!pendingQuickCardId}
+        onClick={()=>{setAdding(null);setDraftTitle('');}}><X size={19}/></button>
       <small>Enter: افزودن · Shift+Enter: خط جدید</small>
     </div>
   </form>;
@@ -1568,23 +1700,103 @@ export default function App(){
         tasks:[...originalOther,...adapted]};
     });
   };
-  const restoreState=s=>{clearCardUndo();setData(normalize(s));dirty.current=false;setSelected('all');setEditorId(null);setCloudOpen(false);setToast('اطلاعات بازیابی شد.');};
+  const clearRecoveredFailure=()=>{
+    latestUnsavedRecovery.current=null;
+    try{localStorage.removeItem('madar-unsaved-recovery');}catch{}
+  };
+  const restoreState=s=>{
+    if(!recoveryReload.current)
+      throw Error('بازیابی خارج از محافظ انحصاری مجاز نیست.');
+    const normalized=normalize(s);
+    // Backup/Drive restore is an authoritative state replacement. Any
+    // ordinary refresh started before it must not publish an older snapshot.
+    dataMutationEpoch.current++;
+    clearCardUndo();setData(normalized);dirty.current=false;
+    lastSaved.current=JSON.stringify(normalized);
+    blocked.current=false;setPendingRecovery(false);setSavingError('');
+    clearRecoveredFailure();setSelected('all');setEditorId(null);
+    setCloudOpen(false);setToast('اطلاعات بازیابی شد.');
+    return true;
+  };
+  const startBackupRestore=()=>{
+    if(recoveryReload.current||saving.current||dirty.current||
+      pendingQuickCardId||quickCardAttempt.current){
+      throw Error('ابتدا ذخیره کارت‌ها را کامل کنید. بازیابی نسخه هنگام نوشتن داده یا تغییر ذخیره‌نشده مجاز نیست.');
+    }
+    if(blocked.current&&!window.confirm(
+      'خطای ذخیره هنوز برطرف نشده است. بازیابی نسخه، اطلاعات ذخیره‌نشده را جایگزین می‌کند. ادامه می‌دهید؟'))
+      throw Error('بازیابی بدون تأیید تغییرات ذخیره‌نشده لغو شد.');
+    backupRestorePreviouslyBlocked.current=blocked.current;
+    recoveryReload.current=true;blocked.current=true;setSyncing(true);
+  };
+  const finishBackupRestore=outcome=>{
+    if(outcome==='cancel')blocked.current=backupRestorePreviouslyBlocked.current;
+    else if(outcome!=='applied'){
+      blocked.current=true;setPendingRecovery(true);
+      setSavingError('نتیجه بازیابی نسخه نامشخص است. قبل از ادامه، داده‌های میزبان و فایل بازیابی را بررسی کنید.');
+    }
+    backupRestorePreviouslyBlocked.current=false;
+    recoveryReload.current=false;setSyncing(false);
+  };
   const syncFromServer=async()=>{
+    if(recoveryReload.current||saving.current){
+      setToast('یک عملیات ذخیره یا بازخوانی هنوز در جریان است.');
+      return;
+    }
     if((blocked.current||dirty.current)&&!window.confirm('تغییرات ذخیره‌نشده وجود دارد. ابتدا از آن‌ها خروجی JSON بگیر. اطلاعات از سرور جایگزین شوند؟'))return;
-    clearCardUndo();dirty.current=false;blocked.current=false;setPendingRecovery(false);
-    await refresh(true);await refreshLan();await refreshUsers();setSelected('all');setEditorId(null);
+    recoveryReload.current=true;blocked.current=true;setSyncing(true);
+    try{
+      // Do ancillary reads first: no later await may invalidate a successful
+      // authoritative state replacement or clear newer recovery data.
+      await refreshLan();await refreshUsers();await refresh(true);
+      clearCardUndo();dirty.current=false;blocked.current=false;
+      setPendingRecovery(false);setSavingError('');
+      clearRecoveredFailure();setSelected('all');setEditorId(null);
+    }catch(error){
+      blocked.current=true;setPendingRecovery(true);
+      setSavingError('بازخوانی نسخه سرور موفق نبود: '+(error?.message||String(error)));
+    }finally{
+      recoveryReload.current=false;setSyncing(false);
+    }
   };
   const saveRecovery=()=>{
-    const snapshot=localStorage.getItem('madar-unsaved-recovery')||JSON.stringify(data);
-    const file=new Blob([snapshot],{type:'application/json;charset=utf-8'});
-    const anchor=document.createElement('a');anchor.href=URL.createObjectURL(file);
-    anchor.download='madar-unsaved-recovery.json';anchor.click();
-    setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+    let recovery=latestUnsavedRecovery.current;
+    if(!recovery){
+      // Recovery from a previous session is useful only when no newer failed
+      // snapshot is held in memory. A denied read must not disable download.
+      try{
+        const stored=localStorage.getItem('madar-unsaved-recovery');
+        if(stored){
+          const parsed=JSON.parse(stored);
+          if(parsed&&Array.isArray(parsed.tasks)&&Array.isArray(parsed.projects))recovery=parsed;
+        }
+      }catch{}
+    }
+    if(!recovery)recovery=latestData.current||data;
+    if(!recovery){setSavingError('داده‌ای برای دریافت نسخهٔ بازیابی در دسترس نیست.');return;}
+    try{
+      const snapshot=JSON.stringify(recovery);
+      const file=new Blob([snapshot],{type:'application/json;charset=utf-8'});
+      const anchor=document.createElement('a');anchor.href=URL.createObjectURL(file);
+      anchor.download='madar-unsaved-recovery.json';anchor.click();
+      setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+    }catch(error){setSavingError('ساخت خروجی بازیابی ناموفق بود: '+(error?.message||String(error)));}
   };
   const discardRecovery=async()=>{
+    if(recoveryReload.current||saving.current){
+      setToast('یک عملیات ذخیره یا بازخوانی هنوز در جریان است.');
+      return;
+    }
     if(!window.confirm('تغییرات ذخیره‌نشده کنار گذاشته شود و نسخه موجود دوباره بارگیری شود؟'))return;
-    dirty.current=false;blocked.current=false;setPendingRecovery(false);setSavingError('');
-    await refresh(true).catch(e=>{blocked.current=true;setPendingRecovery(true);setSavingError(e.message);});
+    recoveryReload.current=true;blocked.current=true;setSyncing(true);
+    try{
+      await refresh(true);
+      dirty.current=false;blocked.current=false;
+      setPendingRecovery(false);setSavingError('');
+      clearRecoveredFailure();
+    }
+    catch(e){blocked.current=true;setPendingRecovery(true);setSavingError(e.message);}
+    finally{recoveryReload.current=false;setSyncing(false);}
   };
   const openStandaloneDashboard=()=>{
     if(!canViewStandalone||!show('accountingDashboard'))return;
@@ -1806,18 +2018,18 @@ export default function App(){
             onGoToLocation={navigateSearchLocation} onClose={()=>setSearch('')}/>
         </>}
 
-        <section className="page-header"><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{lanStatus.mode==='solo'&&canEdit&&<><button type="button" className="btn secondary" disabled={!canUndo} aria-label="بازگرداندن آخرین ویرایش کارت" aria-keyshortcuts="Control+Z" title="بازگرداندن آخرین ویرایش کارت (Ctrl+Z)" onClick={()=>reverseCardEdit('undo')}><Undo2 size={15}/> بازگشت</button><button type="button" className="btn secondary" disabled={!canRedo} aria-label="انجام دوباره آخرین ویرایش کارت" aria-keyshortcuts="Control+Shift+Z Control+Y" title="انجام دوباره ویرایش کارت (Ctrl+Y)" onClick={()=>reverseCardEdit('redo')}><Redo2 size={15}/> انجام دوباره</button></>}{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
+        <section className="page-header" data-board-header={workspaceBoards.length&&mode==='board'?'true':'false'}><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{lanStatus.mode==='solo'&&canEdit&&<><button type="button" className="btn secondary" disabled={!canUndo} aria-label="بازگرداندن آخرین ویرایش کارت" aria-keyshortcuts="Control+Z" title="بازگرداندن آخرین ویرایش کارت (Ctrl+Z)" onClick={()=>reverseCardEdit('undo')}><Undo2 size={15}/> بازگشت</button><button type="button" className="btn secondary" disabled={!canRedo} aria-label="انجام دوباره آخرین ویرایش کارت" aria-keyshortcuts="Control+Shift+Z Control+Y" title="انجام دوباره ویرایش کارت (Ctrl+Y)" onClick={()=>reverseCardEdit('redo')}><Redo2 size={15}/> انجام دوباره</button></>}{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
         {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
         {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
-        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
+        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls page-controls--project-quick">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
         {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
-          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} aria-label="برد کارها" onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} aria-label="فهرست" onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} aria-label="جدول" onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} aria-label="زمان‌بندی" onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;
@@ -1989,6 +2201,8 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
-    {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'} onClose={()=>setCloudOpen(false)} onRestore={restoreState}/>}
+    {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}
+      onClose={()=>setCloudOpen(false)} onRestore={restoreState}
+      onRestoreStart={startBackupRestore} onRestoreFinished={finishBackupRestore}/>}
   </div>;
 }

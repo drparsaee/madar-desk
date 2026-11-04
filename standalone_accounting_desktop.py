@@ -62,6 +62,176 @@ window.madar = Object.fromEntries(
 </script>"""
 
 
+def recover_native_editor_after_close_abort(window, api, *,
+                                            attempt_limit=3,
+                                            sleep_fn=time.sleep):
+    """Keep finance writes blocked until JS confirms that the editor is live.
+
+    This runs on the close worker, never inside pywebview's blocking closing
+    event. A temporarily unavailable WebView bridge is retried instead of
+    leaving an inert editor with host writes silently re-enabled. A failed
+    bounded recovery can be retried by the next native titlebar X. It must
+    never silently grant permission to close or mutate financial records.
+    """
+    with api._lock:
+        api._exit_backed_up = True
+    attempts = 0
+    while attempts < attempt_limit:
+        try:
+            acknowledged = window.evaluate_js(
+                "typeof window.__madarAccountingAbortNativeClose === 'function' "
+                "&& window.__madarAccountingAbortNativeClose()") is True
+        except Exception as exc:
+            print('Native accounting editor restore unavailable: ' + str(exc),
+                  file=sys.stderr)
+            acknowledged = False
+        if acknowledged:
+            with api._lock:
+                api._exit_backed_up = False
+            return True
+        attempts += 1
+        if attempts >= attempt_limit:
+            print('Native accounting editor remains locked. Press the native X '
+                  'again to retry the editor recovery; no financial writes '
+                  'are permitted until the bridge acknowledges.',file=sys.stderr)
+            return False
+        sleep_fn(min(3.0, 0.25 * 2 ** min(attempts - 1, 4)))
+
+
+class NativeAccountingCloseGate:
+    """Veto native X first; ask the live editor on a separate GUI-safe thread.
+
+    pywebview's closing event is blocking. Calling evaluate_js *inside* that
+    event can deadlock WebView2, so the request must be checked only after the
+    handler has returned False. No unknown/unloaded JS state permits closing.
+    """
+
+    def __init__(self, window, api, final_backup, *, thread_factory=Thread,
+                 on_aborted_close=None):
+        self.window = window
+        self.api = api
+        self.final_backup = final_backup
+        self.thread_factory = thread_factory
+        self.on_aborted_close = on_aborted_close or (lambda: None)
+        self._lock = RLock()
+        self._checking = False
+        self._approved = False
+        self._backup_accepted = False
+        self._close_event_seen = False
+        self._recovery_needed = False
+
+    def closing(self):
+        with self._lock:
+            if self._approved or getattr(self.api, '_switch_requested', False):
+                reentrant=self._approved
+                if reentrant:
+                    self._close_event_seen=True
+                self._approved = False
+                authorized = True
+            elif self._checking:
+                return False
+            elif self._recovery_needed:
+                self._checking = True
+                authorized = False
+                retry_recovery = True
+            else:
+                self._checking = True
+                authorized = False
+                retry_recovery = False
+        if authorized:
+            if reentrant and self._backup_accepted:
+                return True
+            return self.final_backup()
+        try:
+            self.thread_factory(target=(self._retry_aborted if retry_recovery
+                                        else self._decide), daemon=True).start()
+        except Exception:
+            with self._lock:
+                self._checking = False
+            raise
+        return False
+
+    def _recover_aborted(self):
+        try:
+            # Older fake close callbacks returned None. Explicit False means
+            # the real bridge never acknowledged a recoverable live editor.
+            recovered = self.on_aborted_close() is not False
+        except Exception as exc:
+            print('Native accounting abort recovery failed: '+str(exc),
+                  file=sys.stderr)
+            recovered = False
+        with self._lock:
+            self._recovery_needed = not recovered
+        return recovered
+
+    def _retry_aborted(self):
+        try:
+            self._recover_aborted()
+        finally:
+            with self._lock:
+                self._checking = False
+
+    def _decide(self):
+        try:
+            # The React handler validates busy/retry status and asks before
+            # discarding any bill, invoice, or issued-document correction.
+            answer = self.window.evaluate_js(
+                "typeof window.__madarAccountingConfirmNativeClose === 'function' "
+                "&& window.__madarAccountingConfirmNativeClose()")
+            accepted = answer is True
+        except Exception as exc:
+            print('Native accounting close guard unavailable: ' + str(exc),
+                  file=sys.stderr)
+            accepted = False
+        js_approved = accepted
+        if accepted:
+            # Do not assume window.destroy() re-emits events.closing. Verify
+            # the final backup *while the native window is still alive* so a
+            # backup error can always veto the requested close.
+            try:
+                accepted = self.final_backup() is True
+            except Exception as exc:
+                print('Native accounting pre-close backup failed: ' + str(exc),
+                      file=sys.stderr)
+                accepted = False
+        if js_approved and not accepted:
+            # The React editor was frozen after confirmation. A failed
+            # mandatory backup must re-enable that same live editor.
+            self._recover_aborted()
+        with self._lock:
+            self._checking = False
+            if accepted:
+                self._approved = True
+                self._backup_accepted = True
+                self._close_event_seen = False
+        if accepted:
+            raised=False
+            try:
+                # Re-enter the normal closing event, which performs the
+                # mandatory final financial backup before allowing exit.
+                self.window.destroy()
+            except Exception as exc:
+                raised=True
+                print('Native accounting close retry failed: ' + str(exc),
+                      file=sys.stderr)
+            finally:
+                with self._lock:
+                    reentered=self._close_event_seen
+                    self._approved=False
+                    self._backup_accepted=False
+                    self._close_event_seen=False
+                if raised or not reentered:
+                    # A window that ignored/delayed destroy must not retain
+                    # close permission or freeze a live accounting session.
+                    with self._lock:
+                        self._checking=True
+                    try:
+                        self._recover_aborted()
+                    finally:
+                        with self._lock:
+                            self._checking=False
+
+
 class AccountingDesktopAPI:
     """Single local desktop principal; not a multi-user authentication server."""
 
@@ -195,8 +365,13 @@ class AccountingDesktopAPI:
                 except Exception as exc:
                     print("Company switch could not close native window: " + str(exc),
                           file=sys.stderr)
+                finally:
+                    # A backend may silently ignore destroy(). Do not leave
+                    # a permanent company-switch authorization that lets the
+                    # *next* X bypass freshly edited bill/invoice fields.
                     with self._lock:
-                        self._switch_requested = False
+                        if not self._exit_backed_up:
+                            self._switch_requested = False
             Thread(target=close_owned_window, daemon=True).start()
             return True
 
@@ -460,6 +635,8 @@ def _run_company_session(data_dir, selected_company_name, args):
 
         def backup_on_close():
             nonlocal exit_backup_saved
+            if exit_backup_saved:
+                return True
             try:
                 with api._lock:
                     backups.backup_now()
@@ -472,17 +649,35 @@ def _run_company_session(data_dir, selected_company_name, args):
                 api._switch_requested = False
                 print("Mandatory accounting exit backup failed: " + str(exc),
                       file=sys.stderr)
-                try:
-                    window.evaluate_js("window.alert(" + json.dumps(
-                        "بستن حسابداری متوقف شد. پشتیبان‌گیری مالی ناموفق بود: " +
-                        str(exc), ensure_ascii=False) + ")")
-                except Exception:
-                    pass  # Still prevent close even if the dialog fails.
+                failure_message=str(exc)
+                # Never call evaluate_js in a blocking close event: on some
+                # pywebview backends that deadlocks the GUI thread.
+                def notify():
+                    try:
+                        window.evaluate_js("window.alert(" + json.dumps(
+                            "بستن حسابداری متوقف شد. پشتیبان‌گیری مالی ناموفق بود: " +
+                            failure_message, ensure_ascii=False) + ")")
+                    except Exception:
+                        pass  # Still prevent close even if dialog unavailable.
+                Thread(target=notify,daemon=True).start()
                 return False
             exit_backup_saved = True
             return True
 
-        window.events.closing += backup_on_close
+        def reset_aborted_close():
+            nonlocal exit_backup_saved
+            # Do not unlock host financial commands before the browser has
+            # acknowledged that its inert editor has actually been restored.
+            # If the bridge is transiently unavailable, this worker retries;
+            # another native X is vetoed until the editor is recovered.
+            if recover_native_editor_after_close_abort(window, api):
+                exit_backup_saved=False
+                return True
+            return False
+
+        close_gate=NativeAccountingCloseGate(window,api,backup_on_close,
+            on_aborted_close=reset_aborted_close)
+        window.events.closing += close_gate.closing
         webview.start()
     finally:
         try:

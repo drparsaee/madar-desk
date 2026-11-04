@@ -593,6 +593,15 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const [taxPreflight,setTaxPreflight]=useState(null);
   const [state,setState]=useState({loading:true,error:'',notice:''});
   const [busy,setBusy]=useState(false);
+  const [childDrafts,setChildDrafts]=useState({});
+  const childDraftsLive=useRef({});
+  const reportChildDraft=useCallback((key,hasDraft)=>{
+    // Update the ref immediately in the field-change event. A user can press
+    // the native X before the passive React effect publishes the new state.
+    childDraftsLive.current[key]=hasDraft;
+    setChildDrafts(previous=>previous[key]===hasDraft?previous:
+      {...previous,[key]:hasDraft});
+  },[]);
   const [pendingRetry,setPendingRetry]=useState(false);
   const [forms,setForms]=useState(DEFAULTS);
   const [rows,setRows]=useState([makeLine()]);
@@ -655,7 +664,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
   const [printTemplate,setPrintTemplate]=useState(DEFAULT_PRINT_TEMPLATE);
   const [printDesignerOpen,setPrintDesignerOpen]=useState(false);
   const live=useRef(true),request=useRef(0),locked=useRef(false),latest=useRef(null),
-    pending=useRef(null);
+    pending=useRef(null),nativeClosePending=useRef(false);
   const view=snapshot?.view;
   const today=accountingCompanyToday(view);
   const lastDefaultDay=useRef(T());
@@ -749,7 +758,11 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     forms.document.tax;
   const documentPreview=previewAccountingTotal(rows,forms.document.discount,documentTax);
   const proformaPreview=previewAccountingTotal(proformaRows,forms.proforma.discount,forms.proforma.tax);
-  const displayHistoricDetails=ident=>{setSelectedHistoricAccount(ident);setAccountFilter(ident);setTab('accounts');};
+  const displayHistoricDetails=ident=>{
+    // Historic-account shortcuts must honor the unsaved-editor navigation veto.
+    if(!gotoTab('accounts'))return;
+    setSelectedHistoricAccount(ident);setAccountFilter(ident);
+  };
   const periodReport=useMemo(()=>view?accountingPeriodRows(view,{
     fromDate:reportFrom,toDate:reportTo,accountId:reportAccount}):null,
     [view,reportFrom,reportTo,reportAccount]);
@@ -792,6 +805,94 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     forms.document.taxRuleId||forms.document.documentDate!==today||
     rows.length!==1||rows.some(row=>row.description.trim()||
       String(row.unitPrice).trim()||row.quantity!=='1'||row.accountId||row.itemId));
+  const hasUnsavedProforma=Boolean(proformaEditing||
+    forms.proforma.proformaId.trim()||forms.proforma.partyId||
+    forms.proforma.note.trim()||forms.proforma.validUntil||
+    forms.proforma.discount!=='0'||forms.proforma.tax!=='0'||
+    forms.proforma.documentDate!==today||
+    proformaRows.length!==1||proformaRows.some(row=>row.description.trim()||
+      String(row.unitPrice).trim()||row.quantity!=='1'||row.accountId||row.itemId));
+  const changedFields=group=>Object.entries(DEFAULTS[group]).some(([field,baseline])=>
+    forms[group]?.[field]!==(
+      ['postingDate','documentDate','throughDate'].includes(field)?today:baseline));
+  const hasActiveChildDraft=()=>Boolean(
+    (tab==='cash'&&childDraftsLive.current['bank-reconciliation'])||
+    (tab==='settlements'&&childDraftsLive.current.installments)||
+    (tab==='items'&&childDraftsLive.current.inventory)||
+    (['cheques','payroll','period','company'].includes(tab)&&
+      childDraftsLive.current[tab]));
+  const hasUnsavedOtherEditor=Boolean(
+    (tab==='parties'&&(changedFields('party')||partyEditing||partyEditReason.trim()||
+      historicalReceipt.debtorId||historicalReceipt.bankId||
+      historicalReceipt.amount||historicalReceipt.note.trim()||
+      historicalReceipt.postingDate!==today))||
+    (tab==='items'&&changedFields('item'))||
+    (tab==='accounts'&&changedFields('account'))||
+    (tab==='settlements'&&(changedFields('settlement')||childDrafts.installments))||
+    (tab==='cash'&&(changedFields('deposit')||changedFields('transfer')||
+      childDrafts['bank-reconciliation']))||
+    (tab==='journal'&&(changedFields('manual')||changedFields('reverse')||
+      manualRows.length!==2||manualRows.some(row=>row.accountId||
+        row.debit!=='0'||row.credit!=='0'))));
+  // The purchase form is always present on the bill tab, while the sale form
+  // exists only when its composer is open. Protect editable proformas too:
+  // they have their own rows and are not issued ledger documents.
+  const hasUnsavedFinancialEditor=(hasUnsavedInvoice&&
+    (tab==='bill'||(tab==='invoice'&&invoiceComposerOpen)))||
+    (tab==='proforma'&&hasUnsavedProforma)||hasUnsavedOtherEditor||
+    hasActiveChildDraft();
+  const discardOtherEditor=()=>{
+    if(tab==='parties'){
+      reset('party');setPartyEditing('');setPartyEditReason('');
+      setHistoricalReceipt({debtorId:'',bankId:'',amount:'',postingDate:today,note:''});
+    }else if(tab==='items')reset('item');
+    else if(tab==='accounts')reset('account');
+    else if(tab==='settlements')reset('settlement');
+    else if(tab==='cash'){
+      reset('deposit');reset('transfer');
+    }else if(tab==='journal'){
+      reset('manual');reset('reverse');
+      setManualRows([makeJournalLine(),makeJournalLine()]);
+    }
+  };
+  // The Windows titlebar X cannot call the React navigation handler directly.
+  // The native host first vetoes close, then calls this synchronously from a
+  // worker thread. Never bypass confirmation when an editor contains changes.
+  useEffect(()=>{
+    const abortNativeClose=()=>{
+      nativeClosePending.current=false;
+      const root=document.querySelector('.sac-root');
+      root?.removeAttribute('inert');
+      root?.removeAttribute('aria-busy');
+      return true;
+    };
+    const confirmNativeClose=()=>{
+      if(nativeClosePending.current)return false;
+      if(locked.current||busy||pendingRetry||state.loading){
+        window.alert('عملیات مالی هنوز در حال انجام است. پس از پایان عملیات دوباره برای خروج اقدام کنید.');
+        return false;
+      }
+      const accepted=!(hasUnsavedFinancialEditor||hasActiveChildDraft())||window.confirm(
+        'اطلاعات این فرم حسابداری هنوز ذخیره نشده است. پنجره را ببندیم و تغییرات را کنار بگذاریم؟');
+      if(!accepted)return false;
+      // The native host verifies the final backup BEFORE it destroys this
+      // WebView. Freeze edits synchronously so newer input cannot be lost
+      // between the JS confirmation and the eventual native close.
+      nativeClosePending.current=true;
+      const root=document.querySelector('.sac-root');
+      root?.setAttribute('inert','');
+      root?.setAttribute('aria-busy','true');
+      return true;
+    };
+    window.__madarAccountingConfirmNativeClose=confirmNativeClose;
+    window.__madarAccountingAbortNativeClose=abortNativeClose;
+    return()=>{
+      if(window.__madarAccountingConfirmNativeClose===confirmNativeClose)
+        delete window.__madarAccountingConfirmNativeClose;
+      if(window.__madarAccountingAbortNativeClose===abortNativeClose)
+        delete window.__madarAccountingAbortNativeClose;
+    };
+  },[busy,pendingRetry,state.loading,hasUnsavedFinancialEditor,tab]);
   const closeInvoiceComposer=({force=false}={})=>{
     if(!force&&hasUnsavedInvoice&&!window.confirm(
       'اطلاعات واردشده در فاکتور هنوز ذخیره نشده است. بدون ذخیره به فهرست بازگردیم؟'))return false;
@@ -800,12 +901,49 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     return true;
   };
+  const requestExit=()=>{
+    if(busy||pendingRetry||state.loading)return false;
+    // Exit is a different path from gotoTab and must not silently discard a
+    // new invoice, edited draft or pending issued-invoice correction.
+    // Do not reset the composer before the native host accepts the exit.
+    if((hasUnsavedFinancialEditor||hasActiveChildDraft())&&
+       !window.confirm('اطلاعات فرم فعلی هنوز ذخیره نشده است. از حسابداری خارج شویم و این تغییرات را کنار بگذاریم؟'))
+      return false;
+    onExit();
+    return true;
+  };
+  const requestCompanySwitch=()=>{
+    if(locked.current||busy||pendingRetry||state.loading||nativeClosePending.current)return false;
+    if((hasUnsavedFinancialEditor||hasActiveChildDraft())&&
+      !window.confirm('فرم حسابداری هنوز ذخیره نشده است. تغییرات را کنار بگذاریم و شرکت را تغییر دهیم؟'))
+      return false;
+    return typeof onSwitchCompany==='function'?onSwitchCompany():false;
+  };
   const gotoTab=name=>{
     if(busy||pendingRetry)return false;
+    // Re-selecting the purchase section is not a request to discard its form.
+    // Clearing correctionTarget here silently changed bill.correct to create.
+    if(name===tab&&name==='bill')return true;
+    if(name===tab&&name==='proforma')return true;
     if(name===tab&&name==='invoice'&&invoiceComposerOpen){
       return closeInvoiceComposer();
     }
     if(name!==tab&&tab==='invoice'&&invoiceComposerOpen&&!closeInvoiceComposer())return false;
+    if(name!==tab&&tab==='bill'&&hasUnsavedFinancialEditor){
+      if(!window.confirm('اطلاعات صورتحساب خرید هنوز ذخیره نشده است. بدون ذخیره به بخش دیگری برویم؟'))
+        return false;
+      reset('document');setRows([makeLine()]);
+    }
+    if(name!==tab&&tab==='proforma'&&hasUnsavedProforma){
+      if(!window.confirm('پیش‌فاکتور هنوز ذخیره نشده است. تغییرات آن را کنار بگذاریم؟'))
+        return false;
+      reset('proforma');setProformaRows([makeLine()]);setProformaEditing('');
+    }
+    if(name!==tab&&(hasUnsavedOtherEditor||hasActiveChildDraft())){
+      if(!window.confirm('فرم فعلی هنوز ذخیره نشده است. تغییرات را کنار بگذاریم و به بخش دیگری برویم؟'))
+        return false;
+      discardOtherEditor();
+    }
     if(name!==tab)setInvoiceComposerOpen(false);
     setSearchTarget(null);
     setTab(name);setCancelTarget('');setEditTarget('');
@@ -846,14 +984,23 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     }
   };
   const openQuickInvoice=()=>{
-    if(tab==='invoice'&&invoiceComposerOpen&&hasUnsavedInvoice&&
-      !window.confirm('فاکتور فعلی هنوز ذخیره نشده است. فاکتور تازه باز شود؟'))return;
+    if(busy||pendingRetry||state.loading)return false;
+    // The global "new sale" shortcut is available while editing a purchase
+    // bill too. It must not bypass the bill/invoice unsaved-draft guard.
+    if((hasUnsavedFinancialEditor||hasActiveChildDraft())&&
+      !window.confirm('سند فعلی هنوز ذخیره نشده است. از تغییرات آن صرف‌نظر کنیم و فاکتور فروش تازه باز کنیم؟'))
+      return false;
+    if(tab==='proforma'&&hasUnsavedProforma){
+      reset('proforma');setProformaRows([makeLine()]);setProformaEditing('');
+    }
+    if(hasUnsavedOtherEditor)discardOtherEditor();
     setForms(p=>({...p,document:{...DEFAULTS.document,documentDate:today,
       documentId:suggestedInvoiceId}}));
     setRows([makeLine()]);setEditTarget('');setCorrectionTarget('');
     setPartyQuery('');
     setCorrectionReason('');setInvoiceComposerOpen(true);setTab('invoice');
     setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
+    return true;
   };
   useEffect(()=>{
     if(tab!=='invoice'||!invoiceComposerOpen)return;
@@ -867,7 +1014,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       document.querySelector('#sac-account-movements')?.scrollIntoView({
         block:'start',behavior:'instant'});
   },[tab,selectedHistoricAccount]);
-  const f=(group,key,value)=>setForms(p=>({...p,[group]:{...p[group],[key]:value}}));
+  const f=(group,key,value)=>{
+    if(locked.current||pendingRetry||nativeClosePending.current)return;
+    setForms(p=>({...p,[group]:{...p[group],[key]:value}}));
+  };
   const reset=group=>setForms(p=>({...p,[group]:{...DEFAULTS[group],
     ...(['document','proforma'].includes(group)?{documentDate:today}:{}),
     ...(group==='close'?{throughDate:today}:{}),
@@ -896,12 +1046,28 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     }}
     return null;
   },[api]);
+  const requestManualRefresh=()=>{
+    if(locked.current||busy||pendingRetry||nativeClosePending.current)return false;
+    // refresh() removes the whole host-authorized view before the read, which
+    // also unmounts nested local-only editors. Never silently discard an
+    // unposted finance draft when the operator asks for a manual refresh.
+    if(hasUnsavedFinancialEditor||hasActiveChildDraft()){
+      if(!window.confirm('بازخوانی دفتر، فرم مالی ذخیره‌نشده را کنار می‌گذارد. تغییرات را دور بریزیم؟'))
+        return false;
+      discardOtherEditor();
+      if(tab==='bill'){reset('document');setRows([makeLine()]);}
+      if(tab==='proforma'){
+        reset('proforma');setProformaRows([makeLine()]);setProformaEditing('');
+      }
+    }
+    return refresh();
+  };
   useEffect(()=>{live.current=true;void refresh();return()=>{live.current=false;request.current++;};},[refresh]);
   const send=async(command,message='ثبت در دفترکل میزبان انجام شد.')=>{
     const drafting=new Set(['party.register','invoice.create','bill.create',
       'proforma.create','proforma.update']);
     if(!(canManage||(canDraft&&drafting.has(command?.type)))||
-      locked.current||!latest.current)return false;
+      locked.current||nativeClosePending.current||!latest.current)return false;
     if(pending.current&&pending.current!==command){
       setState(p=>({...p,error:'ابتدا نتیجه عملیات قبلی را با همان شناسه بازیابی کنید.'}));
       return false;
@@ -975,6 +1141,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       onChange={e=>f(group,name,e.target.value)}/>;
   const idInput=(group,name,hint='')=><div className="sac-id-input">
     <input required dir="ltr" maxLength={96} placeholder={hint}
+      disabled={busy||pendingRetry}
       value={forms[group][name]} onChange={e=>f(group,name,e.target.value)}/>
     {(group==='document'||group==='proforma')&&<button type="button"
       disabled={busy} onClick={()=>{
@@ -1033,19 +1200,22 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
         Object.values(view.bills).filter(x=>x.status==='issued').length};
   },[view]);
   const validPostingDate=d=>validStandaloneDate(d,today)&&(!view.closedThrough||d>view.closedThrough);
-  const rowUpdate=(idx,key,val)=>setRows(p=>p.map((l,i)=>i===idx?{...l,[key]:val}:l));
+  const rowUpdate=(idx,key,val)=>{
+    if(locked.current||pendingRetry)return;
+    setRows(p=>p.map((l,i)=>i===idx?{...l,[key]:val}:l));
+  };
   const focusInvoiceCell=(index,column=0)=>{
     window.requestAnimationFrame(()=>{
       document.querySelector(`.sac-invoice-editor [data-invoice-row="${index}"][data-invoice-col="${column}"]`)?.focus();
     });
   };
   const addInvoiceRow=(clone=null)=>{
-    if(rows.length>=1000)return;
+    if(locked.current||pendingRetry||rows.length>=1000)return;
     setRows(p=>[...p,clone?{...clone}:makeLine()]);
     focusInvoiceCell(rows.length,0);
   };
   const removeInvoiceRow=index=>{
-    if(rows.length<2)return;
+    if(locked.current||pendingRetry||rows.length<2)return;
     setRows(p=>p.filter((_,i)=>i!==index));
     focusInvoiceCell(Math.max(0,Math.min(index,rows.length-2)),0);
   };
@@ -1072,9 +1242,26 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       }else focusInvoiceCell(index,col+1);
     }
   };
-  const manualUpdate=(idx,key,val)=>setManualRows(p=>p.map((l,i)=>i===idx?{...l,[key]:val}:l));
-  const blocked=!canManage||busy||pendingRetry;
-  const draftBlocked=(!canManage&&!canDraft)||busy||pendingRetry;
+  const manualUpdate=(idx,key,val)=>{
+    if(locked.current||pendingRetry||nativeClosePending.current)return;
+    setManualRows(p=>p.map((l,i)=>i===idx?{...l,[key]:val}:l));
+  };
+  const updateProformaRows=mutate=>{
+    if(locked.current||busy||pendingRetry||nativeClosePending.current)return;
+    setProformaRows(previous=>{
+      if(locked.current||nativeClosePending.current)return previous;
+      return mutate(previous);
+    });
+  };
+  const updateManualRows=mutate=>{
+    if(locked.current||busy||pendingRetry||nativeClosePending.current)return;
+    setManualRows(previous=>{
+      if(locked.current||nativeClosePending.current)return previous;
+      return mutate(previous);
+    });
+  };
+  const blocked=!canManage||busy||pendingRetry||nativeClosePending.current;
+  const draftBlocked=(!canManage&&!canDraft)||busy||pendingRetry||nativeClosePending.current;
   const wizardEnabled=tab==='invoice'&&invoiceComposerOpen&&invoiceWizardMode==='guided';
   const wizardIssues=invoiceWizardIssues({document:forms.document,rows,
     accounts,items,today,kind:docKind,tax:documentTax,
@@ -1127,7 +1314,13 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     setInvoiceWizardError('');
     return true;
   };
-  const startEditingDocument=d=>{
+  const confirmEditorReplacement=()=>{
+    if(busy||pendingRetry||state.loading)return false;
+    return !hasUnsavedFinancialEditor||window.confirm(
+      'اطلاعات سند فعلی هنوز ذخیره نشده است. تغییرات را کنار بگذاریم و سند دیگری را باز کنیم؟');
+  };
+  const startEditingDocument=(d,{discardConfirmed=false}={})=>{
+    if(!discardConfirmed&&!confirmEditorReplacement())return false;
     setInvoiceComposerOpen(true);
     setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     setEditTarget(d.id);
@@ -1139,8 +1332,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
     setRows(d.lines.map(l=>({description:l.description,
       quantity:String(l.quantity),unitPrice:String(l.unitPrice),
       accountId:l.accountId||'',itemId:l.itemId||''})));
+    return true;
   };
   const startCorrectingDocument=d=>{
+    if(!confirmEditorReplacement())return false;
     setInvoiceComposerOpen(true);
     setInvoiceWizardStep(0);setInvoiceWizardChecked({});setInvoiceWizardError('');
     const prefix=(docKind==='invoice'?'INV':'BILL')+'-COR';
@@ -1155,6 +1350,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       taxRuleId:d.taxRuleId||''}}));
     setRows(d.lines.map(l=>({description:l.description,quantity:String(l.quantity),
       unitPrice:String(l.unitPrice),accountId:l.accountId||'',itemId:l.itemId||''})));
+    return true;
   };
   const exportDocument=async(doc,format,kind=docKind)=>{
     try{
@@ -1282,7 +1478,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       currentUser={snapshot?.currentUser}
       currency={unitLabel} companyName={view?.companyProfile?.legalName||
         view?.companyWorkspaceLabel||''}
-      onRefresh={()=>void refresh()} onExit={onExit} onSwitchCompany={onSwitchCompany}
+      onRefresh={()=>void requestManualRefresh()} onExit={requestExit} onSwitchCompany={requestCompanySwitch}
       onManageUsers={onManageUsers}
       disabled={busy||state.loading||pendingRetry}/>
     <aside className="sac-sidebar">
@@ -1302,14 +1498,14 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       })}</nav>
       <div className="sac-sidebar-footer"><div>واحد حسابداری: <strong>{unitLabel}</strong></div>
         <p>بدون وابستگی به تسک‌منیجر یا پروژه</p>
-        <button type="button" onClick={onExit}><ArrowRight size={17}/> خروج از حسابداری</button></div>
+        <button type="button" onClick={requestExit}><ArrowRight size={17}/> خروج از حسابداری</button></div>
     </aside>
     <div className="sac-main">
       <header className="sac-header"><div><span className="sac-kicker">MADAR / STANDALONE DESK</span>
         <h1>{SECTIONS.find(s=>s[0]===tab)?.[1]}</h1>
         <p>دفترکل مستقل، مبتنی بر داده واقعی میزبان</p></div>
         <div className="sac-header-actions"><span>تمام مبالغ: {unitLabel}</span>
-          <button type="button" onClick={()=>void refresh()} disabled={busy||state.loading}>
+          <button type="button" onClick={()=>void requestManualRefresh()} disabled={busy||state.loading}>
             <RefreshCw size={16}/> بازخوانی</button></div></header>
       <div className="sac-body" role="region" aria-label="محتوای صفحه حسابداری" tabIndex={0}>
         {tab==='invoice'&&<nav className="sac-workflow-nav" aria-label="مسیر فاکتور فروش">
@@ -1341,7 +1537,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           <span>{state.loading?'دریافت داده دفترکل...':state.error||state.notice}</span>
           {!state.error&&!state.loading&&state.notice&&<button type="button"
             aria-label="بستن پیام موفقیت" onClick={()=>setState(p=>({...p,notice:''}))}>×</button>}
-          {state.error&&<button type="button" disabled={busy} onClick={()=>void refresh()}>
+          {state.error&&<button type="button" disabled={busy||pendingRetry}
+            title={pendingRetry?'ابتدا نتیجه عملیات را با همان شناسه بازیابی کنید.':undefined}
+            onClick={()=>void requestManualRefresh()}>
             بازخوانی از میزبان</button>}</div>}
         {pendingRetry&&<div className="sac-alert error" role="alert">
           <span>نتیجه یک عملیات نامشخص است؛ برای جلوگیری از ثبت دوباره، ارسال تازه متوقف شده است.</span>
@@ -1373,8 +1571,11 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       onClick={()=>void exportDocument(d,'pdf','proforma')}>PDF پیش‌فاکتور</button>}
                     {canManage&&<button type="button" disabled={busy}
                       onClick={()=>void exportDocument(d,'png','proforma')}>PNG</button>}
-                    {canManage&&d.status==='draft'&&<button type="button" disabled={busy}
+                    {canManage&&d.status==='draft'&&<button type="button" disabled={busy||pendingRetry}
                       onClick={()=>{
+                        if(proformaEditing===d.id)return;
+                        if(hasUnsavedProforma&&!window.confirm(
+                          'پیش‌فاکتور فعلی هنوز ذخیره نشده است. تغییرات آن را کنار بگذاریم و پیش‌فاکتور دیگری را ویرایش کنیم؟'))return;
                         setProformaEditing(d.id);
                         setForms(p=>({...p,proforma:{proformaId:d.id,
                           partyId:d.partyId,documentDate:d.documentDate,
@@ -1451,29 +1652,36 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     value={forms.proforma.note} onChange={e=>f('proforma','note',e.target.value)}/></Field>
                 </div>
                 <div className="sac-subheading"><h3>اقلام پیشنهادی</h3><button type="button"
-                  onClick={()=>setProformaRows(p=>p.length<1000?[...p,makeLine()]:p)}>
+                  disabled={busy||pendingRetry||nativeClosePending.current}
+                  onClick={()=>updateProformaRows(p=>p.length<1000?[...p,makeLine()]:p)}>
                   <Plus size={15}/> ردیف جدید</button></div>
                 {proformaRows.map((r,i)=><div className="sac-doc-line" key={i}>
                   <Field label="شرح"><input required maxLength={300} value={r.description}
-                    onChange={e=>setProformaRows(p=>p.map((x,j)=>j===i?{...x,description:e.target.value}:x))}/></Field>
+                    readOnly={busy||pendingRetry}
+                    onChange={e=>updateProformaRows(p=>p.map((x,j)=>j===i?{...x,description:e.target.value}:x))}/></Field>
                   <Field label="تعداد"><input required dir="ltr" inputMode="numeric" value={r.quantity}
-                    onChange={e=>setProformaRows(p=>p.map((x,j)=>j===i?{...x,quantity:e.target.value}:x))}/></Field>
+                    readOnly={busy||pendingRetry}
+                    onChange={e=>updateProformaRows(p=>p.map((x,j)=>j===i?{...x,quantity:e.target.value}:x))}/></Field>
                   <Field label={`قیمت واحد (${unitLabel})`}><input required dir="ltr"
                     inputMode="numeric" value={r.unitPrice}
-                    onChange={e=>setProformaRows(p=>p.map((x,j)=>j===i?{...x,unitPrice:e.target.value}:x))}/></Field>
+                    readOnly={busy||pendingRetry}
+                    onChange={e=>updateProformaRows(p=>p.map((x,j)=>j===i?{...x,unitPrice:e.target.value}:x))}/></Field>
                   <Field label="حساب درآمد"><select required value={r.accountId||'4000'}
-                    onChange={e=>setProformaRows(p=>p.map((x,j)=>j===i?{...x,accountId:e.target.value}:x))}>
+                    disabled={busy||pendingRetry}
+                    onChange={e=>updateProformaRows(p=>p.map((x,j)=>j===i?{...x,accountId:e.target.value}:x))}>
                     {sortMap(accounts).filter(a=>a.kind==='revenue').map(a=>
                       <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}</select></Field>
                   <Field label="کالای کاتالوگ"><select value={r.itemId||''}
-                    onChange={e=>setProformaRows(p=>p.map((x,j)=>j===i?{...x,itemId:e.target.value}:x))}>
+                    disabled={busy||pendingRetry}
+                    onChange={e=>updateProformaRows(p=>p.map((x,j)=>j===i?{...x,itemId:e.target.value}:x))}>
                     {options(sortMap(items).filter(a=>a.active),'بدون قلم')}</select></Field>
-                  <button type="button" disabled={proformaRows.length===1}
-                    onClick={()=>setProformaRows(p=>p.filter((_,j)=>j!==i))}>حذف</button>
+                  <button type="button" disabled={busy||pendingRetry||proformaRows.length===1}
+                    onClick={()=>updateProformaRows(p=>p.filter((_,j)=>j!==i))}>حذف</button>
                 </div>)}
                 <div className="sac-form-actions"><Action disabled={draftBlocked}>
                   {proformaEditing?'ثبت اصلاح':'ایجاد پیش‌فاکتور'}</Action>
-                  {proformaEditing&&<button type="button" onClick={()=>{
+                  {proformaEditing&&<button type="button" disabled={busy||pendingRetry} onClick={()=>{
+                    if(hasUnsavedProforma&&!window.confirm('ویرایش فعلی پیش‌فاکتور ذخیره نشده است. آن را کنار بگذاریم؟'))return;
                     setProformaEditing('');reset('proforma');setProformaRows([makeLine()]);
                   }}>انصراف</button>}
                 </div>
@@ -1727,9 +1935,10 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                         برای صدور، تاریخ معتبر را در «تنظیمات بیشتر چاپ و صدور» مشخص کنید.
                       </small>}
                     {d.status==='issued'&&d.total>d.allocated+(d.returnedAmount||0)&&<button type="button" onClick={()=>{
+                      if(!gotoTab('settlements'))return;
                       setForms(p=>({...p,settlement:{...p.settlement,
                         kind:docKind==='invoice'?'receipt':'payment',documentId:d.id}}));
-                      setTab('settlements');}}>تسویه</button>}
+                    }}>تسویه</button>}
                     <details className="sac-invoice-row-menu">
                       <summary aria-label={'عملیات بیشتر فاکتور '+d.id}>بیشتر</summary>
                       <div className="sac-invoice-row-menu-items">
@@ -1849,12 +2058,13 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                       value={reopenReason} onChange={e=>setReopenReason(e.target.value)}/>
                     <button type="button" disabled={busy||!validText(reopenReason,1000)}
                       onClick={async()=>{
+                        if(!confirmEditorReplacement())return;
                         if(await execute(id=>({command:{
                           type:docKind+'.reopen',eventId:id,
                           [docKind+'Id']:detailedDocument.id,
                           reason:reopenReason.trim()}}),
                           'تأیید سند با رویداد قابل‌ردیابی بازگردانده شد؛ هنوز سند دفترکل ثبت نشده است.')){
-                          startEditingDocument(detailedDocument);setReopenReason('');
+                          startEditingDocument(detailedDocument,{discardConfirmed:true});setReopenReason('');
                         }
                       }}>بازگرداندن به پیش‌نویس و ویرایش</button>
                   </>}
@@ -1971,7 +2181,9 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             {(canManage||canDraft)&&(tab==='bill'||invoiceComposerOpen)&&<Panel compact={tab==='invoice'} title={correctionTarget?'اصلاح فاکتور '+correctionTarget:
               editTarget?'ویرایش فاکتور '+editTarget:tab==='invoice'?'ثبت فاکتور جدید':'ثبت صورتحساب خرید'}
               description="۱. مشتری و تاریخ را مشخص کنید. ۲. شرح، تعداد و قیمت اقلام را بنویسید. ۳. پیش‌نویس را ذخیره کنید.">
-              <form className="sac-invoice-editor" noValidate={wizardEnabled} onSubmit={submit(async()=>{
+              <form className="sac-invoice-editor" noValidate={wizardEnabled}
+                inert={busy||pendingRetry} aria-busy={busy||pendingRetry}
+                onSubmit={submit(async()=>{
                 if(!validateInvoiceSubmission())return;
                 if(await execute(id=>{
                   const built=buildStandaloneInvoiceCommand({
@@ -2049,6 +2261,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     <Field label="تاریخ برگشت قطعی"><AccountingJalaliField
                       max={today} value={correctionDate} onChange={setCorrectionDate}/></Field>
                     <Field label="علت اصلاح (الزامی)"><input required maxLength={1000}
+                      disabled={busy||pendingRetry}
                       value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}
                       placeholder="دلیل اصلاح سند صادرشده"/></Field>
                   </>}
@@ -2168,11 +2381,14 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                 {rows.map((row,i)=><div key={i} className="sac-doc-line sac-invoice-line" onKeyDown={invoiceKeyDown}>
                   <div className="sac-invoice-row-heading">ردیف {Number(i+1).toLocaleString('fa-IR')}</div>
                   <Field label="شرح"><input data-invoice-row={i} data-invoice-col={0} required maxLength={300} value={row.description}
+                    disabled={busy||pendingRetry}
                     placeholder="نام کالا یا شرح خدمات"
                     onChange={e=>rowUpdate(i,'description',e.target.value)}/></Field>
                   <Field label="تعداد"><input data-invoice-row={i} data-invoice-col={1} required dir="ltr" inputMode="numeric"
+                    disabled={busy||pendingRetry}
                     value={row.quantity} onChange={e=>rowUpdate(i,'quantity',e.target.value)}/></Field>
                   <Field label={`قیمت واحد (${unitLabel})`}><input data-invoice-row={i} data-invoice-col={2} required dir="ltr" inputMode="numeric"
+                    disabled={busy||pendingRetry}
                     value={row.unitPrice} onChange={e=>rowUpdate(i,'unitPrice',e.target.value)}/></Field>
                   <output className="sac-invoice-line-total" aria-label={'جمع ردیف '+(i+1)}>
                     <span className="sac-invoice-total-caption" aria-hidden="true">جمع ردیف</span>
@@ -2587,7 +2803,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
           </>}
           {tab==='cheques'&&<>
             <LiveCheques view={view} canManage={canManage} disabled={blocked}
-              execute={execute} today={today} unit={unitLabel}/>
+              execute={execute} today={today} unit={unitLabel}
+              onDraftChange={reportChildDraft}/>
             <Panel title="سوابق چک پارسیان" description="صرفاً آرشیو جدا از چک‌های عملیاتی جدید؛
               تا تطبیق منبع به‌عنوان چک زنده محسوب نمی‌شود.">
             {historical?<><div className="sac-metrics">
@@ -2633,7 +2850,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
               <div className="sac-form-actions"><Action disabled={blocked}>ثبت کالا / خدمت</Action></div>
             </form></Panel>}
             <LiveInventory view={view} canManage={canManage} canAdmin={canAdmin} disabled={blocked}
-              execute={execute} today={today} unit={unitLabel}/>
+              execute={execute} today={today} unit={unitLabel}
+              onDraftChange={reportChildDraft}/>
           </>}
           {tab==='settlements'&&<>
             <Panel title="دریافت‌ها و پرداخت‌ها" description="تمام مبالغ از رسیدها و پرداخت‌های ثبت‌شده موتور حسابداری خوانده می‌شوند.">
@@ -2677,7 +2895,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
               </form>
             </Panel>}
             <InstalmentPlans view={view} canManage={canManage} disabled={blocked}
-              execute={execute} today={today} unit={unitLabel}/>
+              execute={execute} today={today} unit={unitLabel}
+              onDraftChange={reportChildDraft}/>
           </>}
           {tab==='cash'&&<>
             {historical&&<Panel title="مانده واقعی صندوق و بانک انتقالی پارسیان"
@@ -2734,7 +2953,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
               </Panel>
             </div>}
             <BankReconciliation view={view} canManage={canManage} disabled={blocked}
-              execute={execute} today={today} unit={unitLabel}/>
+              execute={execute} today={today} unit={unitLabel}
+              onDraftChange={reportChildDraft}/>
           </>}
           {tab==='accounts'&&<>
             {historical&&<Panel title="درخت کدینگ منتقل‌شده پارسیان"
@@ -2861,17 +3081,20 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     <Field label="تاریخ">{dateInput('manual','postingDate')}</Field>
                     <Field label="شرح سند">{textInput('manual','note','',1000)}</Field></div>
                   {manualRows.map((r,i)=><div className="sac-journal-row" key={i}>
-                    <select aria-label={'سرفصل حساب ردیف '+(i+1)} required value={r.accountId} onChange={e=>manualUpdate(i,'accountId',e.target.value)}>
+                    <select aria-label={'سرفصل حساب ردیف '+(i+1)} required
+                      disabled={busy||pendingRetry} value={r.accountId} onChange={e=>manualUpdate(i,'accountId',e.target.value)}>
                       {options(sortMap(accounts).filter(a=>!['1200','2000'].includes(a.id)),'سرفصل حساب')}</select>
-                    <input aria-label={'بدهکار ردیف '+(i+1)} dir="ltr" inputMode="numeric" value={r.debit} placeholder="بدهکار"
+                    <input aria-label={'بدهکار ردیف '+(i+1)} dir="ltr" inputMode="numeric"
+                      readOnly={busy||pendingRetry} value={r.debit} placeholder="بدهکار"
                       onChange={e=>manualUpdate(i,'debit',e.target.value)}/>
-                    <input aria-label={'بستانکار ردیف '+(i+1)} dir="ltr" inputMode="numeric" value={r.credit} placeholder="بستانکار"
+                    <input aria-label={'بستانکار ردیف '+(i+1)} dir="ltr" inputMode="numeric"
+                      readOnly={busy||pendingRetry} value={r.credit} placeholder="بستانکار"
                       onChange={e=>manualUpdate(i,'credit',e.target.value)}/>
-                    <button type="button" disabled={manualRows.length===2}
-                      onClick={()=>setManualRows(p=>p.filter((_,index)=>index!==i))}>×</button>
+                    <button type="button" disabled={busy||pendingRetry||manualRows.length===2}
+                      onClick={()=>updateManualRows(p=>p.filter((_,index)=>index!==i))}>×</button>
                   </div>)}
-                  <div className="sac-form-actions"><button type="button" disabled={manualRows.length>=100}
-                    onClick={()=>setManualRows(p=>[...p,makeJournalLine()])}>+ ردیف</button>
+                  <div className="sac-form-actions"><button type="button" disabled={busy||pendingRetry||manualRows.length>=100}
+                    onClick={()=>updateManualRows(p=>[...p,makeJournalLine()])}>+ ردیف</button>
                     <Action disabled={blocked}>ثبت سند دستی</Action></div>
                 </form></Panel>
               <Panel title="برگشت سند" description="برگشت فاکتور دارای تسویه ابتدا نیازمند برگشت دریافت یا پرداخت مرتبط است.">
@@ -3008,12 +3231,14 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
             </>}
           </>}
           {tab==='company'&&<CompanyProfile view={view} canManage={canAdmin}
-            disabled={blocked} execute={execute}/>}
+            disabled={blocked} execute={execute} onDraftChange={reportChildDraft}/>}
           {tab==='payroll'&&<PayrollAndTax view={view} canManage={canManage} canSetTax={canAdmin}
-            disabled={blocked} execute={execute} today={today} unit={unitLabel}/>}
+            disabled={blocked} execute={execute} today={today} unit={unitLabel}
+            onDraftChange={reportChildDraft}/>}
           {tab==='period'&&<>
             <FiscalYearClose view={view} canManage={canAdmin}
-              disabled={blocked} execute={execute} today={today}/>
+              disabled={blocked} execute={execute} today={today}
+              onDraftChange={reportChildDraft}/>
             <Panel title="بستن دوره حسابداری"
               description="قفل تاریخ حسابداری مانع ثبت سند عقب‌تر از مرز بسته‌شده می‌شود. این عملیات جایگزین سند اختتامیه سال مالی نیست.">
             <div className="sac-period"><span>مرز بسته‌شدن فعلی:</span>

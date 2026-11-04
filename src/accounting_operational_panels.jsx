@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import AccountingJalaliField from './accounting_jalali_field.jsx';
 import {displayAccountingDate,formatAccountingJalali,
   parseAccountingJalali} from './accounting_jalali_dates.js';
@@ -34,6 +34,15 @@ const asList=collection=>Object.values(collection||{}).sort((a,b)=>a.id.localeCo
 const sendCommand=(execute,type,fields,message)=>execute(id=>({command:{
   type,eventId:id,...fields,
 }}),message||'عملیات با شناسه جدید در دفتر مستقل ثبت شد.');
+
+// Nested financial forms retain their own React state. Surface any unposted
+// draft to the parent navigation/native-close guard before a tab unmounts it.
+function useReportDraft(key,dirty,onDraftChange){
+  // A native titlebar close may arrive in the same turn as an input change.
+  // Publish the committed draft before the browser can paint/handle that close.
+  useLayoutEffect(()=>{onDraftChange?.(key,dirty);},[key,dirty,onDraftChange]);
+  useEffect(()=>()=>onDraftChange?.(key,false),[key,onDraftChange]);
+}
 
 function InlineForm({title,children,onSubmit,canManage,disabled=false}){
   const [error,setError]=useState('');
@@ -89,18 +98,26 @@ function Table({cols,rows,empty='رکوردی ثبت نشده است.'}){
   </div>;
 }
 
-export function LiveCheques({view,canManage,disabled,execute,today,unit}){
+export function LiveCheques({view,canManage,disabled,execute,today,unit,onDraftChange}){
   const [form,setForm]=useState({chequeId:'',direction:'receipt',documentId:'',
     bankAccountId:'1010',dueDate:today,amount:'',reference:''});
   const [reasons,setReasons]=useState({});
   const [endorsees,setEndorsees]=useState({});
+  const hasDraft=Boolean(form.chequeId||form.documentId||form.amount||form.reference||
+    form.direction!=='receipt'||form.bankAccountId!=='1010'||form.dueDate!==today||
+    Object.values(reasons).some(x=>String(x).trim())||
+    Object.values(endorsees).some(Boolean));
+  useReportDraft('cheques',hasDraft,onDraftChange);
   const change=(field,val)=>setForm(f=>({...f,[field]:val,
     ...(field==='direction'?{documentId:''}:{})}));
   const docs=asList(view[form.direction==='receipt'?'invoices':'bills']).filter(d=>
     d.status==='issued'&&d.allocated+(d.returnedAmount||0)<d.total);
   const liquid=asList(view.accounts).filter(a=>a.liquid);
   const cheques=asList(view.cheques);
-  return <section>
+  return <section onChangeCapture={event=>{
+    if(event.target.closest('.sac-operational-form,.sac-cheque-actions'))
+      onDraftChange?.('cheques',true);
+  }}>
     <h2>خزانه و چک عملیاتی</h2>
     <Err>ثبت و واگذاری چک وجه نقد ایجاد نمی‌کند؛ فقط پس از تأیید واقعی وصول در بانک،
       پرداخت یا دریافت مربوط در دفترکل ثبت می‌شود. چک‌های پارسیان بدون تطبیق وارد این بخش نمی‌شوند.</Err>
@@ -280,13 +297,21 @@ export function previewExactPurchaseDiscountAllocation({bill,amounts,reference,r
   }catch(error){return denied(error?.message||'تخصیص خرید قابل تأیید نیست.');}
 }
 
-export function LiveInventory({view,canManage,canAdmin=false,disabled,execute,today,unit}){
+export function LiveInventory({view,canManage,canAdmin=false,disabled,execute,today,unit,onDraftChange}){
   const [warehouse,setWarehouse]=useState({warehouseId:'',name:''});
   const [reverseReason,setReverseReason]=useState({});
   const [form,setForm]=useState({type:'inventory.receive',warehouseId:'',itemId:'',
     quantity:'',postingDate:today,billId:'',invoiceId:'',unitCost:'',toWarehouseId:'',reason:'',
     taxTreatment:'',discountAllocation:'',lineDiscounts:[],allocationReference:'',
     allocationReason:'',reviewAck:false});
+  const hasDraft=Boolean(warehouse.warehouseId||warehouse.name||
+    Object.values(reverseReason).some(x=>String(x).trim())||
+    form.warehouseId||form.itemId||form.quantity||form.billId||form.invoiceId||
+    form.unitCost||form.toWarehouseId||form.reason||form.taxTreatment||
+    form.discountAllocation||form.lineDiscounts.some(Boolean)||
+    form.allocationReference||form.allocationReason||form.reviewAck||
+    form.postingDate!==today);
+  useReportDraft('inventory',hasDraft,onDraftChange);
   useEffect(()=>{
     if(!canAdmin)setForm(current=>current.discountAllocation==='per-line-exact'?{
       ...current,discountAllocation:'',lineDiscounts:[],allocationReference:'',
@@ -313,7 +338,10 @@ export function LiveInventory({view,canManage,canAdmin=false,disabled,execute,to
   const stock=warehouses.flatMap(w=>Object.entries(view.stock?.[w.id]||{}).map(([itemId,b])=>
     ({id:w.id+':'+itemId,warehouseId:w.id,itemId,qty:b.quantity,value:b.value})));
   const movements=asList(view.stockMovements);
-  return <section>
+  return <section onChangeCapture={event=>{
+    if(event.target.closest('.sac-operational-form,.sac-cheque-actions'))
+      onDraftChange?.('inventory',true);
+  }}>
     <h2>انبار، کاردکس و بهای تمام‌شده FIFO</h2>
     <Err>رسید خرید فقط به فاکتور خرید صادرشده و کالای دارای رهگیری موجودی متصل می‌شود.
       موجودی افتتاحیه با تأیید سرمایه ثبت می‌شود. حواله فروش بهای تمام‌شده را در دفترکل ثبت می‌کند.</Err>
@@ -482,7 +510,7 @@ export function LiveInventory({view,canManage,canAdmin=false,disabled,execute,to
   </section>;
 }
 
-export function BankReconciliation({view,canManage,disabled,execute,today,unit}){
+export function BankReconciliation({view,canManage,disabled,execute,today,unit,onDraftChange}){
   const [form,setForm]=useState({statementId:'',accountId:'1010',
     date:today,amount:'',reference:''});
   const [reasons,setReasons]=useState({});
@@ -490,7 +518,16 @@ export function BankReconciliation({view,canManage,disabled,execute,today,unit})
   const [importRows,setImportRows]=useState([]);
   const [importError,setImportError]=useState('');
   const [importAcknowledged,setImportAcknowledged]=useState(false);
-  const ch=(key,val)=>setForm(p=>({...p,[key]:val}));
+  const [importReading,setImportReading]=useState(false);
+  useReportDraft('bank-reconciliation',Boolean(form.statementId.trim()||
+    form.accountId!=='1010'||form.date!==today||form.amount.trim()||
+    form.reference.trim()||Object.values(reasons).some(r=>r.trim())||
+    Object.values(matches).some(Boolean)||importRows.length||importReading),
+  onDraftChange);
+  const ch=(key,val)=>{
+    onDraftChange?.('bank-reconciliation',true);
+    setForm(p=>({...p,[key]:val}));
+  };
   const statements=asList(view.bankStatements);
   const liquid=asList(view.accounts).filter(a=>a.liquid);
   const journalOptions=asList(Object.fromEntries(view.journals.filter(j=>
@@ -515,16 +552,28 @@ export function BankReconciliation({view,canManage,disabled,execute,today,unit})
             {money(r.amount,unit)}</span>,r.journalId||'تطبیق‌نشده',
           canManage?<div className="sac-cheque-actions">
             <input placeholder="علت تصمیم تطبیق" value={reasons[r.id]||''}
-              onChange={e=>setReasons(p=>({...p,[r.id]:e.target.value}))}/>
+              onChange={e=>{
+                onDraftChange?.('bank-reconciliation',true);
+                setReasons(p=>({...p,[r.id]:e.target.value}));
+              }}/>
             {!r.journalId&&<select value={matches[r.id]||''}
-              onChange={e=>setMatches(p=>({...p,[r.id]:e.target.value}))}>
+              onChange={e=>{
+                onDraftChange?.('bank-reconciliation',true);
+                setMatches(p=>({...p,[r.id]:e.target.value}));
+              }}>
               {opt(journalOptions,'سند دفترکل')}</select>}
             <button type="button" disabled={disabled||!(reasons[r.id]||'').trim()||
               (!r.journalId&&!matches[r.id])}
-              onClick={()=>void sendCommand(execute,
+              onClick={()=>void (async()=>{
+                const ok=await sendCommand(execute,
                 r.journalId?'bank.statement.unmatch':'bank.statement.match',{
                   statementId:r.id,reason:reasons[r.id].trim(),
-                  ...(r.journalId?{}:{journalId:matches[r.id]})})}>
+                  ...(r.journalId?{}:{journalId:matches[r.id]})});
+                if(ok){
+                  setReasons(s=>{const next={...s};delete next[r.id];return next;});
+                  setMatches(s=>{const next={...s};delete next[r.id];return next;});
+                }
+              })()}>
               {r.journalId?'بازکردن مغایرت':'تطبیق با سند'}</button>
           </div>:null,
         ]}))}/>
@@ -556,12 +605,15 @@ export function BankReconciliation({view,canManage,disabled,execute,today,unit})
         onChange={async e=>{
           setImportRows([]);setImportAcknowledged(false);setImportError('');
           const file=e.target.files?.[0];if(!file)return;
+          onDraftChange?.('bank-reconciliation',true);
+          setImportReading(true);
           try{
             if(file.size>1024*1024)throw Error('فایل CSV بیش از ۱ مگابایت است.');
             const value=await file.text();
             setImportRows(parseAccountingBankCSV(value,{
               accounts:view.accounts,existing:view.bankStatements,today}));
           }catch(err){setImportError(err.message||'خواندن فایل معتبر نبود.');}
+          finally{setImportReading(false);}
         }}/>
       {importError&&<p role="alert" className="sac-alert error">{importError}</p>}
       {!!importRows.length&&<>
@@ -583,12 +635,18 @@ export function BankReconciliation({view,canManage,disabled,execute,today,unit})
   </section>;
 }
 
-export function InstalmentPlans({view,canManage,disabled,execute,today,unit}){
+export function InstalmentPlans({view,canManage,disabled,execute,today,unit,onDraftChange}){
   const [form,setForm]=useState({planId:'',direction:'receipt',
     documentId:'',schedule:''});
   const [reasons,setReasons]=useState({});
-  const ch=(key,val)=>setForm(s=>({...s,[key]:val,
-    ...(key==='direction'?{documentId:''}:{})}));
+  useReportDraft('installments',Boolean(form.planId.trim()||
+    form.direction!=='receipt'||form.documentId||
+    form.schedule.trim()||Object.values(reasons).some(v=>v.trim())),onDraftChange);
+  const ch=(key,val)=>{
+    onDraftChange?.('installments',true);
+    setForm(s=>({...s,[key]:val,
+      ...(key==='direction'?{documentId:''}:{})}));
+  };
   const rows=asList(view.installmentPlans);
   const documents=asList(view[form.direction==='receipt'?'invoices':'bills'])
     .filter(d=>d.status==='issued'&&d.allocated+(d.returnedAmount||0)<d.total);
@@ -615,10 +673,16 @@ export function InstalmentPlans({view,canManage,disabled,execute,today,unit}){
             plan.active?'فعال':'لغوشده',
             plan.active&&canManage?<div className="sac-cheque-actions">
               <input value={reasons[plan.id]||''} placeholder="علت فسخ برنامه"
-                onChange={e=>setReasons(p=>({...p,[plan.id]:e.target.value}))}/>
+                onChange={e=>{
+                  onDraftChange?.('installments',true);
+                  setReasons(p=>({...p,[plan.id]:e.target.value}));
+                }}/>
               <button disabled={disabled||!(reasons[plan.id]||'').trim()}
-                onClick={()=>void sendCommand(execute,'installments.cancel',{
-                  planId:plan.id,reason:reasons[plan.id].trim()})}>لغو برنامه</button>
+                onClick={()=>void (async()=>{
+                  const ok=await sendCommand(execute,'installments.cancel',{
+                    planId:plan.id,reason:reasons[plan.id].trim()});
+                  if(ok)setReasons(s=>{const next={...s};delete next[plan.id];return next;});
+                })()}>لغو برنامه</button>
             </div>:null]};
       })}/>
     <InlineForm title="ایجاد برنامه اقساط" canManage={canManage} disabled={disabled}
@@ -634,7 +698,7 @@ export function InstalmentPlans({view,canManage,disabled,execute,today,unit}){
         const ok=await sendCommand(execute,'installments.create',{
           planId:form.planId,direction:form.direction,documentId:form.documentId,
           schedule});
-        if(ok)setForm(s=>({...s,planId:'',schedule:''}));
+        if(ok)setForm(s=>({...s,planId:'',documentId:'',schedule:''}));
       }}>
       <Input label="کد برنامه" value={form.planId} onChange={v=>ch('planId',v)}/>
       <Input label="نوع" value={form.direction} onChange={v=>ch('direction',v)}
@@ -651,7 +715,7 @@ export function InstalmentPlans({view,canManage,disabled,execute,today,unit}){
   </section>;
 }
 
-export function PayrollAndTax({view,canManage,canSetTax=canManage,disabled,execute,today,unit}){
+export function PayrollAndTax({view,canManage,canSetTax=canManage,disabled,execute,today,unit,onDraftChange}){
   const [pay,setPay]=useState({payrollId:'',employeeId:'',
     period:parseAccountingJalali(formatAccountingJalali(today,{digits:'ascii'}).slice(0,7)+'/01')||today,
     gross:'',withholding:'0',reason:''});
@@ -659,9 +723,19 @@ export function PayrollAndTax({view,canManage,canSetTax=canManage,disabled,execu
     effectiveFrom:today,reason:''});
   const [bank,setBank]=useState('1010');
   const [statementDate,setStatementDate]=useState(today);
+  const defaultPayPeriod=parseAccountingJalali(
+    formatAccountingJalali(today,{digits:'ascii'}).slice(0,7)+'/01')||today;
+  const hasDraft=Boolean(pay.payrollId||pay.employeeId||pay.gross||pay.reason||
+    pay.withholding!=='0'||pay.period!==defaultPayPeriod||rule.ruleId||
+    rule.name||rule.rateBasisPoints||rule.reason||rule.effectiveFrom!==today||
+    bank!=='1010'||statementDate!==today);
+  useReportDraft('payroll',hasDraft,onDraftChange);
   const ch=(key,val)=>setPay(p=>({...p,[key]:val}));
   const rules=asList(view.taxRules);
-  return <section>
+  return <section onChangeCapture={event=>{
+    if(event.target.closest('.sac-operational-form,.sac-cheque-actions'))
+      onDraftChange?.('payroll',true);
+  }}>
     <h2>حقوق و دستمزد، بدهی کارکنان و سیاست مالیات</h2>
     <Err>این ماژول ثبت حسابداری ناخالص حقوق، کسورات صریح و پرداخت خالص را انجام می‌دهد.
       محاسبات بیمه، عیدی، سنوات، نرخ‌های مالیات و گزارش‌های رسمی ایران خودکار/تأییدشده نیست.
@@ -732,7 +806,7 @@ export function PayrollAndTax({view,canManage,canSetTax=canManage,disabled,execu
   </section>;
 }
 
-export function FiscalYearClose({view,canManage,disabled,execute,today}){
+export function FiscalYearClose({view,canManage,disabled,execute,today,onDraftChange}){
   const solarYear=Number(formatAccountingJalali(today,{digits:'ascii'}).slice(0,4));
   const defaultStart=parseAccountingJalali((solarYear-1)+'/01/01')||today.slice(0,4)+'-01-01';
   const defaultEnd=parseAccountingJalali((solarYear-1)+'/12/30')||
@@ -743,9 +817,17 @@ export function FiscalYearClose({view,canManage,disabled,execute,today}){
     d.setUTCDate(d.getUTCDate()+1);return d.toISOString().slice(0,10);
   });
   const [throughDate,setThroughDate]=useState(defaultEnd);
+  const initialDates=useRef({startDate,throughDate:defaultEnd});
   const [periodId,setPeriodId]=useState('');
   const [reason,setReason]=useState('');
-  return <section>
+  const hasDraft=Boolean(periodId||reason||
+    startDate!==initialDates.current.startDate||
+    throughDate!==initialDates.current.throughDate);
+  useReportDraft('period',hasDraft,onDraftChange);
+  return <section onChangeCapture={event=>{
+    if(event.target.closest('.sac-operational-form'))
+      onDraftChange?.('period',true);
+  }}>
     <h3>اختتامیه سال مالی و انتقال خودکار مانده به دوره بعد</h3>
     <Err>آغاز و پایان دوره با تاریخ شمسی انتخاب می‌شود. بازه باید پیوسته
       و فاقد سند قدیمی بیرون از دوره باشد. درآمد و هزینه با سند متوازن بسته
@@ -775,15 +857,48 @@ export function FiscalYearClose({view,canManage,disabled,execute,today}){
   </section>;
 }
 
-export function CompanyProfile({view,canManage,disabled,execute}){
+export function CompanyProfile({view,canManage,disabled,execute,onDraftChange}){
   const company=view.companyProfile||null;
   const empty={legalName:'',address:'',phone:'',nationalId:'',
     economicCode:'',postalCode:'',postingUtcOffsetMinutes:'',reason:''};
-  const [form,setForm]=useState(empty);
-  useEffect(()=>setForm({...empty,...company,reason:''}),[
-    company?.history?.length,
-  ]);
-  const ch=(key,value)=>setForm(x=>({...x,[key]:value}));
+  const profileKeys=['legalName','address','phone','nationalId','economicCode',
+    'postalCode','postingUtcOffsetMinutes'];
+  const fieldsFrom=source=>Object.fromEntries(profileKeys.map(key=>[
+    key,String(source?.[key]??'')]));
+  const profileFingerprint=JSON.stringify(profileKeys.map(key=>String(company?.[key]??'')));
+  const [editor,setEditor]=useState(()=>({
+    form:{...fieldsFrom(company),reason:''},
+    baseline:fieldsFrom(company),conflicts:[],
+  }));
+  const {form,baseline,conflicts}=editor;
+  const hasDraft=Boolean(form.reason||conflicts.length||profileKeys.some(key=>
+    form[key]!==baseline[key]));
+  useReportDraft('company',hasDraft,onDraftChange);
+  useEffect(()=>{
+    const fresh=fieldsFrom(company);
+    setEditor(previous=>{
+      const merged={...previous.form};
+      const nextConflicts=new Set(previous.conflicts);
+      for(const key of profileKeys){
+        if(previous.baseline[key]===fresh[key])continue;
+        if(previous.form[key]===previous.baseline[key]){
+          // Untouched fields adopt current host values, never stale values.
+          merged[key]=fresh[key];
+          nextConflicts.delete(key);
+        }else if(previous.form[key]!==fresh[key]){
+          // Both host and operator changed this field. Do not silently post
+          // the operator's old snapshot on the host's newer CAS revision.
+          nextConflicts.add(key);
+        }else nextConflicts.delete(key);
+      }
+      return {form:merged,baseline:fresh,conflicts:[...nextConflicts]};
+    });
+  },[profileFingerprint,company?.history?.length]);
+  const ch=(key,value)=>{
+    onDraftChange?.('company',true);
+    setEditor(x=>({...x,form:{...x.form,[key]:value},
+      conflicts:x.conflicts.filter(item=>item!==key)}));
+  };
   return <section>
     <h2>مشخصات واحد اقتصادی و سربرگ اسناد</h2>
     <Err>اطلاعات این بخش در چاپ فاکتور استفاده می‌شود. ثبت آن به معنای
@@ -802,13 +917,22 @@ export function CompanyProfile({view,canManage,disabled,execute}){
     <InlineForm title={company?'ویرایش سربرگ شرکت':'ثبت مشخصات شرکت'}
       canManage={canManage} disabled={disabled}
       onSubmit={async()=>{
+        if(conflicts.length)throw Error('مشخصات شرکت هم‌زمان در میزبان تغییر کرده است. فیلدهای متعارض را بررسی و دوباره وارد کنید، یا آخرین مقادیر میزبان را بارگذاری کنید.');
         const result=await sendCommand(execute,'company.profile.set',{
           legalName:form.legalName,address:form.address,phone:form.phone,
           nationalId:form.nationalId,economicCode:form.economicCode,
           postalCode:form.postalCode,reason:form.reason.trim(),
           postingUtcOffsetMinutes:fixedCompanyPostingOffset(form.postingUtcOffsetMinutes)});
-        if(result)setForm(x=>({...x,reason:''}));
+        if(result)setEditor(x=>({...x,form:{...x.form,reason:''}}));
       }}>
+      {conflicts.length>0&&<div role="alert" className="sac-alert error">
+        تغییر هم‌زمان مشخصات شرکت شناسایی شد. فیلدهای متعارض: {conflicts.join('، ')}.
+        <button type="button" disabled={disabled} onClick={()=>{
+          setEditor({form:{...fieldsFrom(company),reason:''},
+            baseline:fieldsFrom(company),conflicts:[]});
+          onDraftChange?.('company',false);
+        }}>بارگذاری مجدد مقادیر میزبان (کنارگذاشتن ویرایش فعلی)</button>
+      </div>}
       {[
         ['legalName','عنوان رسمی/تجاری',true],
         ['nationalId','شناسه ملی/ثبت',false],

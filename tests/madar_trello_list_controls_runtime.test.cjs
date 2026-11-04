@@ -42,6 +42,7 @@ async function unusedPort(){
       server.close(error=>error?reject(error):resolve(port));
     });
   });
+
 }
 
 async function storedState(page){
@@ -68,7 +69,7 @@ async function titlesIn(lane){
   return lane.locator('.task-card .task-title').allTextContents();
 }
 
-async function addInline(lane,trigger,title){
+async function addInline(page,lane,trigger,title){
   await trigger.click();
   const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
   await form.waitFor({state:'visible'});
@@ -76,6 +77,9 @@ async function addInline(lane,trigger,title){
   await form.getByRole('textbox',{name:'عنوان کارت جدید'}).fill(title);
   await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
   await lane.getByRole('button',{name:'جزئیات '+title}).waitFor({state:'visible'});
+  // React's optimistic card is not durable until the host/local save succeeds.
+  await waitForCardsSaved(page,[title]);
+  await form.waitFor({state:'detached'});
 }
 
 test('Trello list controls: right-click, completion, insert positions, collapse and RTL persist safely',
@@ -89,6 +93,8 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
         // Native WebView2 QA profiles may live under this repository and
         // Windows locks their cookie journals. They are not Vite source.
         watch:{ignored:['**/.qa-*','**/.qa-*/**','**/WebView2/**','**/research/**']}}});
+    const evidenceDir=process.env.MADAR_BOARD_UX_EVIDENCE_DIR;
+    if(evidenceDir)fs.mkdirSync(evidenceDir,{recursive:true});
     let browser;
     try{
       await server.listen();
@@ -110,6 +116,8 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
         .getByRole('button',{name:'برد کارها'}).click();
       await page.getByRole('heading',{name:'برد واقعی آزمون'}).waitFor();
+      if(evidenceDir)await page.screenshot({path:path.join(evidenceDir,
+        'board-before-1440.png'),fullPage:false});
       const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
       const other=page.locator('.kanban-lane[aria-label="ستون مرحله بعد"]');
       assert.deepEqual(await titlesIn(lane),['کارت اول','کارت دوم','کارت سوم']);
@@ -134,14 +142,16 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
         .tasks?.find(t=>t.id==='old-a')?.completed===false);
 
       // The same quick composer is used for all three insertion locations.
-      await addInline(lane,lane.getByRole('button',{name:'افزودن کارت در ابتدای شروع'}),'کارت ابتدا');
+      await addInline(page,lane,lane.getByRole('button',{name:'افزودن کارت در ابتدای شروع'}),'کارت ابتدا');
       assert.deepEqual(await titlesIn(lane),['کارت ابتدا','کارت اول','کارت دوم','کارت سوم']);
-      await addInline(lane,lane.getByRole('button',{name:'افزودن کارت پیش از کارت دوم'}),'کارت میانی');
+      await addInline(page,lane,lane.getByRole('button',{name:'افزودن کارت پیش از کارت دوم'}),'کارت میانی');
       assert.deepEqual(await titlesIn(lane),['کارت ابتدا','کارت اول','کارت میانی','کارت دوم','کارت سوم']);
-      await addInline(lane,lane.locator('.lane-add-card'),'کارت انتها');
+      await addInline(page,lane,lane.locator('.lane-add-card'),'کارت انتها');
       const expected=['کارت ابتدا','کارت اول','کارت میانی','کارت دوم','کارت سوم','کارت انتها'];
       assert.deepEqual(await titlesIn(lane),expected);
       await waitForCardsSaved(page,['کارت ابتدا','کارت میانی','کارت انتها']);
+      if(evidenceDir)await page.screenshot({path:path.join(evidenceDir,
+        'board-after-1440.png'),fullPage:false});
 
       // A collapsed lane becomes narrow, its neighbor remains expanded, and
       // the collapsed lane can be restored without losing any cards.
@@ -165,6 +175,10 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       assert.equal(rtl.direction,'rtl');
       assert.ok(rtl.firstX>rtl.secondX,JSON.stringify(rtl));
       await page.setViewportSize({width:480,height:800});
+      await page.evaluate(()=>{
+        window.scrollTo(0,0);
+        document.querySelector('.workspace-scroll')?.scrollTo({top:0,behavior:'instant'});
+      });
       const mobile=await page.evaluate(()=>{
         const board=document.querySelector('.kanban');
         return {direction:getComputedStyle(board).direction,
@@ -174,6 +188,35 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       assert.equal(mobile.direction,'rtl');
       assert.ok(mobile.body<=mobile.viewport+2,JSON.stringify(mobile));
       assert.ok(mobile.boardScrollWidth>mobile.boardWidth,JSON.stringify(mobile));
+      const mobileBoardTop=await page.locator('.kanban').evaluate(node=>
+        Math.round(node.getBoundingClientRect().top));
+      assert.ok(mobileBoardTop>=0&&mobileBoardTop<=600,
+        'Mobile board content must be visible before the bottom dock, not buried beneath toolbars: '+mobileBoardTop);
+      if(evidenceDir)await page.screenshot({path:path.join(evidenceDir,
+        'board-mobile-480.png'),fullPage:false});
+      await page.setViewportSize({width:390,height:800});
+      await page.evaluate(()=>{
+        window.scrollTo(0,0);
+        document.querySelector('.workspace-scroll')?.scrollTo({top:0,behavior:'instant'});
+      });
+      const narrow=await page.evaluate(()=>{
+        const board=document.querySelector('.kanban');
+        return {viewport:innerWidth,docWidth:document.documentElement.scrollWidth,
+          boardTop:Math.round(board.getBoundingClientRect().top)};
+      });
+      assert.ok(narrow.docWidth<=narrow.viewport+2,JSON.stringify(narrow));
+      assert.ok(narrow.boardTop>=0&&narrow.boardTop<=620,
+        '390px first-screen board access: '+JSON.stringify(narrow));
+      const advancedToggle=page.locator('.board-toolbar .filter-toggle');
+      assert.equal(await advancedToggle.getAttribute('aria-label'),'فیلترهای پیشرفته');
+      await advancedToggle.click();
+      await page.locator('.board-toolbar .filter-popover').waitFor({state:'visible'});
+      await page.locator('.board-toolbar .filter-header button[aria-label="بستن"]').click();
+      const listTab=page.locator('.board-toolbar .board-tabs button[aria-label="فهرست"]');
+      await listTab.click();
+      assert.equal(await page.locator('.list-mode').isVisible(),true);
+      await page.locator('.board-toolbar .board-tabs button[aria-label="برد کارها"]').click();
+      assert.equal(await page.locator('.kanban').isVisible(),true);
 
       // Reload validates persisted card order and invariance of existing
       // finance metadata in the isolated test state, not a real ledger.
@@ -212,4 +255,405 @@ test('Trello list controls: right-click, completion, insert positions, collapse 
       await browser?.close();
       await server.close();
     }
+  });
+
+test('quick-add refuses false success when a visible legacy card has an invalid ordering ID',
+  {skip:!runnable,timeout:60000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',
+      server:{host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+        watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},
+        locale:'fa-IR',reducedMotion:'reduce'});
+      const legacy={...task('legacy','کارت میراثی',3,55000),id:'',
+        accountingReference:'immutable-legacy',checklist:[
+          {id:'legacy-step',text:'سابقه مالی بدون تغییر',done:true,cost:2400}]};
+      const baseline={...fixture,tasks:[...fixture.tasks,legacy]};
+      await context.addInitScript(data=>{
+        if(!localStorage.getItem('madar-preview'))
+          localStorage.setItem('madar-preview',JSON.stringify(data));
+        localStorage.setItem('madar-preferences',
+          JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
+      },baseline);
+      const page=await context.newPage();
+      page.setDefaultTimeout(12000);
+      const errors=[];page.on('pageerror',error=>errors.push(error.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      await page.getByRole('heading',{name:'برد واقعی آزمون'}).waitFor();
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      assert.ok((await titlesIn(lane)).includes('کارت میراثی'),
+        'Host-valid legacy card remains visible rather than being discarded');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      const editor=form.getByRole('textbox',{name:'عنوان کارت جدید'});
+      await editor.fill('کارت با عنوان حفظ‌شده');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await form.getByRole('alert').waitFor({state:'visible'});
+      assert.match(await form.getByRole('alert').innerText(),/ثبت کارت|عنوان شما حفظ شد/);
+      assert.equal(await editor.inputValue(),'کارت با عنوان حفظ‌شده');
+      assert.equal((await titlesIn(lane)).includes('کارت با عنوان حفظ‌شده'),false,
+        'Rejected creation must not render a phantom card');
+      const after=await storedState(page);
+      assert.equal(after.tasks.length,baseline.tasks.length);
+      assert.deepEqual(after.tasks.find(item=>item.id===''),legacy,
+        'Legacy card and its financial metadata must remain unmodified');
+      assert.deepEqual(financeSnapshot(after),financeSnapshot(baseline));
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
+  });
+
+test('quick-add never claims durable success if isolated host save rejects',
+  {skip:!runnable,timeout:60000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',server:{
+      host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+      watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},locale:'fa-IR'});
+      await context.addInitScript(data=>{
+        if(!localStorage.getItem('madar-preview'))
+          localStorage.setItem('madar-preview',JSON.stringify(data));
+        const write=Storage.prototype.setItem;
+        Storage.prototype.setItem=function(key,value){
+          if(key==='madar-preview')throw Error('Synthetic host rejected save');
+          return write.call(this,key,value);
+        };
+        localStorage.setItem('madar-preferences',
+          JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
+      },fixture);
+      const page=await context.newPage();
+      page.setDefaultTimeout(14000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      const editor=form.getByRole('textbox',{name:'عنوان کارت جدید'});
+      await editor.fill('کارت با ذخیره ناموفق');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await form.getByRole('alert').waitFor({state:'visible'});
+      assert.match(await form.getByRole('alert').innerText(),/ذخیره کارت رد شد/);
+      assert.equal(await editor.inputValue(),'کارت با ذخیره ناموفق');
+      assert.equal(await form.getByRole('button',{name:'ذخیره متوقف شد'}).isDisabled(),true);
+      assert.equal(await form.getByRole('button',{name:'بستن افزودن کارت'}).isEnabled(),true,
+        'A failed save must not keep the composer permanently stuck in pending');
+      const durable=await storedState(page);
+      assert.equal(durable.tasks.some(t=>t.title==='کارت با ذخیره ناموفق'),false,
+        'Never confuse a staged React card with a host-persisted record');
+      const recovery=await page.evaluate(()=>
+        JSON.parse(localStorage.getItem('madar-unsaved-recovery')||'null'));
+      assert.ok(recovery?.tasks?.some(t=>t.title==='کارت با ذخیره ناموفق'),
+        'Keep a recovery snapshot instead of silently discarding a rejected card');
+      assert.equal(await page.getByText('کارت ذخیره شد؛ برای تکمیل جزئیات روی آن کلیک کنید.').count(),0);
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
+  });
+
+test('quick-add distinguishes a queued offline client save from host acknowledgment',
+  {skip:!runnable,timeout:60000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',server:{
+      host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+      watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},locale:'fa-IR'});
+      await context.addInitScript(data=>{
+        localStorage.setItem('madar-preview',JSON.stringify(data));
+        const read=()=>JSON.parse(localStorage.getItem('madar-preview'));
+        window.madar={
+          getState:async()=>read(),getStateForUi:async()=>read(),
+          saveState:async state=>{
+            localStorage.setItem('madar-preview',JSON.stringify(state));
+            return {revision:'qa-offline',offline:true};
+          },
+          lanStatus:async()=>({mode:'client',user:{username:'qa-editor',role:'editor',projects:null}}),
+          lanProfiles:async()=>[],getPreferences:async()=>({calendar:'jalali',clockWidget:'hidden'}),
+          syncStatus:async()=>({}),releaseCheck:async()=>({available:false}),
+        };
+      },fixture);
+      const page=await context.newPage();
+      page.setDefaultTimeout(15000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      await form.getByRole('textbox',{name:'عنوان کارت جدید'}).fill('کارت در صف آفلاین');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await page.getByText('کارت در صف آفلاین ثبت شد؛ تأیید میزبان هنوز دریافت نشده است.')
+        .waitFor({state:'visible'});
+      assert.ok((await storedState(page)).tasks.some(t=>t.title==='کارت در صف آفلاین'));
+      assert.equal(await page.getByText('کارت ذخیره شد؛ برای تکمیل جزئیات روی آن کلیک کنید.').count(),0,
+        'Offline:true must never claim host acknowledged the write');
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
+  });
+
+test('quick-add warns when both host save and browser recovery storage fail',
+  {skip:!runnable,timeout:60000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',server:{
+      host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+      watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},locale:'fa-IR'});
+      await context.addInitScript(data=>{
+        localStorage.setItem('madar-preview',JSON.stringify(data));
+        localStorage.setItem('madar-unsaved-recovery',JSON.stringify({
+          ...data,tasks:[...data.tasks,{id:'prior-stale-recovery',title:'نسخه قبلی نامعتبر'}],
+        }));
+        const objectUrl=URL.createObjectURL.bind(URL);
+        URL.createObjectURL=function(blob){window.__lastRecoveryDownload=blob;return objectUrl(blob);};
+        const original=Storage.prototype.setItem;
+        Storage.prototype.setItem=function(key,value){
+          if(key==='madar-preview'||key==='madar-unsaved-recovery')
+            throw Error('Synthetic storage unavailable');
+          return original.call(this,key,value);
+        };
+        localStorage.setItem('madar-preferences',
+          JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
+      },fixture);
+      const page=await context.newPage();page.setDefaultTimeout(14000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      const editor=form.getByRole('textbox',{name:'عنوان کارت جدید'});
+      await editor.fill('متن نجات نیافته');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await form.getByRole('alert').waitFor({state:'visible'});
+      assert.match(await form.getByRole('alert').innerText(),/ثبت نسخهٔ بازیابی نیز ممکن نبود/);
+      assert.equal(await editor.inputValue(),'متن نجات نیافته');
+      assert.equal(await form.getByRole('button',{name:'بستن افزودن کارت'}).isEnabled(),true);
+      await page.getByRole('button',{name:'دریافت تغییرات ذخیره‌نشده'}).click();
+      const exported=await page.evaluate(async()=>JSON.parse(await window.__lastRecoveryDownload.text()));
+      assert.ok(exported.tasks.some(t=>t.title==='متن نجات نیافته'),
+        'Downloaded recovery must use the latest failed state, not a stale storage key');
+      assert.equal(exported.tasks.some(t=>t.id==='prior-stale-recovery'),false);
+      assert.ok((await page.evaluate(()=>JSON.parse(localStorage.getItem('madar-unsaved-recovery'))))
+        .tasks.some(t=>t.id==='prior-stale-recovery'),
+        'The stale key remains unchanged when the newer recovery storage write failed');
+      assert.equal((await storedState(page)).tasks.some(t=>t.title==='متن نجات نیافته'),false);
+      page.once('dialog',async dialog=>await dialog.accept());
+      await page.getByRole('button',{name:'بازخوانی نسخه سرور'}).click();
+      await page.waitForFunction(()=>localStorage.getItem('madar-unsaved-recovery')===null);
+      assert.equal(await page.getByRole('button',{name:'دریافت تغییرات ذخیره‌نشده'}).count(),0,
+        'Confirmed server recovery must invalidate the stale failed-save download');
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
+  });
+
+test('authoritative recovery read cannot silently overwrite a concurrent card edit',
+  {skip:!runnable,timeout:65000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',server:{
+      host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+      watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},locale:'fa-IR'});
+      await context.addInitScript(data=>{
+        const baseline=structuredClone(data);
+        window.__recoveryReadCount=0;
+        window.__recoveryReadPending=false;
+        window.madar={
+          getState:async()=>structuredClone(baseline),
+          getStateForUi:async()=>{
+            if(++window.__recoveryReadCount===1)return structuredClone(baseline);
+            window.__recoveryReadPending=true;
+            return new Promise(resolve=>{
+              window.__finishRecoveryRead=()=>resolve(structuredClone(baseline));
+            });
+          },
+          saveState:async()=>{throw Error('Synthetic rejected host save');},
+          lanStatus:async()=>({mode:'solo',user:{username:'qa',role:'admin',projects:null}}),
+          lanProfiles:async()=>[],
+          getPreferences:async()=>({calendar:'jalali',clockWidget:'hidden'}),
+          syncStatus:async()=>({}),
+          releaseCheck:async()=>({available:false}),
+        };
+      },fixture);
+      const page=await context.newPage();page.setDefaultTimeout(15000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      await form.getByRole('textbox',{name:'عنوان کارت جدید'}).fill('کارت آزمایش بازیابی');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await form.getByRole('alert').waitFor({state:'visible'});
+      page.once('dialog',async dialog=>await dialog.accept());
+      await page.getByRole('button',{name:'بازخوانی نسخه سرور'}).click();
+      await page.waitForFunction(()=>window.__recoveryReadPending===true);
+      const toggle=lane.locator('[data-progressive-card-id="old-a"] .task-complete-toggle');
+      assert.equal(await toggle.getAttribute('aria-pressed'),'false');
+      await toggle.click();
+      assert.equal(await toggle.getAttribute('aria-pressed'),'false',
+        'No speculative edit is permitted during a forced host read');
+      await page.getByText('بازخوانی اطلاعات در جریان است؛ پس از پایان آن دوباره ویرایش کنید.')
+        .waitFor({state:'visible'});
+      await page.evaluate(()=>window.__finishRecoveryRead());
+      await page.locator('.recovery-alert').waitFor({state:'detached'});
+      assert.equal(await toggle.getAttribute('aria-pressed'),'false');
+      assert.equal((await storedState(page))?.tasks,undefined,
+        'A rejected host save never becomes a durable preview write');
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
+  });
+
+test('native backup restore replaces stale polling and reacquires the host CAS token before editing',
+  {skip:!runnable,timeout:70000},async()=>{
+    const {chromium}=require(playwrightPath);
+    const {createServer}=await import('vite');
+    const server=await createServer({root,logLevel:'error',server:{
+      host:'127.0.0.1',port:await unusedPort(),strictPort:true,hmr:false,
+      watch:{ignored:['**/.qa-*','**/WebView2/**','**/research/**']}}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const context=await browser.newContext({viewport:{width:1440,height:900},locale:'fa-IR'});
+      await context.addInitScript(data=>{
+        let host=structuredClone(data),revision='qa-revision-0';
+        const clone=state=>structuredClone(state);
+        window.__syntheticSaves=[];
+        window.__syntheticReads=0;
+        const actualSetInterval=window.setInterval.bind(window);
+        window.setInterval=(fn,ms,...args)=>{
+          if(ms===15000)window.__runBoardPoll=fn;
+          return actualSetInterval(fn,ms,...args);
+        };
+        window.madar={
+          getState:async()=>clone(host),
+          getStateForUi:async()=>{
+            ++window.__syntheticReads;
+            if(window.__failNextAuthoritativeRead){
+              window.__failNextAuthoritativeRead=false;
+              throw Error('Synthetic post-restore host read unavailable');
+            }
+            const snapshot={...clone(host),__localRevision:revision};
+            if(window.__delayNextPollRead){
+              window.__delayNextPollRead=false;
+              window.__oldPollingReadPending=true;
+              return new Promise(resolve=>{
+                window.__releaseOldPollingRead=()=>resolve(snapshot);
+              });
+            }
+            return snapshot;
+          },
+          saveState:async state=>{
+            if(state.__localRevision!==revision)
+              throw Error('CONFLICT: synthetic localRevision was not read after restore');
+            window.__syntheticSaves.push(clone(state));
+            host=clone(state);revision='qa-revision-'+(window.__syntheticSaves.length+1);
+            return {localRevision:revision};
+          },
+          listLocalBackups:async()=>[{name:'madar-qa-synthetic-backup.json'}],
+          driveStatus:async()=>({connected:false}),
+          driveFolderStatus:async()=>({configured:false,folder:'',available:false}),
+          driveFolderList:async()=>[],
+          cloudPeerStatus:async()=>({paired:false,enabled:false}),
+          restoreLocalBackup:async()=>{
+            const restored=clone(data);
+            restored.tasks[0].title='کارت بازگردانی‌شده';
+            delete restored.__localRevision;
+            host=restored;revision='qa-revision-restored';
+            return clone(restored); // Real native backup APIs return bare state.
+          },
+          lanStatus:async()=>({mode:'solo',user:{username:'qa',role:'admin',projects:null}}),
+          lanProfiles:async()=>[],
+          getPreferences:async()=>({calendar:'jalali',clockWidget:'hidden'}),
+          syncStatus:async()=>({}),releaseCheck:async()=>({available:false}),
+        };
+        localStorage.setItem('madar-preferences',JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
+      },fixture);
+      const page=await context.newPage();page.setDefaultTimeout(16000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      await page.getByRole('navigation',{name:'بخش‌های اصلی مدار'})
+        .getByRole('button',{name:'برد کارها'}).click();
+      await page.waitForFunction(()=>typeof window.__runBoardPoll==='function');
+      // Capture a pre-restore host snapshot and leave its background read open.
+      await page.evaluate(()=>{
+        window.__delayNextPollRead=true;
+        window.__runBoardPoll();
+      });
+      await page.waitForFunction(()=>window.__oldPollingReadPending===true);
+      await page.locator('.vitrea-quickdock').getByRole('button',{name:'Google Drive'}).click();
+      const recent=page.locator('.backup-easy-recent');
+      page.once('dialog',async dialog=>dialog.accept());
+      await recent.getByRole('button',{name:'بازیابی'}).click();
+      // Only the synthetic host and in-memory synthetic state are modified.
+      await page.getByRole('button',{name:'جزئیات کارت بازگردانی‌شده'})
+        .waitFor({state:'visible'});
+      await page.evaluate(()=>window.__releaseOldPollingRead());
+      await page.waitForTimeout(200);
+      await page.getByRole('button',{name:'جزئیات کارت بازگردانی‌شده'})
+        .waitFor({state:'visible'});
+      const lane=page.locator('.kanban-lane[aria-label="ستون شروع"]');
+      await lane.locator('.lane-add-card').click();
+      const form=lane.getByRole('form',{name:'افزودن کارت به شروع'});
+      await form.getByRole('textbox',{name:'عنوان کارت جدید'}).fill('کارت پس از بازیابی');
+      await form.getByRole('button',{name:'افزودن کارت',exact:true}).click();
+      await page.waitForFunction(()=>window.__syntheticSaves.length===1);
+      const saved=await page.evaluate(()=>window.__syntheticSaves[0]);
+      assert.equal(saved.__localRevision,'qa-revision-restored',
+        'Post-restore save must use the fresh native host revision, not the raw backup payload');
+      assert.ok(saved.tasks.some(t=>t.title==='کارت بازگردانی‌شده'));
+      assert.ok(saved.tasks.some(t=>t.title==='کارت پس از بازیابی'));
+      assert.equal(await page.locator('.recovery-alert').count(),0);
+      // Host restore can commit successfully while the subsequent token read
+      // fails. The UI must remain fail-closed rather than publish stale CAS.
+      await page.evaluate(()=>{window.__failNextAuthoritativeRead=true;});
+      await page.locator('.vitrea-quickdock').getByRole('button',{name:'Google Drive'}).click();
+      page.once('dialog',async dialog=>dialog.accept());
+      await page.locator('.backup-easy-recent').getByRole('button',{name:'بازیابی'}).click();
+      await page.locator('.recovery-alert').waitFor({state:'visible'});
+      assert.ok((await page.locator('.recovery-alert').innerText()).includes('نتیجه بازیابی نسخه نامشخص است'));
+      assert.equal(await page.evaluate(()=>window.__syntheticSaves.length),1,
+        'Unknown host restore outcome must not trigger an automatic stale save');
+      page.once('dialog',async dialog=>dialog.accept());
+      await page.getByRole('button',{name:'بازخوانی نسخه سرور'}).click();
+      await page.locator('.recovery-alert').waitFor({state:'detached'});
+      await page.getByRole('button',{name:'جزئیات کارت بازگردانی‌شده'})
+        .waitFor({state:'visible'});
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }finally{await browser?.close();await server.close();}
   });

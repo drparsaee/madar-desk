@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import tempfile
 import types
 import unittest
@@ -26,9 +27,29 @@ class FakeWindow:
     def __init__(self):
         self.events = types.SimpleNamespace(closing=FakeClosingEvent())
         self.alerts = []
+        self.native_close_results = []
 
     def evaluate_js(self, js):
+        if '__madarAccountingConfirmNativeClose' in js:
+            return True
+        if '__madarAccountingAbortNativeClose' in js:
+            # Mirrors the real React abort callback's explicit Boolean ACK.
+            # A missing ACK is intentionally fail-closed in production.
+            return True
         self.alerts.append(js)
+
+    def destroy(self):
+        self.native_close_results.append(self.events.closing.callback())
+
+
+class SyntheticCloseWorker:
+    """Run an explicitly deferred close decision without actual WebView2."""
+    def __init__(self, *, target, daemon):
+        assert daemon
+        self.target = target
+
+    def start(self):
+        self.target()
 
 
 class FakeHttpServer:
@@ -94,6 +115,14 @@ class AutoBackupDesktopExit(unittest.TestCase):
             desktop, "serve_accounting_page", return_value=FakeHttpServer())
         server_patch.start()
         self.addCleanup(server_patch.stop)
+        gate_class = desktop.NativeAccountingCloseGate
+        def test_gate(window, api, backup, **kwargs):
+            return gate_class(window, api, backup,
+                              thread_factory=SyntheticCloseWorker, **kwargs)
+        gate_patch = patch.object(desktop, 'NativeAccountingCloseGate',
+                                  side_effect=test_gate)
+        gate_patch.start()
+        self.addCleanup(gate_patch.stop)
 
     def launch(self):
         return desktop.main([
@@ -110,11 +139,17 @@ class AutoBackupDesktopExit(unittest.TestCase):
             outcomes.append(callback())
         self.webview.start = run_ui
         self.launch()
-        self.assertEqual(outcomes, [False, True])
+        self.assertEqual(outcomes, [False, False],
+                         'Native X first vetoes and decides in a deferred handler')
+        self.assertEqual(self.window.native_close_results, [True])
         backup = FakeBackup.instances[0]
         self.assertEqual(backup.calls, 3)  # startup, failed close, retried close
         self.assertTrue(backup.started)
         self.assertTrue(backup.stopped)
+        for _ in range(50):
+            if self.window.alerts:
+                break
+            time.sleep(.01)
         self.assertTrue(self.window.alerts)
         self.assertTrue((self.root / "standalone-accounting.sqlite3").exists())
         self.assertFalse((self.root / "tasks.json").exists())
@@ -138,7 +173,8 @@ class AutoBackupDesktopExit(unittest.TestCase):
                 })
         self.webview.start = run_ui
         self.launch()
-        self.assertEqual(recorded, [True])
+        self.assertEqual(recorded, [False])
+        self.assertEqual(self.window.native_close_results, [True])
         self.assertEqual(FakeBackup.instances[0].calls, 2)
         self.assertEqual(self.api.standaloneAccountingRead()["revision"], 0)
 
@@ -165,7 +201,8 @@ class AutoBackupDesktopExit(unittest.TestCase):
                             "kind": "customer"},
                 "expectedRevision": first["revision"],
             })
-            self.assertTrue(self.window.events.closing.callback())
+            self.assertFalse(self.window.events.closing.callback())
+            self.assertEqual(self.window.native_close_results, [True])
         self.webview.start = run_ui
         with patch.object(auto, "AutomaticStandaloneBackups", REAL_AUTOMATIC_BACKUPS):
             self.launch()

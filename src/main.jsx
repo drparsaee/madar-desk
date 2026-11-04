@@ -6,5 +6,6 @@ import {installButtonHints} from './button_hints.js';
 import './mobile_navigation.css';
 import './unslop_general.css';
 import './checkbox_motion.css';
+import './mobile_board_density.css';
 createRoot(document.getElementById('root')).render(<App />);
 installButtonHints(document);

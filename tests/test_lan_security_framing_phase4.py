@@ -42,10 +42,16 @@ class LanOriginAndFramingTests(unittest.TestCase):
 
     def test_post_rejects_signed_content_length_before_login(self):
         payload = json.dumps({"username": "test-owner", "password": "test-only-secret-123"}).encode()
-        status, _ = self.request("POST", "/api/login", payload,
-                                 {"Content-Type": "application/json",
-                                  "Content-Length": "+" + str(len(payload))})
+        # The malformed Content-Length must be refused before reading a body
+        # or reaching authentication. Sending bytes after a header that is
+        # already rejected can trigger a Windows TCP reset on the unread data
+        # (WinError 10053), masking the actual 400 framing response. Keep this
+        # a header-only framing probe, like the PATCH case below.
+        status, result = self.request("POST", "/api/login",
+                                      headers={"Content-Type": "application/json",
+                                               "Content-Length": "+" + str(len(payload))})
         self.assertEqual(status, 400)
+        self.assertEqual(result, {"error": "طول درخواست نامعتبر است."})
         self.assertEqual(self.service.sessions, {})
 
     def test_http11_missing_host_rejected_before_login(self):
@@ -55,13 +61,17 @@ class LanOriginAndFramingTests(unittest.TestCase):
             conn.putrequest("POST", "/api/login", skip_host=True)
             conn.putheader("Content-Type", "application/json")
             conn.putheader("Content-Length", str(len(payload)))
-            conn.endheaders(payload)
+            # Missing HTTP/1.1 Host is rejected before body consumption. Do
+            # not send unread login bytes after the invalid header: Windows
+            # can reset the connection while the 400 response is in flight.
+            conn.endheaders()
             response = conn.getresponse()
             status = response.status
-            response.read()
+            result = json.loads(response.read())
         finally:
             conn.close()
         self.assertEqual(status, 400)
+        self.assertEqual(result, {"error": "هدر Host الزامی است."})
         self.assertEqual(self.service.sessions, {})
 
     def test_patch_rejects_signed_content_length_before_routing(self):

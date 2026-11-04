@@ -51,6 +51,39 @@ def build_state(company, invoice, customer):
          "partyId": vendor, "accountId": "1010", "postingDate": "2026-11-02",
          "allocations": [{"billId": bill, "amount": 9000}]},
     ]
+    if suffix == "A":
+        # Separate unsettled documents are essential: a paid document cannot
+        # enter the correction composer and would falsely pass an exit-only QA.
+        commands.extend([
+            {"type": "invoice.create", "invoiceId": "REVIEW-INV-COR-A",
+             "partyId": customer, "documentDate": "2026-11-01", "lines": [
+                 {"description": "Unsettled synthetic invoice", "quantity": 1,
+                  "unitPrice": 50000}]},
+            {"type": "invoice.approve", "invoiceId": "REVIEW-INV-COR-A"},
+            {"type": "invoice.issue", "invoiceId": "REVIEW-INV-COR-A",
+             "postingDate": "2026-11-02"},
+            {"type": "bill.create", "billId": "REVIEW-BILL-COR-A",
+             "partyId": vendor, "documentDate": "2026-11-01", "lines": [
+                 {"description": "Unsettled synthetic purchase", "quantity": 1,
+                  "unitPrice": 45000}]},
+            {"type": "bill.approve", "billId": "REVIEW-BILL-COR-A"},
+            {"type": "bill.issue", "billId": "REVIEW-BILL-COR-A",
+             "postingDate": "2026-11-02"},
+            {"type": "bill.create", "billId": "REVIEW-BILL-DRAFT-A",
+             "partyId": vendor, "documentDate": "2026-11-01", "lines": [
+                 {"description": "Synthetic editable purchase draft", "quantity": 2,
+                  "unitPrice": 12000}]},
+            {"type": "proforma.create", "proformaId": "REVIEW-PROFORMA-A",
+             "partyId": customer, "documentDate": "2026-11-01",
+             "validUntil": "2026-11-05", "lines": [
+                 {"description": "Synthetic proposal one", "quantity": 1,
+                  "unitPrice": 15000}], "discount": 0, "tax": 0},
+            {"type": "proforma.create", "proformaId": "REVIEW-PROFORMA-B",
+             "partyId": customer, "documentDate": "2026-11-01",
+             "validUntil": "2026-11-05", "lines": [
+                 {"description": "Synthetic proposal two", "quantity": 2,
+                  "unitPrice": 7000}], "discount": 0, "tax": 0},
+        ])
     for number, command in enumerate(commands, 1):
         state = apply_accounting_command(
             state, {**command, "eventId": f"UXREVIEW-{invoice}-{number}"},
@@ -92,6 +125,9 @@ def main():
     assert "REVIEW-INV-A" not in other["view"]["invoices"]
     assert "REVIEW-REC-A" in viewer["view"]["receipts"]
     assert "REVIEW-PAY-A" in viewer["view"]["payments"]
+    assert admin["view"]["invoices"]["REVIEW-INV-COR-A"]["allocated"] == 0
+    assert admin["view"]["bills"]["REVIEW-BILL-COR-A"]["allocated"] == 0
+    assert admin["view"]["bills"]["REVIEW-BILL-DRAFT-A"]["status"] == "draft"
     journal = next(item["id"] for item in admin["view"]["journals"]
                    if item.get("sourceType") == "invoice.issue")
     assert journal

@@ -1,0 +1,114 @@
+/* Board-focused mobile density: keep every working action and the owner's
+ * flip clock, but bring the actual cards above the first screen fold.
+ * Scoped to the board workspace; not a global theme replacement. */
+@media (max-width:600px) {
+  .app-shell.vitrea-layout .workspace-scroll .page-header[data-board-header="true"] {
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:6px;
+    margin-block-end:8px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .page-header[data-board-header="true"] h1 {
+    font-size:20px;
+    line-height:1.4;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .page-header[data-board-header="true"] > .page-controls {
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:6px;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    overflow-x:auto;
+    scrollbar-width:thin;
+    padding-block:2px 5px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .page-header[data-board-header="true"] > .page-controls > button {
+    flex:0 0 auto;
+    min-height:40px;
+    padding:7px 9px;
+    font-size:11px;
+  }
+  /* Hidden only while inoperative; enabled Undo/Redo reappear when available. */
+  .app-shell.vitrea-layout .workspace-scroll .page-header[data-board-header="true"] > .page-controls > button:disabled {
+    display:none;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .project-file-panel--compact {
+    margin-block:6px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .project-file-panel--compact > summary {
+    min-height:42px;
+    padding-block:7px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll > .page-controls--project-quick {
+    display:flex;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    max-width:100%;
+    gap:6px;
+    scrollbar-width:thin;
+    margin-block:6px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll > .page-controls--project-quick > button {
+    flex:0 0 auto;
+    min-height:40px;
+    padding-inline:9px;
+    font-size:11px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-toolbar {
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:5px;
+    margin-block-end:7px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-tabs {
+    flex:0 0 auto;
+    gap:0;
+    padding:2px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-tabs button {
+    font-size:0;
+    gap:0;
+    justify-content:center;
+    min-width:41px;
+    min-height:44px;
+    padding:7px;
+    flex:0 0 auto;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-tabs button svg {
+    flex:none;
+    width:18px;
+    height:18px;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-filters {
+    width:auto;
+    flex:0 1 auto;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:flex-end;
+    gap:5px;
+    min-width:0;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-filters .filter-toggle {
+    font-size:0;
+    min-width:44px;
+    min-height:44px;
+    padding:8px;
+    gap:0;
+    justify-content:center;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-filters .filter-toggle svg {
+    flex:none;
+  }
+  .app-shell.vitrea-layout .workspace-scroll .board-filters .filter-select {
+    min-width:0;
+    width:110px;
+    min-height:44px;
+    padding-inline:5px;
+    font-size:10px;
+  }
+}

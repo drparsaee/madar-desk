@@ -7,6 +7,7 @@ import types
 import unittest
 
 from standalone_accounting_company_registry import StandaloneCompanyRegistry
+import standalone_accounting_desktop as desktop
 from standalone_accounting_desktop import main, AccountingDesktopAPI
 from standalone_accounting_identity import LocalCompanyIdentity
 
@@ -20,9 +21,18 @@ class FakeWindow:
     def __init__(self,api):
         self.api=api
         self.events=types.SimpleNamespace(closing=CloseEvent())
+        self.native_close_results=[]
+    def evaluate_js(self,js):
+        return '__madarAccountingConfirmNativeClose' in js
     def destroy(self):
-        # The fake start loop invokes the close event synchronously itself.
-        pass
+        self.native_close_results.append(self.events.closing.callback())
+
+
+class SyntheticCloseWorker:
+    def __init__(self, *, target, daemon):
+        assert daemon
+        self.target=target
+    def start(self): self.target()
 
 
 class CompanySwitchTests(unittest.TestCase):
@@ -58,14 +68,26 @@ class CompanySwitchTests(unittest.TestCase):
                     self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceLabel'],'شرکت ب')
                     self.assertEqual(current.api.standaloneAccountingRead()['view']['companyWorkspaceId'],b['id'])
                     self.assertFalse(current.api._switch_requested)
-                self.assertTrue(current.events.closing.callback())
+                # Company switch was explicitly confirmed. Normal native X
+                # first vetoes and then checks the dirty React editor.
+                result=current.events.closing.callback()
+                if len(windows)==1:
+                    self.assertTrue(result)
+                else:
+                    self.assertFalse(result)
+                    self.assertEqual(current.native_close_results, [True])
             webview.create_window=create_window
             webview.start=run_webview
+            gate_class=desktop.NativeAccountingCloseGate
+            def test_gate(window,api,backup,**kwargs):
+                return gate_class(window,api,backup,
+                    thread_factory=SyntheticCloseWorker,**kwargs)
             with patch.dict(sys.modules,{'webview':webview}), patch(
                     'standalone_accounting_company_registry.pick_company_dialog',
                     side_effect=selection) as chosen, patch(
                     'standalone_accounting_desktop._native_accounting_login',
-                    side_effect=authenticate):
+                    side_effect=authenticate), patch.object(desktop,
+                    'NativeAccountingCloseGate',side_effect=test_gate):
                 self.assertEqual(main(['--companies-dir',str(hub),
                     '--site-dir',str(root)]),0)
             self.assertEqual(chosen.call_count,2)

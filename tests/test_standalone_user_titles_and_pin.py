@@ -55,7 +55,16 @@ class UserTitlesAndPinTests(unittest.TestCase):
                 self.auth.change_job_title('testowner',title,administrator=self.session)
         self.auth.add_user('auditor','الگوی امن ۲۰۲۶','viewer',administrator=self.session)
         data=(self.path/'local-users.json').read_text(encoding='utf-8')
-        self.assertNotIn('1234',data)
+        # A random salt/digest may legitimately contain the four hex digits
+        # "1234". Searching the entire JSON string creates a flaky test.
+        # Check the stored credential structure and equality instead.
+        stored=json.loads(data)
+        for record in stored['users'].values():
+            self.assertFalse({'password','passwordHash','pin','secret'} & set(record))
+            self.assertRegex(record['salt'], r'\A[0-9a-f]+\Z')
+            self.assertRegex(record['hash'], r'\A[0-9a-f]+\Z')
+            self.assertNotEqual(record['salt'],'1234')
+            self.assertNotEqual(record['hash'],'1234')
         self.assertNotIn('الگوی امن ۲۰۲۶',data)
 
     def test_snapshot_user_title_follows_same_authenticated_company(self):

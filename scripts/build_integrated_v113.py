@@ -179,6 +179,16 @@ def main() -> None:
         raise FileExistsError("Immutable 1.0.13 release artifact already exists")
     source_commit = source_git_commit(builder.ROOT)
     builder.main()  # Signed WebView2 prerequisite and fixed installer preflight.
+    # npm's font-license synchronization may change only the working-tree
+    # timestamps even when its bytes are identical to the committed content.
+    # Verify exact Git content equality before refreshing metadata. Never
+    # stage, replace, or silently ignore an actual font-license change.
+    fonts = ["public/fonts/Estedad-OFL.txt", "public/fonts/OFL.txt"]
+    subprocess.run(["git", "-C", str(builder.ROOT), "diff", "--exit-code",
+                    "--", *fonts], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(builder.ROOT), "update-index",
+                    "--refresh", "--", *fonts], check=False,
+                   capture_output=True)
     if not all(path.is_file() for path in (builder.PROGRAM, builder.QA, builder.PROD)):
         raise RuntimeError("Complete cumulative Windows application and installers required")
     if source_git_commit(builder.ROOT) != source_commit:
