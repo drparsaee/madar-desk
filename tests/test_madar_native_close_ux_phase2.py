@@ -106,6 +106,22 @@ class NativeAccountingCloseGateTest(unittest.TestCase):
         self.resolve()
         self.assertEqual(self.backups, 1)
 
+    def test_failed_close_worker_start_explicitly_vetos_native_event(self):
+        class UnavailableThread:
+            def __init__(self, *, target, daemon):
+                assert daemon
+
+            def start(self):
+                raise RuntimeError('synthetic thread allocation failure')
+
+        gate = NativeAccountingCloseGate(self.window, self.api,
+            lambda: self.fail('No backup should be attempted when close worker failed'),
+            thread_factory=UnavailableThread)
+        self.assertIs(gate.closing(),False)
+        self.assertFalse(gate._checking)
+        self.assertFalse(gate._approved)
+        self.assertEqual(self.window.destroy_calls,0)
+
     def test_preconfirmed_company_switch_still_runs_mandatory_backup(self):
         self.api._switch_requested = True
         self.assertIs(self.gate.closing(), True)

@@ -64,7 +64,9 @@ window.madar = Object.fromEntries(
 
 def recover_native_editor_after_close_abort(window, api, *,
                                             attempt_limit=3,
-                                            sleep_fn=time.sleep):
+                                            sleep_fn=time.sleep,
+                                            js_script=None,
+                                            host_lock_attribute='_exit_backed_up'):
     """Keep finance writes blocked until JS confirms that the editor is live.
 
     This runs on the close worker, never inside pywebview's blocking closing
@@ -73,21 +75,25 @@ def recover_native_editor_after_close_abort(window, api, *,
     bounded recovery can be retried by the next native titlebar X. It must
     never silently grant permission to close or mutate financial records.
     """
+    if host_lock_attribute not in ('_exit_backed_up', '_exit_financial_locked'):
+        raise ValueError('Unknown financial close lock')
+    if js_script is None:
+        js_script = (
+            "typeof window.__madarAccountingAbortNativeClose === 'function' "
+            "&& window.__madarAccountingAbortNativeClose()")
     with api._lock:
-        api._exit_backed_up = True
+        setattr(api, host_lock_attribute, True)
     attempts = 0
     while attempts < attempt_limit:
         try:
-            acknowledged = window.evaluate_js(
-                "typeof window.__madarAccountingAbortNativeClose === 'function' "
-                "&& window.__madarAccountingAbortNativeClose()") is True
+            acknowledged = window.evaluate_js(js_script) is True
         except Exception as exc:
             print('Native accounting editor restore unavailable: ' + str(exc),
                   file=sys.stderr)
             acknowledged = False
         if acknowledged:
             with api._lock:
-                api._exit_backed_up = False
+                setattr(api, host_lock_attribute, False)
             return True
         attempts += 1
         if attempts >= attempt_limit:
@@ -107,12 +113,15 @@ class NativeAccountingCloseGate:
     """
 
     def __init__(self, window, api, final_backup, *, thread_factory=Thread,
-                 on_aborted_close=None):
+                 on_aborted_close=None, decision_script=None):
         self.window = window
         self.api = api
         self.final_backup = final_backup
         self.thread_factory = thread_factory
         self.on_aborted_close = on_aborted_close or (lambda: None)
+        self.decision_script = decision_script or (
+            "typeof window.__madarAccountingConfirmNativeClose === 'function' "
+            "&& window.__madarAccountingConfirmNativeClose()")
         self._lock = RLock()
         self._checking = False
         self._approved = False
@@ -145,10 +154,15 @@ class NativeAccountingCloseGate:
         try:
             self.thread_factory(target=(self._retry_aborted if retry_recovery
                                         else self._decide), daemon=True).start()
-        except Exception:
+        except Exception as exc:
             with self._lock:
                 self._checking = False
-            raise
+            # In a native closing event an exception is not guaranteed to
+            # cancel window destruction. Always explicitly veto if the
+            # decision worker could not start; the user can retry the X.
+            print('Native accounting close worker failed to start: '+str(exc),
+                  file=sys.stderr)
+            return False
         return False
 
     def _recover_aborted(self):
@@ -175,9 +189,7 @@ class NativeAccountingCloseGate:
         try:
             # The React handler validates busy/retry status and asks before
             # discarding any bill, invoice, or issued-document correction.
-            answer = self.window.evaluate_js(
-                "typeof window.__madarAccountingConfirmNativeClose === 'function' "
-                "&& window.__madarAccountingConfirmNativeClose()")
+            answer = self.window.evaluate_js(self.decision_script)
             accepted = answer is True
         except Exception as exc:
             print('Native accounting close guard unavailable: ' + str(exc),

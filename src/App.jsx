@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import packageInfo from '../package.json';
 import {
   Activity, Archive, ArrowDownToLine, ArrowLeft, ArrowUpLeft, Bell, CalendarDays,
@@ -864,11 +864,51 @@ export default function App(){
   const recoveryReload=useRef(false);
   const backupRestorePreviouslyBlocked=useRef(false);
   const saving=useRef(false);
+  const nativeClosePending=useRef(false);
   const lastSaved=useRef('');
   const dataMutationEpoch=useRef(0);
   const quickCardAttempt=useRef(null);
   const latestData=useRef(null);
   const latestUnsavedRecovery=useRef(null);
+  useLayoutEffect(()=>{
+    // The integrated Windows titlebar X first vetoes its native event, then
+    // asks this live task workspace before committing the final host backup.
+    // An unacknowledged save or an unsubmitted composer must not disappear.
+    const abortNativeClose=()=>{
+      nativeClosePending.current=false;
+      const root=document.querySelector('.app-shell');
+      root?.removeAttribute('inert');root?.removeAttribute('aria-busy');
+      return true;
+    };
+    const confirmNativeClose=()=>{
+      if(nativeClosePending.current)return false;
+      if(!ready.current||!data||saving.current||dirty.current||
+         blocked.current||recoveryReload.current||pendingRecovery||
+         pendingQuickCardId||quickCardAttempt.current||syncing||updateBusy){
+        window.alert('مدار هنوز در حال ذخیره، بازیابی یا هماهنگ‌سازی اطلاعات است. ابتدا وضعیت ذخیره را مشخص کنید و دوباره برای خروج اقدام کنید.');
+        return false;
+      }
+      if((adding&&draftTitle.trim())||
+         (projectModal&&projectName.trim())||
+         (boardModal&&boardName.trim())){
+        window.alert('یک فرم جدید هنوز ثبت نشده است. ابتدا آن را ذخیره یا لغو کنید و سپس پنجره را ببندید.');
+        return false;
+      }
+      nativeClosePending.current=true;
+      const root=document.querySelector('.app-shell');
+      root?.setAttribute('inert','');root?.setAttribute('aria-busy','true');
+      return true;
+    };
+    window.__madarTasksConfirmNativeClose=confirmNativeClose;
+    window.__madarTasksAbortNativeClose=abortNativeClose;
+    return()=>{
+      if(window.__madarTasksConfirmNativeClose===confirmNativeClose)
+        delete window.__madarTasksConfirmNativeClose;
+      if(window.__madarTasksAbortNativeClose===abortNativeClose)
+        delete window.__madarTasksAbortNativeClose;
+    };
+  },[data,pendingRecovery,pendingQuickCardId,syncing,updateBusy,
+     adding,draftTitle,projectModal,projectName,boardModal,boardName]);
   useEffect(()=>{latestData.current=data;},[data]);
   const cardUndo=useRef(emptyCardHistory(null));
   const clearCardUndo=()=>{cardUndo.current=emptyCardHistory(null);};
@@ -1162,14 +1202,14 @@ export default function App(){
   }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
   const activeTask=tasks.find(t=>t.id===editorId);
-  const change=(next,preserveCardUndo=false)=>{if(!canEdit)return;
+  const change=(next,preserveCardUndo=false)=>{if(!canEdit||nativeClosePending.current)return;
     if(recoveryReload.current){
       setToast('بازخوانی اطلاعات در جریان است؛ پس از پایان آن دوباره ویرایش کنید.');
       return;
     }
     if(!preserveCardUndo)clearCardUndo();
     dataMutationEpoch.current++;dirty.current=true;setData(current=>{
-    if(recoveryReload.current)return current;
+    if(recoveryReload.current||nativeClosePending.current)return current;
     const newState=typeof next==='function'?next(current):next;
     if(blocked.current){
       latestUnsavedRecovery.current=newState;

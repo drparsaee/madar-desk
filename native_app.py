@@ -2939,6 +2939,34 @@ window.madar = Object.fromEntries(
 """
 
 
+def integrated_native_closing_scripts():
+    """Explicit URL allow-list for the main window's native close decision.
+
+    A partially loaded or unknown page cannot bypass unsaved accounting edits.
+    Unlike the standalone accounting window, the task board has no React
+    accounting hook and is safe to close after the mandatory host backup.
+    """
+    confirm = (
+        "(()=>{const path=location.pathname.toLowerCase();"
+        "if(path==='/'||path==='/index.html')return "
+        "typeof window.__madarTasksConfirmNativeClose==='function' "
+        "&&window.__madarTasksConfirmNativeClose();"
+        "if(path==='/accounting.html')return "
+        "typeof window.__madarAccountingConfirmNativeClose==='function' "
+        "&&window.__madarAccountingConfirmNativeClose();"
+        "return false})()")
+    abort = (
+        "(()=>{const path=location.pathname.toLowerCase();"
+        "if(path==='/'||path==='/index.html')return "
+        "typeof window.__madarTasksAbortNativeClose==='function' "
+        "&&window.__madarTasksAbortNativeClose();"
+        "if(path==='/accounting.html')return "
+        "typeof window.__madarAccountingAbortNativeClose==='function' "
+        "&&window.__madarAccountingAbortNativeClose();"
+        "return false})()")
+    return confirm, abort
+
+
 def main():
     # A crashed offline full restore can leave the prior data root under a
     # journal-owned sibling. Refuse to create/open a new live database here;
@@ -3011,22 +3039,58 @@ def main():
             width=1500, height=960, min_size=(900, 650), js_api=api,
             background_color="#f7f8fa",
         )
-        if financial_backup is not None:
-            def require_backup_before_close():
-                nonlocal exit_financial_backup_done
-                try:
-                    with api._lock:
+        from standalone_accounting_desktop import (
+            NativeAccountingCloseGate, recover_native_editor_after_close_abort)
+        # The integrated executable also navigates to accounting.html. Its
+        # titlebar X must not bypass React's unsaved-financial-editor veto.
+        # The ordinary task-manager page has no accounting React callback;
+        # permit it only for these two exact, already-loaded document paths.
+        integrated_confirm, integrated_abort = integrated_native_closing_scripts()
+        failed_exit_backup_notice = False
+
+        def require_backup_before_close():
+            nonlocal exit_financial_backup_done, failed_exit_backup_notice
+            try:
+                with api._lock:
+                    if financial_backup is not None:
                         financial_backup.backup_now()
-                        api._exit_financial_locked = True
-                    exit_financial_backup_done = True
-                    return True
-                except Exception as error:
-                    # Closing is rejected; the financial data remains available
-                    # for operator recovery and a later successful retry.
-                    print("MANDATORY FINANCIAL EXIT BACKUP FAILED: " + str(error),
-                          file=sys.stderr)
-                    return False
-            window.events.closing += require_backup_before_close
+                    api._exit_financial_locked = True
+                exit_financial_backup_done = True
+                failed_exit_backup_notice = False
+                return True
+            except Exception as error:
+                failed_exit_backup_notice = True
+                print("MANDATORY FINANCIAL EXIT BACKUP FAILED: " + str(error),
+                      file=sys.stderr)
+                return False
+
+        def restore_after_abort():
+            nonlocal exit_financial_backup_done, failed_exit_backup_notice
+            recovered = recover_native_editor_after_close_abort(
+                window, api, js_script=integrated_abort,
+                host_lock_attribute='_exit_financial_locked')
+            if recovered:
+                exit_financial_backup_done = False
+                if failed_exit_backup_notice:
+                    failed_exit_backup_notice = False
+                    # The installed Windows EXE is windowed: stderr alone is
+                    # invisible to its operator. Give a clear explanation only
+                    # AFTER the financial editor has been safely unfrozen.
+                    try:
+                        window.evaluate_js('window.alert(' + json.dumps(
+                            'بستن مدار متوقف شد، چون ذخیره نسخه پشتیبان مالی ناموفق بود. '
+                            'فضای دیسک و دسترسی پوشه داده را بررسی کنید و دوباره تلاش کنید.',
+                            ensure_ascii=False) + ')')
+                    except Exception as error:
+                        print('Unable to display finance backup warning: '+str(error),
+                              file=sys.stderr)
+            return recovered
+
+        integrated_close_gate = NativeAccountingCloseGate(
+            window, api, require_backup_before_close,
+            on_aborted_close=restore_after_abort,
+            decision_script=integrated_confirm)
+        window.events.closing += integrated_close_gate.closing
         if os.environ.get("MADAR_QA_REPORT"):
             bridge_qa_started = threading.Event()
             bridge_qa_start_lock = threading.Lock()
