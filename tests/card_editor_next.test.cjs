@@ -20,7 +20,7 @@ test('disclosure layout is per-user and reused across cards without modifying ta
   const {readCardSectionPreferences,saveCardSectionPreferences}=load('src/card_section_preferences.js');
   const memory=new Map(),storage={getItem:key=>memory.get(key)??null,setItem:(key,val)=>memory.set(key,val)};
   assert.deepEqual(readCardSectionPreferences(storage,'employee'),{
-    metadata:true,description:true,assignees:false,attachments:false,checklist:false,
+    metadata:true,description:true,assignees:false,attachments:false,checklist:true,
     tags:false,cover:false,time:false,dependencies:false,reports:false,
     accounting:false,settings:false});
   saveCardSectionPreferences(storage,'employee',{assignees:true,reports:true});
@@ -39,14 +39,15 @@ test('card editor all native disclosures and exact user-specified toolbar and DO
     assert.match(app,new RegExp("onSectionToggle\\('"+group+"'"));
   }
   const ids=['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports'];
-  const nav=app.slice(app.indexOf('<nav className="task-quick-actions"'),app.indexOf('</nav>',app.indexOf('<nav className="task-quick-actions"')));
+  const nav=app.match(/<nav className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0]||'';
+  assert.ok(nav,'the card quick navigation exists');
   let previous=-1;
   for(const id of ids){
-    const at=nav.indexOf("jumpToSection('"+id+"')");
+    const at=nav.indexOf('aria-controls="task-section-'+id+'"');
     assert.ok(at>previous,'quick section order: '+id);
     previous=at;
   }
-  const body=app.slice(app.indexOf('<nav className="task-quick-actions"'),app.indexOf('{canEdit&&<div className="drawer-danger">'));
+  const body=app.slice(app.indexOf(nav),app.indexOf('{canEdit&&<div className="drawer-danger">'));
   previous=-1;
   for(const id of ids){
     const at=body.indexOf('id="task-section-'+id+'"');

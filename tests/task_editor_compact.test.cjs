@@ -17,7 +17,7 @@ test('task detail remains parseable and imports its separately scoped density st
 });
 
 test('every visible quick action has a unique, actual and focusable destination',()=>{
-  const nav=app.match(/<nav className="task-quick-actions"[\s\S]*?<\/nav>/)?.[0];
+  const nav=app.match(/<nav className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0];
   assert.ok(nav,'the task edit toolbar exists');
   const ids=Array.from(nav.matchAll(/aria-controls="(task-section-[a-z]+)"/g),m=>m[1]);
   assert.equal(ids.length,10,'the complete ordered toolbar now includes metadata, time, dependencies and cover');
@@ -26,8 +26,10 @@ test('every visible quick action has a unique, actual and focusable destination'
     assert.match(app,new RegExp('id="'+id+'" tabIndex=\\{-1\\}'),id+' should be keyboard focusable');
   }
   assert.match(app,/target\.scrollIntoView\(/);
-  assert.match(app,/target\.focus\(\{preventScroll:true\}\)/);
+  assert.match(app,/\(focusTarget\|\|target\)\.focus\(\{preventScroll:true\}\)/);
   assert.match(nav,/type="button"/,'navigation buttons must never submit forms');
+  assert.match(nav,/aria-expanded=\{showExtraActions\}/,'secondary shortcuts should have an accessible disclosure');
+  assert.match(css,/\.task-quick-actions:not\(\.task-quick-actions--expanded\) \.task-quick-action--extra\{display:none\}/);
 });
 
 test('compact task layout reserves legible inputs and responsive columns',()=>{

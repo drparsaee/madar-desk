@@ -50,6 +50,15 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');
       await page.mouse.click(80,45,{button:'right'});
       await menu.getByRole('menuitem',{name:'بایگانی کارت'}).click();
+      assert.deepEqual(await page.evaluate(()=>window.events),['section:tags:synthetic-1','copy:synthetic-1'],
+        'archive must not mutate without an explicit confirmation');
+      await menu.getByRole('button',{name:'انصراف'}).click();
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');
+      await menu.getByRole('menuitem',{name:'حذف کارت'}).click();
+      await menu.getByRole('button',{name:'انصراف'}).click();
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');
+      await menu.getByRole('menuitem',{name:'بایگانی کارت'}).click();
+      await menu.getByRole('button',{name:'تأیید بایگانی'}).click();
       assert.equal((await page.evaluate(()=>window.events)).at(-1),'archive:synthetic-1');
       await page.evaluate(()=>window.setEdit(false));
       await page.mouse.click(100,50,{button:'right'});

@@ -8,6 +8,8 @@ export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicat
   onToggleComplete,canEdit=false}) {
   const panel=useRef(null);
   const [position,setPosition]=useState(null);
+  const [pendingDanger,setPendingDanger]=useState(null);
+  useEffect(()=>setPendingDanger(null),[request?.id]);
   useLayoutEffect(()=>{
     if(!request||!panel.current)return;
     const bounds=panel.current.getBoundingClientRect();
@@ -60,11 +62,20 @@ export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicat
       {onDuplicate&&<button type="button" role="menuitem" onClick={()=>{onClose();onDuplicate(request.cardId);}}>
         <Copy size={16}/> کپی کارت</button>}
       <div className="madar-card-context-menu__group madar-card-context-menu__danger" aria-label="آرشیو و حذف">
-        {onArchive&&<button type="button" role="menuitem" onClick={()=>{onClose();onArchive(request.cardId);}}>
+        {onArchive&&<button type="button" role="menuitem" onClick={()=>setPendingDanger('archive')}>
           <Archive size={16}/> بایگانی کارت</button>}
-        {onDelete&&<button type="button" role="menuitem" onClick={()=>{onClose();onDelete(request.cardId);}}>
+        {onDelete&&<button type="button" role="menuitem" onClick={()=>setPendingDanger('delete')}>
           <Trash2 size={16}/> حذف کارت</button>}
       </div>
+      {pendingDanger&&<div className="madar-card-context-menu__confirm" role="group" aria-label="تأیید عملیات کارت">
+        <span>{pendingDanger==='archive'?'کارت بایگانی شود؟ قابل بازیابی خواهد بود.':'کارت به زباله‌دان منتقل شود؟ اطلاعات آن حفظ می‌شود.'}</span>
+        <div>
+          <button type="button" onClick={()=>setPendingDanger(null)}>انصراف</button>
+          <button type="button" onClick={()=>{const action=pendingDanger==='archive'?onArchive:onDelete;onClose();action?.(request.cardId);}}>
+            {pendingDanger==='archive'?'تأیید بایگانی':'تأیید حذف'}
+          </button>
+        </div>
+      </div>}
     </>}
   </div>,document.body);
 }

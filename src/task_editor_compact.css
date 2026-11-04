@@ -1,8 +1,23 @@
-/* Compact task-detail hierarchy. Scoped to the drawer so accounting and
-   ordinary application dialogs keep their independent layouts. */
+/* Trello-like card composition. Only the task editor changes: accounting and
+   other native dialogs retain their independent layouts. */
+.task-editor-overlay{
+  display:grid;
+  place-items:center;
+  padding:18px;
+}
 .drawer{
-  width:min(740px,calc(100vw - 12px));
+  width:min(800px,calc(100vw - 36px));
   max-width:100%;
+}
+.task-editor-overlay .task-editor-drawer{
+  position:relative;
+  left:auto;
+  top:auto;
+  height:min(850px,calc(100dvh - 36px));
+  border:1px solid var(--border,#dbe4ee);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 24px 70px #0d1c3066;
 }
 .drawer .drawer-top{
   min-height:48px;
@@ -19,9 +34,40 @@
   font-size:21px;
   line-height:1.45;
 }
+.drawer .task-editor-location{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  margin:0 0 8px;
+  color:var(--text-muted,#718399);
+  font-size:12px;
+}
+.drawer .task-editor-location strong{color:var(--text,#344b69);font-weight:700}
+.drawer .task-editor-summary{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  margin-bottom:9px;
+}
+.drawer .task-editor-summary button{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:30px;
+  border:1px solid var(--border,#dbe4ee);
+  border-radius:7px;
+  padding:4px 9px;
+  color:var(--text,#344b69);
+  background:var(--surface-soft,#f6f8fc);
+  font-size:11px;
+  cursor:pointer;
+}
+.drawer .task-editor-summary button:is(:hover,:focus-visible){border-color:#9ebceb;outline-offset:2px}
 .drawer .task-quick-actions{
   display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-template-columns:repeat(6,minmax(0,1fr));
   align-items:stretch;
   gap:6px;
   position:sticky;
@@ -55,6 +101,11 @@
 .drawer .task-quick-actions button:hover{
   background:#e7f0ff;
   border-color:#9ebceb;
+}
+.drawer .task-quick-actions:not(.task-quick-actions--expanded) .task-quick-action--extra{display:none}
+.drawer .task-quick-actions .task-quick-actions__more{
+  border-style:dashed;
+  background:transparent;
 }
 .drawer .task-quick-actions button:focus-visible{
   outline:2px solid #427fe2;
@@ -292,6 +343,11 @@
   background:#263e59;
   border-color:#7296c0;
 }
+:root[data-theme="dark"] .drawer .task-editor-location strong{color:#e3edf9}
+:root[data-theme="dark"] .drawer .task-editor-summary button{
+  background:#17263a;color:#d9e6f7;border-color:#39506b;
+}
+:root[data-theme="dark"] .drawer .task-quick-actions .task-quick-actions__more{background:transparent}
 :root[data-theme="dark"] .drawer .task-inline-action{
   background:#17263a;color:#d9e6f7;border-color:#39506b;
 }
@@ -318,11 +374,14 @@
 :root[data-theme="dark"] .drawer .task-compact-step .step-cost-fields :is(input,.money-input),
 :root[data-theme="dark"] .drawer .task-direct-cost-fields :is(input,.money-input){background:#152236;color:#e0ecfb;border-color:#39506b}
 @media(max-width:720px){
+  .task-editor-overlay{padding:0;place-items:stretch}
+  .task-editor-overlay .task-editor-drawer{
+    width:100%;height:100dvh;max-height:100dvh;
+    border:0;border-radius:0;
+  }
   .drawer{width:min(100%,620px)}
   .drawer .edit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  /* Ten navigation buttons form a tall grid on narrow screens. A sticky
-     grid can cover the deadline input and intercept its calendar click.
-     Let the navigation scroll naturally on tablets and phones. */
+  /* Allow the small primary toolbar to scroll naturally without hiding dates. */
   .drawer .task-quick-actions{
     grid-template-columns:repeat(4,minmax(0,1fr));
     position:static;top:auto;z-index:auto;

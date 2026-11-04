@@ -52,6 +52,33 @@ test('full App reuses disclosure preference, offers Jalali popup, keeps full-cov
       await page.locator('.task-card .task-title').first().click();
       let drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
+      const cardBox=await drawer.boundingBox();
+      assert.ok(cardBox&&Math.abs(cardBox.x+cardBox.width/2-640)<3,
+        'on desktop the card should be centered like a Trello detail dialog');
+      assert.match(await drawer.locator('.task-editor-location').innerText(),/پروژه تست/);
+      assert.equal(await drawer.locator('.task-quick-actions > button:visible').count(),6,
+        'five common actions and one More control are visible at first');
+      assert.equal(await drawer.locator('.task-quick-action--extra:visible').count(),0);
+      await drawer.getByRole('button',{name:'بیشتر'}).click();
+      assert.equal(await drawer.locator('.task-quick-action--extra:visible').count(),5);
+      await drawer.getByRole('button',{name:'کمتر'}).click();
+      assert.notEqual(await drawer.locator('#task-section-checklist').getAttribute('open'),null,
+        'the checklist is immediately available for a first-time user');
+      await drawer.locator('.task-quick-actions [aria-controls="task-section-checklist"]').click();
+      const newStep=drawer.locator('#task-section-checklist .inline-create input');
+      assert.equal(await newStep.evaluate(node=>node===document.activeElement),true,
+        'one click on checklist should focus the quick-add field');
+      await newStep.fill('مرحله سریع آزمایشی');
+      await newStep.press('Enter');
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.length===1);
+      await drawer.locator('.task-quick-actions [aria-controls="task-section-description"]').click();
+      const description=drawer.locator('#task-section-description .rich-description textarea');
+      await page.waitForFunction(()=>document.activeElement===document.querySelector('#task-section-description .rich-description textarea'));
+      assert.equal(await description.evaluate(node=>node===document.activeElement),true,
+        'one click on description should focus the writing field');
+      await description.fill('توضیح آزمایشی سریع');
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].description==='توضیح آزمایشی سریع');
+      assert.equal(await drawer.getByRole('textbox',{name:'عنوان کار'}).getAttribute('maxlength'),'300');
       const orderedIds=['metadata','description','assignees','attachments','checklist','tags',
         'cover','time','dependencies','reports','accounting','settings'];
       const actualSections=await drawer.locator('.task-shared-disclosure[id^="task-section-"]')

@@ -81,7 +81,10 @@ test('Chromium: compact user identity, centered native/custom checkmarks and red
             await page.locator('.vitrea-overview-task').filter({hasText:'آزمون محل تیک'}).first().click();
             const drawer=page.locator('.drawer');
             await drawer.waitFor({state:'visible'});
-            await drawer.locator('#task-section-checklist > summary').click();
+            // New Trello-like cards expose the checklist by default. Existing
+            // per-user preferences may still have it folded.
+            if(await drawer.locator('#task-section-checklist').getAttribute('open')===null)
+              await drawer.locator('#task-section-checklist > summary').click();
             const step=drawer.getByRole('button',{name:'تغییر وضعیت مرحله بررسی'});
             await step.waitFor({state:'visible'});
             await step.click();
