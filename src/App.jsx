@@ -38,6 +38,7 @@ import {CardCover,CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColo
 import {PlannerPanel} from './planner.jsx';
 import {removeUnpaidLegacyStep} from './checklistguard.js';
 import {plannerIdentity} from './planner_identity.js';
+import {EMPTY_ADVANCED_FILTER,readScopedAdvancedFilter,updateScopedAdvancedFilter} from './advanced_filter_scope.js';
 import {importCalendarEvents} from './calendar_import_state.js';
 import {getOrderedLaneCards,moveCardInState} from './cardorder.js';
 import {sortLaneState,moveAllLaneCardsState} from './lane_operations.js';
@@ -754,7 +755,7 @@ export default function App(){
   const [mode,setMode]=useState('board');
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('all');
-  const [advanced,setAdvanced]=useState({priority:'all',member:'all',label:'all',status:'all',due:'all',attachments:false});
+  const [advancedState,setAdvancedState]=useState({scope:'',value:EMPTY_ADVANCED_FILTER});
   const [editorId,setEditorId]=useState(null);
   const [editorInitialSection,setEditorInitialSection]=useState(null);
   const [cardContext,setCardContext]=useState(null);
@@ -966,6 +967,10 @@ export default function App(){
                      ||(selected==='all'?null:workspaceBoards.find(b=>b.projectId===selected)))||null;
   const boardViewScope=activeBoard?.id||'workspace:'+(activeWorkspaceId||'legacy');
   const boardViewIdentity=lanStatus.user?.username||'local';
+  const advancedScope=String(plannerIdentity(lanStatus))+'|'+boardViewScope;
+  const advanced=readScopedAdvancedFilter(advancedState,advancedScope);
+  const setAdvanced=update=>setAdvancedState(previous=>
+    updateScopedAdvancedFilter(previous,advancedScope,update));
   const boardViewColumns=useMemo(()=>boardTableColumns(activeBoard),[activeBoard?.id,activeBoard?.customFields]);
   useEffect(()=>{
     if(!data||!activeWorkspaceId)return;
@@ -1812,7 +1817,7 @@ export default function App(){
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
-          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
           {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;

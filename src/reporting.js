@@ -1,4 +1,5 @@
 // Task analytics deliberately exclude confidential finance and server-only fields.
+import {taskIsCompleted} from './task_completion.js';
 export const dateKey=value=>{
   if(typeof value!=='string')return '';
   const match=/^(\d{4})-(\d\d)-(\d\d)/.exec(value);
@@ -24,7 +25,9 @@ export const reportRows=(tasks=[],projects=[],stages=[],options={})=>{
     const done=(t.checklist||[]).filter(item=>item.done).length;
     return {id:safeText(t.id),title:safeText(t.title),project:safeText(projectName.get(t.projectId)||'نامشخص'),
       status:safeText(stageName.get(t.listId)||stageName.get(t.status)||t.status),
-      completed:t.status==='done',
+      // Explicit card completion must count without moving a list/status:
+      // stage transitions can trigger separate financial processing.
+      completed:taskIsCompleted(t),
       priority:safeText(t.priority),createdAt:dateKey(t.createdAt),dueDate:dateKey(t.dueDate),
       estimatedMinutes:Math.max(0,Number(t.estimatedMinutes)||0),actualMinutes:Math.max(0,Number(t.actualMinutes)||0),
       checklistCount:count,completedSteps:done,progress:count?Math.round(done/count*100):0,

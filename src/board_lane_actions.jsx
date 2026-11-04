@@ -108,6 +108,13 @@ export function LaneActionsMenu({
       document.removeEventListener('scroll',schedule,true);
     };
   },[open,contextPoint]);
+  useEffect(()=>{
+    if(!open||!position||!panel.current)return;
+    if(panel.current.contains(document.activeElement))return;
+    // The popover is portalled out of DOM order. Without moving focus into
+    // it, a keyboard user tabs through unrelated board controls instead.
+    panel.current.querySelector('button:not(:disabled)')?.focus();
+  },[open,position]);
   const save=e=>{
     e.preventDefault();
     if(!canManage||!onSave||!name.trim())return;

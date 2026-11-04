@@ -39,6 +39,26 @@ test('summary and timeline use task dates and actual vs estimated time',()=>{
   assert.equal(summary.totalSteps,2);
   assert.equal(timelineBuckets(rows).length,1);
 });
+test('report treats explicitly completed task as finished without changing status or finance',()=>{
+  const card={id:'completed-in-place',title:'وظیفه تکمیل‌شده',projectId:'p1',
+    status:'active',listId:'active',completed:true,priority:'high',
+    dueDate:'2020-01-01',createdAt:'2019-12-01'};
+  const rows=reportRows([card],projects,stages);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].status,'در حال انجام');
+  assert.equal(rows[0].completed,true);
+  const summary=summarizeRows(rows);
+  assert.equal(summary.done,1);
+  assert.equal(summary.overdue,0);
+  assert.equal(card.status,'active');
+  assert.equal(card.listId,'active');
+  const reopened={...card,completed:false,status:'done'};
+  const reopenedSummary=summarizeRows(reportRows([reopened],projects,stages));
+  assert.equal(reopenedSummary.done,0);
+  assert.equal(reopenedSummary.overdue,1);
+  const legacy={...reopened,completed:undefined};
+  assert.equal(summarizeRows(reportRows([legacy],projects,stages)).done,1);
+});
 test('CSV escapes formula payloads, quotes and never includes finance',()=>{
   const rows=reportRows(tasks,projects,stages);
   const csv=taskReportCsv(rows);

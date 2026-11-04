@@ -15,10 +15,22 @@ export default function AccountingGlobalSearch({open,index=[],onSelect,onClose,d
     inputRef.current?.focus();
   },[open]);
   React.useEffect(()=>setSelected(0),[query,index]);
+  React.useEffect(()=>{
+    if(!open)return;
+    const focusExistingSearch=event=>{
+      if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.isComposing&&
+         event.key.toLocaleLowerCase('en-US')==='k'){
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown',focusExistingSearch,true);
+    return()=>document.removeEventListener('keydown',focusExistingSearch,true);
+  },[open]);
   const activate=match=>{
     if(disabled||!match)return;
-    onSelect(match);
-    onClose();
+    // A draft-discard confirmation may veto navigation. Preserve query then.
+    if(onSelect(match)!==false)onClose();
   };
   const keyDown=event=>{
     if(event.key==='Escape'){
@@ -33,11 +45,14 @@ export default function AccountingGlobalSearch({open,index=[],onSelect,onClose,d
       else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
       return;
     }
-    if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+    if(event.target===inputRef.current&&
+        (event.key==='ArrowDown'||event.key==='ArrowUp')){
       if(!matches.length)return;
       event.preventDefault();setSelected(current=>
         (current+(event.key==='ArrowDown'?1:-1)+matches.length)%matches.length);
-    }else if(event.key==='Enter'&&matches.length){
+    }else if(event.key==='Enter'&&event.target===inputRef.current&&matches.length){
+      // Enter on a focused Close/result button belongs to that button.
+      // Never redirect it to the currently highlighted search result.
       event.preventDefault();activate(matches[Math.min(selected,matches.length-1)]);
     }
   };
@@ -74,7 +89,8 @@ export default function AccountingGlobalSearch({open,index=[],onSelect,onClose,d
         {matches.map((match,i)=><button type="button" role="option"
           id={'sac-global-search-result-'+i} key={match.key} aria-selected={i===selected}
           className={'sac-global-search-result'+(i===selected?' active':'')}
-          onMouseEnter={()=>setSelected(i)} onClick={()=>activate(match)}>
+          onMouseEnter={()=>setSelected(i)} onFocus={()=>setSelected(i)}
+          onClick={()=>activate(match)}>
           <span><strong dir="auto">{match.title}</strong><small>{match.subtitle}</small></span>
           <ArrowLeft size={16} aria-hidden="true"/>
         </button>)}

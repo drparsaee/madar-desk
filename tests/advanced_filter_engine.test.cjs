@@ -46,6 +46,17 @@ test('nested groups and per-field comparisons cover title, attachments, status a
  assert(!matchFilterTree(card,group('and',leaf('status','active')),'other'));
  assert(matchFilterTree(card,group('or',leaf('due','unset','isNot')),'b'));
 });
+test('nested overdue predicate agrees with explicit completion without moving the card',()=>{
+ const filter=group('and',leaf('due','overdue'));
+ const completed={...card,dueDate:'2020-01-01',completed:true,status:'legacy',listId:'active'};
+ assert.equal(matchFilterTree(completed,filter,'b','2026-11-04'),false);
+ assert.equal(matchFilterTree({...completed,completed:false},filter,'b','2026-11-04'),true);
+ assert.equal(matchFilterTree({...completed,completed:false,status:'done'},filter,'b','2026-11-04'),true);
+ assert.equal(matchFilterTree({...completed,completed:undefined,status:'done'},filter,'b','2026-11-04'),false);
+ assert.equal(matchFilterTree(completed,group('and',leaf('due','overdue','isNot')),'b','2026-11-04'),true);
+ assert.equal(completed.status,'legacy');
+ assert.equal(completed.listId,'active');
+});
 
 test('empty root remains neutral, malformed rules fail closed, and removal of rules preserves legacy filters',()=>{
  assert(matchFilterTree(card,null,'b'));

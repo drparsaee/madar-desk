@@ -1,5 +1,6 @@
 // A small, independently authored predicate tree for Madar task filters.
 // The application intersects its result with the already authorized board cards.
+import {taskIsCompleted} from './task_completion.js';
 export const FILTER_LIMITS=Object.freeze({depth:3,nodes:32,children:8,text:120});
 export const FILTER_FIELDS=Object.freeze(['priority','member','label','status','due','attachments','title']);
 
@@ -59,7 +60,8 @@ function ruleMatches(task,rule,boardId,today){
    case 'attachments':matches=hasAttachment(task)===(value==='yes');break;
    case 'due':{
      const due=typeof task?.dueDate==='string'?task.dueDate.slice(0,10):'';
-     matches=value==='unset'?!due:value==='today'?due===today:!!due&&due<today;
+     matches=value==='unset'?!due:value==='today'?due===today:
+       !!due&&due<today&&!taskIsCompleted(task);
      break;
    }
  }

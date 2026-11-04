@@ -53,6 +53,10 @@ test('wizard view retains all stages mounted and gates only invoice draft submit
   assert.match(jsx,/noValidate=\{wizardEnabled\}/);
   assert.match(jsx,/if\(!validateInvoiceSubmission\(\)\)return/);
   assert.match(jsx,/if\(correctionTarget&&!window\.confirm/);
+  assert.match(jsx,/correctionTarget\?'ثبت اصلاحیه و ایجاد پیش‌نویس جایگزین'/,
+    'Issued-invoice correction must not be described as merely saving a draft');
+  assert.match(jsx,/type:docKind\+'\.correct'/,
+    'Correction action still uses the auditable host correction command');
   assert.match(jsx,/buildStandaloneInvoiceCommand/);
   assert.match(jsx,/invoiceWizardStep===4|invoiceWizardStep<4/);
   assert.match(css,/\[data-invoice-step\]\[hidden\]\{display:none!important\}/);

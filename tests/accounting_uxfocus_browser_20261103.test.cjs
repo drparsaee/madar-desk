@@ -207,6 +207,11 @@ test('UXFocus: journal/party/receipt/payment exact focused records and unsaved d
       assert.equal(await page.locator('.sac-invoice-editor').isVisible(),true);
       assert.equal(await page.locator('.sac-document-detail').count(),0,
         'Cancelled deep link must not silently replace draft with a different record');
+      const retainedSearch=page.getByRole('dialog',{name:'جست‌وجوی حسابداری'});
+      assert.equal(await retainedSearch.isVisible(),true,
+        'Refusing to discard an unsaved invoice must retain the search dialog');
+      assert.equal(await retainedSearch.getByRole('combobox').inputValue(),
+        data.expected.customer,'Cancelled navigation must retain the search query');
 
       page.once('dialog',async dialog=>{dialogs.push(dialog.message());await dialog.accept();});
       r=await search(page,data.expected.journal);

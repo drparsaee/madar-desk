@@ -80,8 +80,10 @@ export default function AccountingNavigationShell({tab,sections=[],groups=[],gro
     return ()=>document.removeEventListener('pointerdown',outside);
   },[moreOpen]);
   const navigate=key=>{
-    if(disabled||!labels.has(key))return;
-    setMoreOpen(false);onNavigate(key);
+    if(disabled||!labels.has(key))return false;
+    const result=onNavigate(key);
+    if(result!==false)setMoreOpen(false);
+    return result;
   };
   const quick=action=>{
     if(disabled)return;
@@ -95,9 +97,10 @@ export default function AccountingNavigationShell({tab,sections=[],groups=[],gro
     }else if(action==='reports')navigate('reports');
   };
   const searchSelect=result=>{
-    if(result.type==='section')navigate(result.tab);
-    else if(typeof onSearchSelect==='function')onSearchSelect({
+    if(result.type==='section')return navigate(result.tab);
+    if(typeof onSearchSelect==='function')return onSearchSelect({
       kind:result.type,id:result.recordId,tab:result.tab});
+    return false;
   };
   const closeSearch=()=>{
     setSearchOpen(false);

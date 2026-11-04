@@ -823,11 +823,11 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       receipt:['receipts','settlements'],payment:['payments','settlements']};
     const spec=locations[kind];
     if(!spec||destination!==spec[1]||!validId(id)||!view||
-      state.loading||state.error)return;
+      state.loading||state.error)return false;
     const collection=view?.[spec[0]];
     const record=Array.isArray(collection)?collection.find(item=>item?.id===id):
       collection&&typeof collection==='object'?collection[id]:null;
-    if(!record||!gotoTab(destination))return;
+    if(!record||!gotoTab(destination))return false;
     if(kind==='invoice'||kind==='bill')setDetailTarget(id);
     else if(kind==='account'){setAccountFilter(id);setSelectedHistoricAccount(id);}
     else if(['party','journal','receipt','payment'].includes(kind))
@@ -836,6 +836,7 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
       setForms(old=>({...old,settlement:{...old.settlement,
         kind:kind==='payment'?'payment':'receipt',documentId:''}}));
     }
+    return true;
   };
   const quickAccountingAction=action=>{
     if(action==='purchase'){if(canManage||canDraft)gotoTab('bill');}
@@ -2235,7 +2236,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     <strong><span>مبلغ نهایی</span><b>{documentPreview?moneyText(documentPreview.total):'—'}</b></strong>
                   </div>
                   <p className="sac-invoice-summary-note">مبالغ بر اساس مقادیر همین فرم محاسبه می‌شوند؛
-                    ذخیره پیش‌نویس به معنی صدور قطعی نیست.</p>
+                    {correctionTarget?' ثبت اصلاحیه، سند صادرشدهٔ قبلی را برگشت می‌دهد و جایگزین را به‌صورت پیش‌نویس می‌سازد.':
+                      ' ذخیره پیش‌نویس به معنی صدور قطعی نیست.'}</p>
                   <p className="sac-wizard-impact-warning" role="note">
                     {correctionTarget?
                       'هشدار: ثبت اصلاحیه، سند صادرشدهٔ قبلی را برگشت می‌دهد و یک پیش‌نویس جدید می‌سازد. پیش از ادامه، مبلغ و طرف حساب را بازبینی کنید.':
@@ -2245,7 +2247,8 @@ export function StandaloneAccountingWorkspace({api,onExit=()=>{},canManage=false
                     disabled={draftBlocked|| (!!correctionTarget&&
                       (!validText(correctionReason,1000)||!validPostingDate(correctionDate)||
                         correctionDate<currentDocs[correctionTarget]?.postingDate))}>
-                    {editTarget?'ذخیره ویرایش':'ذخیره پیش‌نویس'}
+                    {correctionTarget?'ثبت اصلاحیه و ایجاد پیش‌نویس جایگزین':
+                      editTarget?'ذخیره ویرایش':'ذخیره پیش‌نویس'}
                   </button>
                 </aside>
                 </div>

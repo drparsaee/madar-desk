@@ -3,6 +3,7 @@ import {AlignLeft,AlignRight,Bold,Check,ChevronDown,ChevronUp,Filter,Italic,Link
  List,Save,Search,TextCursorInput,Trash2,Undo2,X} from 'lucide-react';
 import {MarkdownPreview} from './markdown.jsx';
 import {FILTER_LIMITS,matchFilterTree,validateFilterTree} from './advanced_filter_engine.js';
+import {taskIsCompleted} from './task_completion.js';
 
 const colors=['#9a6714','#24845d','#7953b0','#b14f72','#3378ad','#aa5439','#676cbe','#54836a'];
 export function labelColor(label){
@@ -52,7 +53,10 @@ export function matchAdvanced(task,advanced,activeBoardId){
  if(advanced.due!=='all'){
    const day=(task.dueDate||'').slice(0,10);
    const today=localDateKey(new Date());
-   if(advanced.due==='overdue'&&(!day||day>=today))return false;
+   // A card completed in place is not overdue even if its board lane did
+   // not change. Moving it to the legacy 'done' lane can post finance events.
+   if(advanced.due==='overdue'&&
+       (!day||day>=today||taskIsCompleted(task)))return false;
    if(advanced.due==='today'&&day!==today)return false;
    if(advanced.due==='unset'&&day)return false;
  }
@@ -62,7 +66,20 @@ export function localDateKey(date){
  const pad=value=>String(value).padStart(2,'0');
  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
 }
-const storeKey='madar-saved-filters-v1';
+// Never reuse the legacy unscoped key. Its contents cannot be attributed to
+// an authenticated user or board, so importing it would expose another
+// user's saved searches. Leave that key untouched for explicit recovery.
+export function savedFilterStorageKey(identity,scopeId){
+ if(typeof identity!=='string'||!identity.trim()||
+    typeof scopeId!=='string'||!scopeId.trim()||
+    identity.length>1024||scopeId.length>512)return '';
+ try{
+   // Never truncate a caller identity: users with long shared host prefixes
+   // could otherwise collide and read each other's saved filter metadata.
+   return 'madar-saved-filters-v2:'+
+     encodeURIComponent(identity)+':'+encodeURIComponent(scopeId);
+ }catch{return '';}
+}
 const FILTER_FIELD_LABELS={priority:'اولویت',member:'مسئول',label:'برچسب',status:'مرحله',due:'سررسید',attachments:'پیوست',title:'عنوان کارت'};
 const FILTER_DUE_OPTIONS=[{value:'today',label:'امروز'},{value:'overdue',label:'عقب‌افتاده'},{value:'unset',label:'بدون موعد'}];
 const FILTER_ATTACHMENT_OPTIONS=[{value:'yes',label:'دارد'},{value:'no',label:'ندارد'}];
@@ -102,10 +119,13 @@ function RuleEditor({node,path,depth,options,nodes,onChangeRoot,onRemove}){
    </div>
  </div>;
 }
-export function AdvancedFilters({tasks=[],users=[],stages=[],priorities=[],value=EMPTY_FILTER,onChange}){
+export function AdvancedFilters({tasks=[],users=[],stages=[],priorities=[],value=EMPTY_FILTER,onChange,
+ identity='solo:local',scopeId='workspace:default'}){
  const [open,setOpen]=useState(false);
  const [saved,setSaved]=useState([]);
  const [name,setName]=useState('');
+ const [saveError,setSaveError]=useState('');
+ const storeKey=useMemo(()=>savedFilterStorageKey(identity,scopeId),[identity,scopeId]);
  const active=value||EMPTY_FILTER;
  const tree=active.rules??{op:'and',children:[]};
  const treeValidation=validateFilterTree(tree);
@@ -122,11 +142,28 @@ export function AdvancedFilters({tasks=[],users=[],stages=[],priorities=[],value
    const next=change(tree);
    onChange({...active,rules:next.children.length?next:null});
  };
- useEffect(()=>{try{const result=JSON.parse(localStorage.getItem(storeKey)||'[]');if(Array.isArray(result))setSaved(result.slice(0,20));}catch{}},[]);
+ useEffect(()=>{
+   setSaved([]);setSaveError('');
+   if(!storeKey)return;
+   try{
+     const result=JSON.parse(localStorage.getItem(storeKey)||'[]');
+     if(Array.isArray(result))setSaved(result.slice(0,20));
+   }catch{}
+ },[storeKey]);
  const save=()=>{
-   const valueName=name.trim().slice(0,60);if(!valueName||!treeValidation.valid)return;
+   const valueName=name.trim().slice(0,60);
+   if(!valueName||!treeValidation.valid||!storeKey)return;
    const next=[...saved.filter(x=>x.name!==valueName),{name:valueName,filter:active}].slice(-20);
-   localStorage.setItem(storeKey,JSON.stringify(next));setSaved(next);setName('');
+   try{
+     localStorage.setItem(storeKey,JSON.stringify(next));
+     setSaved(next);setName('');setSaveError('');
+   }catch{setSaveError('ذخیره فیلتر در این دستگاه ممکن نیست. فضای ذخیره‌سازی را بررسی کنید.');}
+ };
+ const removeSaved=valueName=>{
+   if(!storeKey)return;
+   const next=saved.filter(item=>item.name!==valueName);
+   try{localStorage.setItem(storeKey,JSON.stringify(next));setSaved(next);setSaveError('');}
+   catch{setSaveError('حذف فیلتر ذخیره نشد. فضای ذخیره‌سازی را بررسی کنید.');}
  };
  return <div className="advanced-filter">
    <button className={'filter-toggle '+(open?'selected':'')} onClick={()=>setOpen(v=>!v)} aria-expanded={open}><Filter size={16}/> فیلترهای پیشرفته</button>
@@ -146,8 +183,9 @@ export function AdvancedFilters({tasks=[],users=[],stages=[],priorities=[],value
          <button type="button" className="filter-rule-reset" onClick={()=>onChange({...active,rules:null})}>حذف شرط‌های نامعتبر</button>}
        <small>فیلترهای معمولی و شرط‌های ترکیبی هم‌زمان اعمال می‌شوند. حداکثر {FILTER_LIMITS.nodes} بخش و {FILTER_LIMITS.depth} سطح تو در تو.</small>
      </details>
-     <div className="filter-save"><input maxLength={60} placeholder="نام جست‌وجوی ذخیره‌شده" value={name} onChange={e=>setName(e.target.value)}/><button onClick={save} disabled={!name.trim()||!treeValidation.valid}><Save size={15}/> ذخیره</button></div>
-     {!!saved.length&&<div className="saved-searches">{saved.map(item=><div key={item.name}><button onClick={()=>{onChange(item.filter);setOpen(false);}}>{item.name}</button><button title="حذف فیلتر" onClick={()=>{const next=saved.filter(s=>s.name!==item.name);setSaved(next);localStorage.setItem(storeKey,JSON.stringify(next));}}><Trash2 size={13}/></button></div>)}</div>}
+     <div className="filter-save"><input maxLength={60} placeholder="نام جست‌وجوی ذخیره‌شده" value={name} onChange={e=>setName(e.target.value)}/><button onClick={save} disabled={!storeKey||!name.trim()||!treeValidation.valid}><Save size={15}/> ذخیره</button></div>
+     {saveError&&<small role="alert" className="filter-rule-error">{saveError}</small>}
+     {!!saved.length&&<div className="saved-searches">{saved.map(item=><div key={item.name}><button onClick={()=>{onChange(item.filter);setOpen(false);}}>{item.name}</button><button title="حذف فیلتر" aria-label={'حذف فیلتر '+item.name} onClick={()=>removeSaved(item.name)}><Trash2 size={13}/></button></div>)}</div>}
      <button className="clear-filters" onClick={()=>onChange({...EMPTY_FILTER})}><Undo2 size={14}/> پاک‌کردن همه فیلترها</button>
    </section>}
  </div>;

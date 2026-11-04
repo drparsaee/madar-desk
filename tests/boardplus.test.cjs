@@ -9,7 +9,7 @@ const loader=new Module(path.join(root,'src','boardplus-test.cjs'),module);
 loader.filename=path.join(root,'src','boardplus-test.cjs');
 loader.paths=Module._nodeModulePaths(root);
 loader._compile(result,loader.filename);
-const {labelColor,labelText,matchAdvanced}=loader.exports;
+const {labelColor,labelText,matchAdvanced,savedFilterStorageKey}=loader.exports;
 const React=require('react');
 const {renderToStaticMarkup}=require('react-dom/server');
 const markdownBundle=esbuild.buildSync({entryPoints:[path.join(root,'src/markdown.jsx')],
@@ -59,6 +59,27 @@ test('attachment and due-date filters do not invent files or dates',()=>{
  assert(matchAdvanced({...base,fileLinks:[{name:'sample',path:'\\\\host\\share\\x'}]},
    {...f,attachments:true}));
  assert(!matchAdvanced({...base,dueDate:'2027-01-01'},f));
+});
+test('completed cards are not overdue even when still in the original board lane',()=>{
+ const late={...base,dueDate:'2020-01-01',completed:true,status:'doing',listId:'in-progress'};
+ const due={priority:'all',member:'all',label:'all',status:'all',due:'overdue',attachments:false};
+ assert.equal(matchAdvanced(late,due),false,
+   'marking card completed must not require a stage move or financial posting');
+ assert.equal(matchAdvanced({...late,completed:false},due),true);
+ assert.equal(matchAdvanced({...late,completed:false,status:'done'},due),true);
+ assert.equal(matchAdvanced({...late,completed:undefined,status:'done'},due),false);
+ assert.equal(late.status,'doing');
+ assert.equal(late.listId,'in-progress');
+});
+test('saved-filter keys preserve complete user identities and refuse ambiguous scopes',()=>{
+ const shared='https://same-host.test/'+('x'.repeat(240));
+ const alice=savedFilterStorageKey(shared+'alice','board-1');
+ const bob=savedFilterStorageKey(shared+'bob','board-1');
+ assert.notEqual(alice,bob,'Long host prefixes must not merge users');
+ assert.notEqual(alice,savedFilterStorageKey(shared+'alice','board-2'));
+ assert.equal(savedFilterStorageKey(null,'board-1'),'');
+ assert.equal(savedFilterStorageKey('user',''),'');
+ assert.equal(savedFilterStorageKey('u'.repeat(1025),'board-1'),'');
 });
 test('Markdown preview renders headings, lists, emphasis, links, and fenced code',()=>{
  const html=renderToStaticMarkup(React.createElement(MarkdownPreview,{value:'# عنوان\n\n**پررنگ** و *مورب*\n\n- الف\n- ب\n\n[رفتن](https://example.com)\n\n```js\nconst x=1;\n```'}));
