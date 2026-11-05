@@ -63,6 +63,7 @@ import {boardTableColumns,readBoardViewPreferences,saveBoardViewPreferences} fro
 import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
+import {ChecklistTaskRow} from './checklist_task_row.jsx';
 import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
 import {emptyCardHistory,isUndoableCardPatch,recordCardEdit,cardHistoryAvailability,applyCardHistory} from './card_undo.js';
 import './interface_mode.css';
@@ -368,7 +369,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>toggleQuickMenu('date')} aria-expanded={quickMenu==='date'} aria-controls="task-section-metadata"><CalendarDays size={15}/> تاریخ</button>
         <button type="button" onClick={()=>jumpToSection('description','.rich-description textarea')} aria-controls="task-section-description"><FileText size={15}/> توضیحات</button>
         <button type="button" onClick={()=>toggleQuickMenu('members')} aria-expanded={quickMenu==='members'} aria-controls="task-section-assignees"><Users size={15}/> اعضا</button>
-        <button type="button" className="task-quick-action--extra" onClick={()=>toggleQuickMenu('attachments')} aria-expanded={quickMenu==='attachments'} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
+        <button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> فایل‌ها</button>
         <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
         <button type="button" onClick={()=>toggleQuickMenu('labels')} aria-expanded={quickMenu==='labels'} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
         <button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('cover')} aria-controls="task-section-cover"><Palette size={15}/> کاور</button>
@@ -382,7 +383,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           {quickMenu==='members'&&<div className="task-quick-popover__body"><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>}
           {quickMenu==='labels'&&<div className="task-quick-popover__body"><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>}
           {quickMenu==='checklist'&&<div className="task-quick-popover__body"><label className="task-quick-popover__label">مرحله جدید<div className="task-quick-popover__create"><input aria-label="مرحله جدید چک‌لیست" placeholder="مرحله بعدی را بنویس..." maxLength={5000} value={newStep} disabled={!canEdit} onChange={event=>setNewStep(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addStep();}}}/><button type="button" disabled={!canEdit||!newStep.trim()} onClick={addStep}><Plus size={15}/> افزودن</button></div></label><label className="task-quick-popover__label">چک‌لیست جداگانه<div className="task-quick-popover__create"><input aria-label="نام چک‌لیست جدید" placeholder="مثلاً کارهای قبل از تحویل" maxLength={180} value={newChecklistName} disabled={!canEdit} onChange={event=>setNewChecklistName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addChecklistGroup();}}}/><button type="button" disabled={!canEdit||!newChecklistName.trim()} onClick={addChecklistGroup}><Plus size={15}/> ساخت</button></div></label>{!!quickError&&<p className="field-error" role="alert">{quickError}</p>}<button type="button" onClick={()=>jumpToSection('checklist','.inline-create input')}>نمایش مراحل و چک‌لیست‌ها <ChevronLeft size={14}/></button></div>}
-          {quickMenu==='attachments'&&<div className="task-quick-popover__body"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/><button type="button" onClick={()=>jumpToSection('attachments')}>مشاهده همه پیوست‌ها <ChevronLeft size={14}/></button></div>}
         </div>}
       </nav>
       {!!task.labels?.length&&<div className="task-editor-labels" aria-label="برچسب‌های کارت">{task.labels.map((label,index)=><LabelChip key={index} label={task.labelColors?.[label]?{name:label,color:task.labelColors[label]}:label}/>)}<button type="button" disabled={!canEdit} onClick={()=>toggleQuickMenu('labels')}><Plus size={14}/> ویرایش برچسب‌ها</button></div>}
@@ -415,50 +415,27 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       </details>
       <details className="task-optional-block task-shared-disclosure" id="task-section-attachments" tabIndex={-1}
         open={sectionOpen.attachments} onToggle={event=>onSectionToggle('attachments',event)}>
-        <summary><FolderOpen size={16}/> پیوست‌ها</summary>
-      <div className="edit-section"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
-      <details className="task-optional-block" defaultOpen={!!task.fileLinks?.length}>
-        <summary><span>لینک فایل‌های اشتراکی</span>{!!task.fileLinks?.length&&<small>{task.fileLinks.length} لینک</small>}</summary>
-        <div className="edit-section"><SharedLinks links={task.fileLinks||[]} canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/></div>
-      </details>
+        <summary><FolderOpen size={16}/> فایل‌ها</summary>
+      <div className="edit-section task-card-files"><CardAttachments cardId={task.id} api={api} canEdit={canEdit} compact/>
+        <SharedLinks links={task.fileLinks||[]} compact canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/>
+      </div>
       </details>
       <details className="task-optional-block task-shared-disclosure" id="task-section-checklist" tabIndex={-1}
         open={sectionOpen.checklist} onToggle={event=>onSectionToggle('checklist',event)}>
         <summary><ListChecks size={16}/> چک‌لیست <small>{done}/{total}</small></summary>
       <div className="edit-section"><div className="section-header"><h3><ListChecks size={17}/> مراحل انجام</h3><span>{done} / {total}</span></div>
-        <div className="step-list">{task.checklist.map(c=><div className="task-compact-step" key={c.id}>
-          <div className="step-row">
-            <button type="button" disabled={!canEdit} className={'step-check '+(c.done?'checked':'')}
-              aria-label={'تغییر وضعیت '+c.text} aria-pressed={Boolean(c.done)}
-              onClick={()=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,done:!i.done}:i)})}>
-              {c.done&&<Check size={14}/>}
-            </button>
-            <span className={c.done?'completed':''}>{c.text}</span>
-            <button disabled={!canEdit||!canManage||Number(c.cost??0)!==0||!!c.expenseItems?.length} className="tiny-icon" title={Number(c.cost??0)!==0?'برای حذف مرحله ابتدا هزینه ثبت‌شده را بررسی کنید.':'حذف مرحله'} aria-label="حذف مرحله" onClick={()=>{const changes=removeUnpaidLegacyStep(task,c.id);if(changes)update(changes);}}><X size={14}/></button>
-          </div>
-          {priceEnabled&&<details className="task-step-cost-disclosure">
-            <summary>هزینه مرحله{Number(c.cost||0)>0?' · '+money(c.cost)+' تومان':''}{!c.cost&&(c.costCategory||c.costDate)?' · دارای جزئیات':''}</summary>
-            <div className="step-cost-fields">
-              <label className="task-step-money-label">مبلغ<MoneyField disabled={!canEdit} value={c.cost||0} label={'هزینه مرحله '+c.text} onChange={cost=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,cost,costDate:i.costDate||(cost?todayISO():'')}:i)})}/></label>
-              <label>دسته هزینه<input aria-label={'دسته هزینه مرحله '+c.text} maxLength={80} value={c.costCategory||''} disabled={!canEdit} placeholder="مثلاً پیک" onChange={e=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costCategory:e.target.value}:i)})}/></label>
-              <CalendarField label={'تاریخ هزینه مرحله '+c.text} calendar={calendar} value={c.costDate||''} disabled={!canEdit} onChange={costDate=>update({checklist:task.checklist.map(i=>i.id===c.id?{...i,costDate}:i)})}/>
-            </div>
-          </details>}
-        </div>)}</div>
-        {canManage&&task.checklist.map(step=><details key={step.id} className="task-optional-block task-step-expenses" defaultOpen={!!step.expenseItems?.length}>
-          <summary>هزینه‌های مستقل مرحله: {step.text}{!!step.expenseItems?.length&&<small>{step.expenseItems.length} مورد</small>}</summary>
-          <StageExpenseFields task={task} step={step}
-            parties={Object.values(accountView?.parties||{})}
-            existingJobs={accountView?.contractorJobs||{}}
-            accountReady={Boolean(accountView)}
-            canEdit={canEdit} onUpdate={update} onPrepare={onOpenPurchase}/>
-        </details>)}
+        <div className="task-checklist-progress" aria-label={'پیشرفت '+done+' از '+total}>
+          <span>{total?Math.round(done/total*100):0}٪</span><div className="progress-track"><i style={{width:(total?Math.round(done/total*100):0)+'%'}}/></div>
+        </div>
+        <div className="step-list">{task.checklist.map(step=><ChecklistTaskRow key={step.id} task={task} step={step}
+          users={users} calendar={calendar} canEdit={canEdit} canManage={canManage}
+          priceEnabled={priceEnabled} accountView={accountView} onUpdate={update} onOpenPurchase={onOpenPurchase}/>)}</div>
         {priceEnabled&&<div className="step-total">جمع هزینه‌های قدیمی این کار: <strong>{money((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))} تومان</strong></div>}
         {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
       </div>
       <details className="task-optional-block" defaultOpen={Boolean(task.checklistGroups?.length||task.checklists?.length)}>
         <summary>چک‌لیست‌های بیشتر</summary>
-        <div className="edit-section"><CardChecklists task={task} hideLegacy disabled={!canEdit} onChange={update}/></div>
+        <div className="edit-section"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} onChange={update}/></div>
       </details>
       </details>
       <details className="task-optional-block task-shared-disclosure" id="task-section-tags" tabIndex={-1}

@@ -34,8 +34,8 @@ test('duplicate IDs are rejected and UI invokes guarded handler',()=>{
   assert.equal(removeUnpaidLegacyStep({checklist:[{id:'x'},{id:'x'}]},'x'),null);
   assert.equal(removeUnpaidLegacyStep({checklist:[{
     id:'vendor',cost:0,expenseItems:[{id:'cost.1',unitPrice:null}]}]},'vendor'),null);
-  const app=fs.readFileSync(path.join(root,'src/App.jsx'),'utf8');
-  assert.match(app,/const changes=removeUnpaidLegacyStep\(task,c\.id\)/);
+  const app=fs.readFileSync(path.join(root,'src/checklist_task_row.jsx'),'utf8');
+  assert.match(app,/const result=removeUnpaidLegacyStep\(task,step\.id\)/);
   // Roles below manager cannot remove lines even when their redacted cost is 0.
-  assert.match(app,/disabled=\{!canEdit\|\|!canManage\|\|Number\(c\.cost\?\?0\)!==0\|\|!!c\.expenseItems\?\.length\}/);
+  assert.match(app,/const canDelete=canEdit&&canManage&&!paid/);
 });

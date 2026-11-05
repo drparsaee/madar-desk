@@ -1,6 +1,6 @@
 import React,{useEffect,useId,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {CalendarDays, Clock3, Copy, ExternalLink, FileText, FolderOpen, Link2, Plus, Search, Trash2, X, BarChart3} from 'lucide-react';
+import {CalendarDays, Clock3, Copy, ExternalLink, FileText, FolderOpen, Link2, Plus, Search, Trash2, X, BarChart3,HelpCircle,Download} from 'lucide-react';
 import {MiniCalendar} from './mini_calendar.jsx';
 
 export const durationText=v=>{
@@ -170,13 +170,33 @@ export const pathValid=path=>{
 
 export function SharedLinks({links=[],onChange,api,canEdit=true,compact=false}){
  const [name,setName]=useState(''),[path,setPath]=useState(''),[message,setMessage]=useState('');
+ const [showEditor,setShowEditor]=useState(false);
  const open=async p=>{setMessage('');try{await api.openSharedFile(p);}catch(e){setMessage('بازکردن فایل ممکن نشد: '+e.message);}};
  const download=async p=>{setMessage('');try{const result=await api.downloadSharedFile(p);setMessage('فایل در پوشه دانلودهای این سیستم ذخیره شد: '+result.name);}catch(e){setMessage('دانلود فایل ممکن نشد: '+e.message);}};
  const choose=async()=>{setMessage('');try{const file=await api.chooseSharedFile();if(!file.canceled){setPath(file.path);setName(file.name);}}catch(e){setMessage('انتخاب فایل ممکن نشد: '+e.message);}};
  const add=()=>{if(!pathValid(path)){setMessage('مسیر معتبر نمونه: \\\\OFFICE-PC\\Projects\\file.pdf');return;}
    if(!name.trim()){setMessage('عنوان فایل را وارد کنید.');return;}
-   onChange([...links,{id:id(),name:name.trim().slice(0,180),path:path.replace(/\//g,'\\')}]);setName('');setPath('');setMessage('');
+   onChange([...links,{id:id(),name:name.trim().slice(0,180),path:path.replace(/\//g,'\\')}]);setName('');setPath('');setMessage('');setShowEditor(false);
  };
+ if(compact)return <div className="shared-links shared-links--compact">
+   <div className="shared-links__heading"><strong><Link2 size={15}/> لینک‌های فایل اشتراکی ({links.length})</strong>
+     {canEdit&&<button type="button" onClick={()=>setShowEditor(v=>!v)} aria-expanded={showEditor}><Plus size={14}/> لینک اشتراکی</button>}
+     <details className="shared-links__help"><summary title="راهنمای فایل شبکه" aria-label="راهنمای لینک اشتراکی"><HelpCircle size={15}/></summary><p>مسیر شبکه باید با Windows File Sharing در دسترس باشد. فایل روی میزبان شبکه می‌ماند؛ برای دریافت روی نام فایل بزنید. مدار نسخهٔ دیگری از فایل شبکه آپلود نمی‌کند.</p></details>
+   </div>
+   {links.map(item=><div className="shared-item" key={item.id}>
+     <FileText size={15}/><button type="button" className="shared-open" onClick={()=>download(item.path)} title={item.path} aria-label={'دانلود '+item.name}><strong dir="auto">{item.name}</strong></button>
+     <button type="button" onClick={()=>download(item.path)} title="دانلود از شبکه" aria-label={'دانلود فایل '+item.name}><Download size={15}/></button>
+     <button type="button" onClick={()=>open(item.path)} title="نمایش در File Explorer" aria-label={'بازکردن '+item.name}><FolderOpen size={15}/></button>
+     {canEdit&&<button type="button" title="حذف لینک" aria-label={'حذف لینک '+item.name} onClick={()=>onChange(links.filter(x=>x.id!==item.id))}><X size={15}/></button>}
+   </div>)}
+   {canEdit&&showEditor&&<div className="shared-links__editor">
+     <button type="button" onClick={choose}><FolderOpen size={14}/> انتخاب فایل از شبکه</button>
+     <input aria-label="عنوان فایل" maxLength={180} placeholder="نام فایل" value={name} onChange={e=>setName(e.target.value)}/>
+     <input dir="ltr" aria-label="مسیر اشتراک ویندوز" placeholder="\\\\SERVER\\Share\\file.pdf" value={path} onChange={e=>setPath(e.target.value)}/>
+     <button type="button" disabled={!name.trim()||!path.trim()} onClick={add}>ثبت لینک</button>
+   </div>}
+   {!!message&&<p className="field-error" role="alert">{message}</p>}
+ </div>;
  return <div className="shared-links">
  {links.map(item=><div className="shared-item" key={item.id}><FileText size={16}/>
    <button className="shared-open" onClick={()=>download(item.path)} title={'دانلود فایل: '+item.path}><strong>{item.name}</strong><small dir="ltr">{item.path}</small></button>

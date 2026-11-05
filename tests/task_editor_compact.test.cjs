@@ -29,9 +29,10 @@ test('every visible quick action has a unique, real destination or contextual ed
   assert.match(app,/\(focusTarget\|\|target\)\.focus\(\{preventScroll:true\}\)/);
   assert.match(nav,/type="button"/,'navigation buttons must never submit forms');
   assert.match(nav,/aria-expanded=\{showExtraActions\}/,'secondary shortcuts should have an accessible disclosure');
-  for(const quick of ['date','members','labels','checklist','attachments']){
+  for(const quick of ['date','members','labels','checklist']){
     assert.match(nav,new RegExp("quickMenu==='"+quick+"'"));
   }
+  assert.match(nav,/jumpToSection\('attachments'\)/);
   assert.match(app,/setQuickMenu\(null\)/,'context menu must have a close path');
   assert.match(css,/\.task-quick-actions:not\(\.task-quick-actions--expanded\) \.task-quick-action--extra\{display:none\}/);
 });
@@ -54,7 +55,10 @@ test('less-used card features collapse safely while existing data opens them',()
   }
   assert.match(app, /className="task-activity-panel" id="task-section-reports" tabIndex=\{-1\}/);
   assert.match(app, /activityOpen&&<div className="task-activity-panel__content"/);
-  assert.match(app, /className="task-optional-block task-step-expenses" defaultOpen=\{!!step\.expenseItems\?\.length\}/);
+  assert.match(app, /ChecklistTaskRow key=\{step\.id\}/);
+  const checklist=fs.readFileSync(path.join(root,'src/checklist_task_row.jsx'),'utf8');
+  assert.match(checklist, /StageExpenseFields task=\{task\} step=\{step\}/);
+  for(const action of ['date','members','cost','more']) assert.match(checklist,new RegExp("menu==='"+action+"'"));
   assert.match(app, /<summary>چک‌لیست‌های بیشتر<\/summary>/);
   assert.match(css, /\.task-optional-block\[open\]/);
 });
@@ -83,6 +87,6 @@ test('task drawer has a keyboard focus trap, escape close and restores previous 
 test('reports composer is explicitly revealed and shared links remain discoverable',()=>{
   assert.match(app,/const \[reportComposerOpen,setReportComposerOpen\]=useState\(false\)/);
   assert.match(app,/canEdit&&reportComposerOpen&&<div className="report-composer"/);
-  assert.match(app,/<summary><span>لینک فایل‌های اشتراکی<\/span>/);
+  assert.match(app,/<SharedLinks links=\{task\.fileLinks\|\|\[\]\} compact/);
   assert.match(app,/className="project-file-panel project-file-panel--compact"/);
 });

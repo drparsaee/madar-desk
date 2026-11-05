@@ -108,6 +108,18 @@ test('bounded and valid checklist commands reject malformed values',()=>{
   assert.throws(()=>editCardChecklists(task,{type:'add-item',groupId:'checklist-legacy',text:'x'.repeat(5001)}));
 });
 
+test('named checklist item can carry its own assignee and due date without modifying financial fields',()=>{
+  const source={...baseCard(),checklists:[{id:'independent',name:'QC',items:[{id:'i1',text:'Inspect',done:false,cost:2300}]}]};
+  const patch=editCardChecklists(source,{type:'patch-item',groupId:'independent',itemId:'i1',
+    changes:{assignees:['local','qa','qa'],dueDate:'2026-11-18'}});
+  assert.deepEqual(patch.checklists[0].items[0].assignees,['local','qa']);
+  assert.equal(patch.checklists[0].items[0].dueDate,'2026-11-18');
+  assert.equal(patch.checklists[0].items[0].cost,2300);
+  assert.deepEqual(patch.checklist,source.checklist);
+  assert.throws(()=>editCardChecklists(source,{type:'patch-item',groupId:'independent',itemId:'i1',changes:{cost:0}}));
+  assert.throws(()=>editCardChecklists(source,{type:'patch-item',groupId:'independent',itemId:'i1',changes:{dueDate:'bad-date'}}));
+});
+
 test('covers accept only solid HEX colors with fixed size, no URLs or arbitrary CSS',()=>{
   assert.deepEqual(normalizeCover({type:'color',color:'#cA9b11',size:'strip'}),
     {type:'color',color:'#CA9B11',size:'strip'});

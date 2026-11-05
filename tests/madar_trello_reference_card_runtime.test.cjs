@@ -14,10 +14,10 @@ const playwrightHome='C:\\Users\\Parsa\\AppData\\Roaming\\npm\\node_modules\\pla
 const available=fs.existsSync(chrome)&&fs.existsSync(playwrightHome);
 const stages=[{id:'planned',label:'در انتظار',color:'#5e82b1',subtitle:''}];
 const fixture={version:1,workspaces:[{id:'qa-space',name:'فضای آزمایشی',archived:false}],
-  projects:[{id:'qa-project',name:'پروژه نمونه',color:'#6688ab',costEnabled:false,price:0}],
+  projects:[{id:'qa-project',name:'پروژه نمونه',color:'#6688ab',costEnabled:true,price:0}],
   boards:[{id:'qa-board',name:'برد نمونه',workspaceId:'qa-space',projectId:'qa-project',archived:false,stages,customFields:[]}],
   stages,tasks:[{id:'qa-task',projectId:'qa-project',boardId:'qa-board',listId:'planned',status:'planned',
-    title:'کارت نمونه بازطراحی',priority:'medium',description:'شرح کوتاه کارت',labels:[],assignees:[],
+    title:'کارت نمونه بازطراحی',priority:'medium',description:'شرح کوتاه کارت',labels:[],assignees:[],costEnabled:true,
     reports:[],checklist:[{id:'step1',text:'مرحله اولیه',done:false,cost:0}],cost:0,
     createdAt:'2026-11-04T10:00:00.000Z',updatedAt:'2026-11-04T10:00:00.000Z'}],
   settings:{theme:'dark',costDefault:false}};
@@ -76,6 +76,29 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.some(x=>x.text==='کار قابل انجام'));
           await drawer.locator('#task-section-checklist .step-row').filter({hasText:'کار قابل انجام'}).locator('button.step-check').click();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.some(x=>x.text==='کار قابل انجام'&&x.done));
+          const step=drawer.locator('.task-checklist-item').filter({hasText:'کار قابل انجام'});
+          await step.getByRole('button',{name:'مسئول کار قابل انجام'}).click();
+          const memberBox=step.locator('.assignee-picker input[type="checkbox"]');
+          if(await memberBox.count()){
+            await memberBox.first().check();
+            await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.some(x=>x.text==='کار قابل انجام'&&x.assignees?.length));
+          }
+          await step.getByRole('button',{name:'زمان کار قابل انجام'}).click();
+          const dateControl=step.getByText('موعد این مرحله');
+          assert.equal(await dateControl.count(),1,'step has its own date field');
+          await step.getByRole('button',{name:'انتخاب تاریخ موعد این مرحله'}).click();
+          await page.getByRole('group',{name:'تقویم انتخاب تاریخ'})
+            .locator('.madar-mini-calendar__days button:not(.madar-mini-calendar__outside)').first().click();
+          await page.waitForFunction(()=>/^\d{4}-\d{2}-\d{2}$/.test(
+            JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.find(x=>x.text==='کار قابل انجام')?.dueDate||''));
+          await step.getByRole('button',{name:'هزینه کار قابل انجام'}).click();
+          assert.equal(await step.getByRole('combobox',{name:'طرف حساب کار قابل انجام'}).isDisabled(),true,'offline party list cannot be fabricated');
+          await step.getByRole('textbox',{name:'هزینه مرحله کار قابل انجام',exact:true}).fill('2500');
+          await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.find(x=>x.text==='کار قابل انجام')?.cost===2500);
+          await step.getByRole('button',{name:'راهنمای هزینه'}).count().then(n=>assert.ok(n===0||n===1));
+          await step.getByRole('button',{name:'بیشتر کار قابل انجام'}).click();
+          assert.equal(await step.getByRole('button',{name:'حذف مرحله'}).count(),1);
+          assert.equal(await step.getByRole('button',{name:'حذف مرحله'}).isDisabled(),true,'paid checklist item stays protected');
           await nav.locator('> button[aria-controls="task-section-checklist"]').click();
           await popover.getByRole('textbox',{name:'نام چک‌لیست جدید'}).fill('بررسی قبل از تحویل');
           await popover.getByRole('button',{name:'ساخت'}).click();
@@ -87,6 +110,16 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
           assert.equal(await popover.isVisible(),true,'members have a compact editor');
           await nav.locator('> button[aria-controls="task-section-assignees"]').click();
           assert.equal(await popover.count(),0,'second click closes the menu');
+          const fileSection=drawer.locator('#task-section-attachments');
+          if(await fileSection.getAttribute('open')===null)await fileSection.locator(':scope > summary').click();
+          assert.equal(await fileSection.locator('.attachment-warning:visible').count(),0,'host warning hidden under help');
+          assert.equal(await fileSection.getByLabel('بارگذاری فایل کارت').count(),1);
+          await fileSection.getByRole('button',{name:'لینک اشتراکی'}).click();
+          await fileSection.getByRole('textbox',{name:'عنوان فایل'}).fill('نمونه');
+          await fileSection.getByRole('textbox',{name:'مسیر اشتراک ویندوز'}).fill('\\\\OFFICE-PC\\Projects\\sample.pdf');
+          await fileSection.getByRole('button',{name:'ثبت لینک'}).click();
+          await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].fileLinks?.some(x=>x.name==='نمونه'));
+          assert.equal(await fileSection.getByRole('button',{name:'دانلود نمونه'}).count(),1,'clickable filename downloads');
           await activity.getByRole('button',{name:'افزودن گزارش'}).click();
           await activity.getByRole('textbox',{name:'گزارش یک‌خطی'}).fill('نمونه گزارش آزمایشی');
           await activity.getByRole('button',{name:'ثبت گزارش'}).click();

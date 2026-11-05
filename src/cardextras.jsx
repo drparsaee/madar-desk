@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
-import {ChevronDown, ChevronUp, ListChecks, Plus, Trash2} from 'lucide-react';
+import {ChevronDown, ChevronUp, ListChecks, Plus, Trash2, Clock3, Users, Ellipsis} from 'lucide-react';
 import {CalendarField} from './productivity.jsx';
+import {AssigneeSelector} from './members.jsx';
 import {CoverColorPicker} from './cover_color_picker.jsx';
 import './cardextras.css';
 
@@ -66,7 +67,7 @@ export function editCardChecklists(task, command, idFactory = issueId) {
     if (!group) throw new Error('چک‌لیست یافت نشد');
     if (type === 'rename-group') group.name = nonEmpty(command.name, 180, 'نام چک‌لیست');
     else if (type === 'remove-group') {
-      if (group.items.some(hasMoney)) throw new Error('حذف چک‌لیست دارای هزینه ثبت‌شده مجاز نیست');
+      if (group.items.some(item=>hasMoney(item)||(item.expenseItems||[]).length>0)) throw new Error('حذف چک‌لیست دارای هزینه ثبت‌شده مجاز نیست');
       groups.splice(groupIndex,1);
     } else if (type === 'add-item') {
       if (group.items.length >= 300) throw new Error('حداکثر ۳۰۰ مرحله در هر چک‌لیست مجاز است');
@@ -77,9 +78,22 @@ export function editCardChecklists(task, command, idFactory = issueId) {
       if (index < 0) throw new Error('مرحله یافت نشد');
       const item = group.items[index];
       if (type === 'rename-item') item.text = nonEmpty(command.text,5000,'متن مرحله');
+      else if (type === 'patch-item') {
+        const changes=command.changes||{};
+        if(Object.keys(changes).some(key=>!['dueDate','assignees'].includes(key))) throw new Error('تنها موعد و مسئول قابل ویرایش است');
+        if(Object.hasOwn(changes,'dueDate')) {
+          if(typeof changes.dueDate!=='string'||(changes.dueDate&&!/^\d{4}-\d{2}-\d{2}$/.test(changes.dueDate)))throw new Error('تاریخ نامعتبر است');
+          item.dueDate=changes.dueDate;
+        }
+        if(Object.hasOwn(changes,'assignees')) {
+          if(!Array.isArray(changes.assignees)||changes.assignees.length>100||
+              changes.assignees.some(v=>typeof v!=='string'||v.length>120)) throw new Error('فهرست مسئولان نامعتبر است');
+          item.assignees=[...new Set(changes.assignees)];
+        }
+      }
       else if (type === 'toggle-item') item.done = !item.done;
       else if (type === 'remove-item') {
-        if (hasMoney(item)) throw new Error('مرحله دارای هزینه ثبت‌شده قابل حذف نیست');
+        if (hasMoney(item)||(item.expenseItems||[]).length) throw new Error('مرحله دارای هزینه ثبت‌شده قابل حذف نیست');
         group.items.splice(index, 1);
       } else if (type === 'move-item') {
         const target = index + (command.direction === 'up' ? -1 : command.direction === 'down' ? 1 : 0);
@@ -166,28 +180,42 @@ export function editBoardFields(board, tasks = [], templates = [], command, idFa
 
 function ActionError({message}) {return message ? <p className="cardextras-error" role="alert">{message}</p> : null;}
 
-function ChecklistRow({group, item, onEdit, disabled}) {
+function ChecklistRow({group, item, onEdit, disabled, users=[], calendar='jalali',projectId=''}) {
   const [editing,setEditing] = useState(false);
+  const [menu,setMenu]=useState('');
   const [draft,setDraft] = useState(item.text);
   const commit = () => {if (!draft.trim()) return;onEdit({type:'rename-item',groupId:group.id,itemId:item.id,text:draft});setEditing(false);};
-  return <li className="cardextras-checkitem">
+  const edit=changes=>onEdit({type:'patch-item',groupId:group.id,itemId:item.id,changes});
+  return <li className="cardextras-checkitem cardextras-checkitem--compact" onKeyDown={event=>{if(event.key==='Escape'&&menu){event.stopPropagation();setMenu('');}}}>
+   <div className="cardextras-checkitem__line">
     <input type="checkbox" aria-label={'انجام '+item.text} checked={Boolean(item.done)} disabled={disabled}
       onChange={() => onEdit({type:'toggle-item',groupId:group.id,itemId:item.id})}/>
     {editing ? <input className="cardextras-grow" value={draft} maxLength={5000} aria-label="ویرایش متن مرحله"
       onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();commit();}if(e.key==='Escape')setEditing(false);}}/>
-      : <span className={item.done?'cardextras-complete cardextras-grow':'cardextras-grow'}>{item.text}</span>}
-    {editing ? <button type="button" disabled={disabled||!draft.trim()} onClick={commit}>ذخیره</button> :
-      <button type="button" disabled={disabled} onClick={()=>{setDraft(item.text);setEditing(true);}}>ویرایش</button>}
+      : <button type="button" className={item.done?'cardextras-complete cardextras-grow cardextras-checkitem__title':'cardextras-grow cardextras-checkitem__title'} disabled={disabled} onClick={()=>{setDraft(item.text);setEditing(true);}}>{item.text}</button>}
+    {editing&&<button type="button" disabled={disabled||!draft.trim()} onClick={commit}>ذخیره</button>}
+    <div className="cardextras-checkitem__actions">
+      <button type="button" aria-label={'زمان '+item.text} aria-expanded={menu==='date'} onClick={()=>setMenu(v=>v==='date'?'':'date')}><Clock3 size={15}/></button>
+      <button type="button" aria-label={'مسئول '+item.text} aria-expanded={menu==='members'} onClick={()=>setMenu(v=>v==='members'?'':'members')}><Users size={15}/></button>
+      <button type="button" aria-label={'بیشتر '+item.text} aria-expanded={menu==='more'} onClick={()=>setMenu(v=>v==='more'?'':'more')}><Ellipsis size={15}/></button>
+    </div>
+   </div>
+   {menu&&<div className="cardextras-checkitem__menu" role="group" aria-label={'گزینه‌های '+item.text}>
+     {menu==='date'&&<CalendarField value={item.dueDate||''} calendar={calendar} disabled={disabled} label="موعد مرحله" onChange={dueDate=>edit({dueDate})} popupOnClick/>}
+     {menu==='members'&&<AssigneeSelector users={users} projectId={projectId} value={item.assignees||[]} disabled={disabled} onChange={assignees=>edit({assignees})}/>}
+     {menu==='more'&&<div className="cardextras-checkitem__more">
     <button type="button" disabled={disabled} title="یک مرحله بالاتر" aria-label={'بالا بردن '+item.text}
       onClick={()=>onEdit({type:'move-item',groupId:group.id,itemId:item.id,direction:'up'})}><ChevronUp size={14}/></button>
     <button type="button" disabled={disabled} title="یک مرحله پایین‌تر" aria-label={'پایین بردن '+item.text}
       onClick={()=>onEdit({type:'move-item',groupId:group.id,itemId:item.id,direction:'down'})}><ChevronDown size={14}/></button>
-    <button type="button" disabled={disabled||item.cost>0} title={item.cost>0?'ابتدا هزینه ثبت‌شده را از بخش مالی مدیریت کنید':'حذف مرحله'}
+    <button type="button" disabled={disabled||item.cost>0||(item.expenseItems||[]).length>0} title={item.cost>0?'ابتدا هزینه ثبت‌شده را از بخش مالی مدیریت کنید':'حذف مرحله'}
       aria-label={'حذف '+item.text} onClick={()=>onEdit({type:'remove-item',groupId:group.id,itemId:item.id})}><Trash2 size={15}/></button>
+     </div>}
+   </div>}
   </li>;
 }
 
-function ChecklistGroup({group,disabled,onEdit}) {
+function ChecklistGroup({group,disabled,onEdit,users,calendar,projectId}) {
   const [newItem,setNewItem] = useState('');
   const [rename,setRename] = useState(false);
   const [name,setName] = useState(group.name);
@@ -211,7 +239,7 @@ function ChecklistGroup({group,disabled,onEdit}) {
     {expanded && <>
       <div className="cardextras-track"><span style={{width:`${group.items.length?completed/group.items.length*100:0}%`}}/></div>
       <ul className="cardextras-items">{group.items.map(item=><ChecklistRow key={item.id} group={group} item={item}
-        disabled={disabled} onEdit={onEdit}/>)}</ul>
+        disabled={disabled} onEdit={onEdit} users={users} calendar={calendar} projectId={projectId}/>)}</ul>
       {!disabled&& <div className="cardextras-addrow"><input aria-label={'مرحله جدید '+group.name} placeholder="مرحله جدید..."
         value={newItem} maxLength={5000} onChange={e=>setNewItem(e.target.value)}
         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}/>
@@ -220,7 +248,7 @@ function ChecklistGroup({group,disabled,onEdit}) {
   </section>;
 }
 
-export function CardChecklists({task,onChange,disabled=false,hideLegacy=false}) {
+export function CardChecklists({task,onChange,disabled=false,hideLegacy=false,users=[],calendar='jalali'}) {
   const [name,setName] = useState('');
   const [error,setError] = useState('');
   const groups=cardChecklistGroups(task);
@@ -230,7 +258,7 @@ export function CardChecklists({task,onChange,disabled=false,hideLegacy=false}) 
   const add=()=>{if(name.trim()){update({type:'add-group',name});setName('');}};
   return <div className="cardextras" dir="rtl">
     <h3><ListChecks size={17}/> چک‌لیست‌های کارت</h3>
-    {visibleGroups.map(group=><ChecklistGroup key={group.id} group={group} disabled={disabled} onEdit={update}/>)}
+    {visibleGroups.map(group=><ChecklistGroup key={group.id} group={group} disabled={disabled} onEdit={update} users={users} calendar={calendar} projectId={task.projectId}/>)}
     {!visibleGroups.length&&<p className="cardextras-muted">هنوز چک‌لیست دیگری ثبت نشده است.</p>}
     {!disabled&&<div className="cardextras-addrow"><input aria-label="نام چک‌لیست جدید" value={name} maxLength={180}
       placeholder="نام چک‌لیست جدید" onChange={e=>setName(e.target.value)}
