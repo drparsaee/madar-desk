@@ -33,6 +33,23 @@ def legacy():
 
 
 class MigrationTests(unittest.TestCase):
+    def test_global_label_library_validates_without_assigning_labels_to_tasks(self):
+        state = normalize_plus(legacy())
+        previous = copy.deepcopy(state["tasks"])
+        state["settings"]["labelLibrary"] = [
+            {"id": "global.1", "name": "بازبینی", "color": "#12AABB"},
+            {"id": "global.2", "name": "ارسال", "color": "#334455"}]
+        self.assertTrue(validate_plus(state))
+        self.assertEqual(previous, state["tasks"])
+        for mutation in (
+                lambda s: s["settings"]["labelLibrary"][0].update(color="red"),
+                lambda s: s["settings"]["labelLibrary"][1].update(name="بازبینی"),
+                lambda s: s["settings"]["labelLibrary"][0].update(random="html")):
+            invalid=copy.deepcopy(state)
+            mutation(invalid)
+            with self.assertRaises(ValueError):
+                validate_plus(invalid)
+
     def test_card_completion_boolean_is_persistent_and_independent_of_financial_status(self):
         source = legacy()
         original = copy.deepcopy(source["tasks"][0])

@@ -1,7 +1,8 @@
-import React, {useEffect, useState} from 'react';
-import {Plus, X} from 'lucide-react';
+import React, {useState} from 'react';
+import {Plus, X, Pencil, Search, Check} from 'lucide-react';
 import {LabelChip, labelColor} from './boardplus.jsx';
 import {CommonColorOptions} from './common_color_palette.jsx';
+import {coverTextColor} from './cardextras.jsx';
 import './labels.css';
 
 const HEX_COLOR = /^#[\da-f]{6}$/i;
@@ -82,71 +83,71 @@ export function TaskLabelChip({label, colors = {}}) {
   return <LabelChip label={color ? {name, color} : name}/>;
 }
 
-const ERROR_MESSAGES = {
-  empty: 'نام برچسب نمی‌تواند خالی باشد.',
-  duplicate: 'این نام برچسب قبلاً ثبت شده است.',
-  limit: 'حداکثر ۲۰۰ برچسب برای هر کار مجاز است.',
-  color: 'رنگ انتخابی معتبر نیست.',
-  invalid: 'امکان تغییر این برچسب وجود ندارد.'
-};
-
-// onChange receives {labels: string[], labelColors: {[name]: '#rrggbb'}}.
-export function LabelEditor({labels = [], colors = {}, onChange, disabled = false}) {
-  const [drafts, setDrafts] = useState({});
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(DEFAULT_COLOR);
-  const [error, setError] = useState('');
-  const normalized = normalizeTaskLabels(labels, colors);
-  const namesSignature = JSON.stringify(normalized.labels);
-
-  useEffect(() => {setDrafts({}); setError('');}, [namesSignature]);
-
-  const apply = operation => {
-    if (disabled || typeof onChange !== 'function') return false;
-    const next = editTaskLabels(labels, colors, operation);
-    if (next.error) {setError(ERROR_MESSAGES[next.error]); return false;}
-    setError('');
-    if (JSON.stringify(normalized) !== JSON.stringify(next)) onChange(next);
-    return true;
-  };
-  const rename = (index, name) => {
-    if (apply({action: 'rename', index, name})) {
-      setDrafts(prev => {const next = {...prev}; delete next[index]; return next;});
+// One catalogue for the system; a checked item belongs ONLY to this card.
+// Managing shared definitions is restricted to administrators on LAN.
+export function LabelEditor({library=[],labels=[],disabled=false,canManage=false,onToggle,onCreate,onEdit}) {
+  const [search,setSearch]=useState('');
+  const [newName,setNewName]=useState('');
+  const [newColor,setNewColor]=useState(DEFAULT_COLOR);
+  const [creating,setCreating]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [editName,setEditName]=useState('');
+  const [editColor,setEditColor]=useState(DEFAULT_COLOR);
+  const [error,setError]=useState('');
+  const selected=new Set(labels.map(nameOf));
+  const filtered=library.filter(item=>item.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const create=()=>{
+    const name=cleanName(newName);
+    if(!name||library.some(item=>item.name===name)||library.length>=MAX_LABELS){
+      setError('نام برچسب خالی، تکراری یا کتابخانه پر است.');return;
     }
+    onCreate?.({name,color:newColor});
+    setNewName('');setNewColor(DEFAULT_COLOR);setCreating(false);setError('');
   };
-  const add = () => {
-    if (apply({action: 'add', name: newName, color: newColor})) {
-      setNewName('');
-      setNewColor(DEFAULT_COLOR);
+  const saveEdit=()=>{
+    if(!editing)return;
+    const name=cleanName(editName);
+    if(!name||library.some(item=>item.id!==editing&&item.name===name)){
+      setError('نام برچسب خالی یا تکراری است.');return;
     }
+    onEdit?.({id:editing,name,color:editColor});
+    setEditing(null);setError('');
   };
-
-  return <div className="label-editor" dir="rtl" aria-label="برچسب‌ها">
-    {normalized.labels.map((name, index) => <div className="label-editor-row" key={`${index}-${name}`}>
-      <div className="label-editor-name-wrap">
-        <span className="label-editor-dot" style={{backgroundColor: normalized.labelColors[name]}} aria-hidden="true"/>
-        <input type="text" aria-label={`نام برچسب ${name}`} maxLength={MAX_NAME} disabled={disabled}
-          value={drafts[index] ?? name}
-          onChange={event => {setDrafts(prev => ({...prev, [index]: event.target.value})); setError('');}}
-          onBlur={event => rename(index, event.currentTarget.value)}
-          onKeyDown={event => {
-            if (event.key === 'Enter') {event.preventDefault(); event.currentTarget.blur();}
-            if (event.key === 'Escape') {event.currentTarget.value = name; event.currentTarget.blur();}
-          }}/>
-      </div>
-      <button type="button" className="label-editor-remove" disabled={disabled} aria-label={`حذف برچسب ${name}`}
-        title="حذف برچسب" onClick={() => apply({action: 'remove', index})}><X size={15}/></button>
-      <CommonColorOptions disabled={disabled} label={'برچسب '+name} value={normalized.labelColors[name]}
-        onChange={color=>apply({action:'color',index,color})}/>
-    </div>)}
-    {!disabled && <div className="label-editor-row label-editor-create">
-      <input type="text" aria-label="نام برچسب جدید" maxLength={MAX_NAME} value={newName}
-        placeholder="نام برچسب جدید..." onChange={event => {setNewName(event.target.value); setError('');}}
-        onKeyDown={event => {if (event.key === 'Enter') {event.preventDefault(); add();}}}/>
-      <button type="button" className="label-editor-add" aria-label="افزودن برچسب" title="افزودن برچسب"
-        disabled={!newName.trim() || normalized.labels.length >= MAX_LABELS} onClick={add}><Plus size={17}/></button>
-      <CommonColorOptions disabled={disabled} label="برچسب جدید" value={newColor} onChange={setNewColor}/>
+  return <div className="label-editor" dir="rtl" aria-label="کتابخانه برچسب‌های مشترک">
+    <label className="label-editor-search"><Search size={15}/>
+      <input type="search" aria-label="جست‌وجوی برچسب‌ها" placeholder="جست‌وجوی برچسب..." value={search}
+        onChange={event=>setSearch(event.target.value)}/></label>
+    <div className="label-editor-list">
+      {filtered.map(item=><div className="label-editor-row" key={item.id}>
+        <label className="label-editor-option">
+          <input type="checkbox" disabled={disabled} aria-label={'انتخاب برچسب '+item.name}
+            checked={selected.has(item.name)} onChange={event=>onToggle?.(item.id,event.target.checked)}/>
+          <span className="label-editor-swatch" style={{backgroundColor:item.color,color:coverTextColor(item.color)}}>{item.name}</span>
+        </label>
+        {canManage&&<button type="button" className="label-editor-edit" aria-label={'ویرایش برچسب '+item.name}
+          onClick={()=>{setEditing(editing===item.id?null:item.id);setEditName(item.name);setEditColor(item.color);setError('');}}>
+          <Pencil size={15}/></button>}
+        {editing===item.id&&canManage&&<div className="label-editor-editpanel">
+          <input aria-label={'نام جدید برچسب '+item.name} value={editName} maxLength={MAX_NAME}
+            onChange={event=>setEditName(event.target.value)}
+            onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();saveEdit();}}}/>
+          <CommonColorOptions label={'رنگ برچسب '+item.name} value={editColor} onChange={setEditColor}/>
+          <button type="button" onClick={saveEdit}><Check size={14}/> ذخیره</button>
+        </div>}
+      </div>)}
+      {!filtered.length&&<small className="label-editor-empty">برچسبی پیدا نشد.</small>}
+    </div>
+    {canManage&&<div className="label-editor-create">
+      {creating?<div className="label-editor-editpanel">
+        <input type="text" aria-label="نام برچسب جدید" maxLength={MAX_NAME} value={newName}
+          placeholder="نام برچسب جدید..." onChange={event=>setNewName(event.target.value)}
+          onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();create();}}}/>
+        <CommonColorOptions label="برچسب جدید" value={newColor} onChange={setNewColor}/>
+        <button type="button" disabled={!newName.trim()} aria-label="افزودن برچسب" onClick={create}><Plus size={14}/> ایجاد</button>
+        <button type="button" aria-label="انصراف از ساخت برچسب" onClick={()=>setCreating(false)}><X size={15}/></button>
+      </div>:
+        <button type="button" className="label-editor-create-button" onClick={()=>setCreating(true)}><Plus size={15}/> ساخت برچسب مشترک</button>}
     </div>}
-    {!!error && <small role="alert" className="label-editor-error">{error}</small>}
+    {!!error&&<small role="alert" className="label-editor-error">{error}</small>}
   </div>;
 }

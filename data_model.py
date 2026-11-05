@@ -315,6 +315,13 @@ def _check_base(state):
     _boolean(settings.get("themeForAllUsers", False), "settings.themeForAllUsers")
     _boolean(settings.get("costDefault", False), "settings.costDefault")
     priority_ids = priority_definition_ids(settings)
+    if "labelLibrary" in settings:
+        _check_labels(settings["labelLibrary"], "settings.labelLibrary")
+        for index, label in enumerate(settings["labelLibrary"]):
+            if set(label) != {"id", "name", "color"}:
+                _error(f"settings.labelLibrary[{index}]", "expected id, name and color only")
+            if not isinstance(label["color"], str) or not _HEX_COLOR.fullmatch(label["color"]):
+                _error(f"settings.labelLibrary[{index}].color", "expected strict #RRGGBB")
     tasks = list(_records(state.get("tasks"), "tasks", 20000, legacy_ids=True))
     financial_source_ids = set()
     for task, here in tasks:

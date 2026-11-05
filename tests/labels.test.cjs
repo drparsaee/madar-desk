@@ -63,18 +63,21 @@ test('rejects duplicates, blanks, and invalid palette values without losing othe
   assert.deepEqual(labels, ['مهم', 'ارسال']);
 });
 
-test('renders a unified color picker per label with accessible freeform inputs', () => {
+test('shared label editor renders a searchable catalogue with independent checkbox selections', () => {
   const html = renderToStaticMarkup(React.createElement(LabelEditor, {
-    labels: ['کار', 'مهم'], colors: {'کار': '#123456'}, onChange: () => {}}));
-  assert.equal((html.match(/type="color"/g) || []).length, 3);
-  assert.equal((html.match(/class="madar-common-colors__details"/g) || []).length, 3);
-  assert.match(html, /aria-label="رنگ برچسب کار"/);
-  assert.match(html, /aria-label="نام برچسب جدید"/);
-  assert.match(html, /aria-label="افزودن برچسب"/);
-  assert.match(html, /value="#123456"/);
+    library:[{id:'tag-1',name:'کار',color:'#123456'},{id:'tag-2',name:'مهم',color:'#aabbcc'}],
+    labels:['کار'],canManage:true,onToggle:()=>{},onCreate:()=>{},onEdit:()=>{}}));
+  assert.match(html,/جست‌وجوی برچسب‌ها/);
+  assert.match(html,/انتخاب برچسب کار/);
+  assert.match(html,/انتخاب برچسب مهم/);
+  assert.match(html,/checked=""/);
+  assert.match(html,/ساخت برچسب مشترک/);
+  assert.match(html,/ویرایش برچسب کار/);
+  assert.doesNotMatch(html,/--label-color/);
   const chip = renderToStaticMarkup(React.createElement(TaskLabelChip, {label: 'کار', colors: {'کار': '#123456'}}));
   assert.match(chip, /--label-color:#123456/);
-  const disabled = renderToStaticMarkup(React.createElement(LabelEditor, {labels: ['کار'], disabled: true}));
-  assert(!disabled.includes('نام برچسب جدید'));
+  const disabled = renderToStaticMarkup(React.createElement(LabelEditor, {
+    library:[{id:'tag-1',name:'کار',color:'#123456'}],labels:[],disabled:true,canManage:false}));
+  assert(!disabled.includes('ساخت برچسب مشترک'));
   assert.match(disabled, /disabled=""/);
 });

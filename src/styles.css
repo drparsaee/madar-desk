@@ -151,7 +151,6 @@ button{border:0}
 .task-card{text-align:right;width:100%;display:block;min-height:36px;border-radius:10px;border:1px solid #e7ebf1;padding:10px;background:white;box-shadow:0 3px 6px #182a4604;transition:box-shadow .2s,transform .2s,border-color .2s;cursor:grab}
 .task-card:active{cursor:grabbing}
 .task-card:hover{border-color:#c5d2e8;box-shadow:0 10px 24px #29497616;transform:translateY(-3px)}
-.task-card-top{display:flex;justify-content:space-between;align-items:center;color:#b2bdc9;margin-bottom:7px}
 .project-tiny{display:flex;gap:6px;align-items:center;color:#8290a4;font-size:10px}
 .project-tiny i{width:7px;height:7px;border-radius:2px;flex:none}
 .task-title{font-size:12.5px;color:#304057;font-weight:760;line-height:1.55;overflow-wrap:anywhere;margin-bottom:5px}
