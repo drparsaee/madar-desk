@@ -31,35 +31,22 @@ test('disclosure layout is per-user and reused across cards without modifying ta
   assert.equal(readCardSectionPreferences(storage,'viewer').reports,false);
   assert.doesNotThrow(()=>saveCardSectionPreferences({setItem(){throw Error('no storage')}},'employee',{time:true}));
 });
-test('card editor retains native advanced disclosures and opens activity beside the main column',()=>{
+test('card editor shows only three main sections, with optional advanced tools in one menu',()=>{
   const app=text('src/App.jsx');
-  for(const group of ['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports','accounting','settings']){
+  for(const group of ['metadata','description','attachments','checklist','cover','time','reports','accounting','settings']){
     assert.match(app,new RegExp('id="task-section-'+group+'"'));
-    if(group!=='reports'){
-      assert.match(app,new RegExp('open=\\{sectionOpen\\.'+group+'\\}'));
-      assert.match(app,new RegExp("onSectionToggle\\('"+group+"'"));
-    }
   }
-  const ids=['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports'];
-  const nav=app.match(/<nav ref=\{quickNavRef\} className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0]||'';
-  assert.ok(nav,'the card quick navigation exists');
-  let previous=-1;
-  for(const id of ids){
-    const at=nav.indexOf('aria-controls="task-section-'+id+'"');
-    assert.ok(at>previous,'quick section order: '+id);
-    previous=at;
-  }
-  const body=app.slice(app.indexOf(nav),app.indexOf('{canEdit&&<div className="drawer-danger">'));
-  previous=-1;
-  for(const id of [...ids.slice(0,-1),'accounting','settings']){
-    const at=body.indexOf('id="task-section-'+id+'"');
-    assert.ok(at>previous,'rendered section DOM order: '+id);
-    previous=at;
-  }
-  assert.ok(app.indexOf('id="task-section-reports"')>app.indexOf('className="drawer-danger"'));
+  assert.doesNotMatch(app,/id="task-section-dependencies"/);
+  assert.doesNotMatch(app,/CardDependencyPanel/);
+  assert.match(app,/className="task-quick-actions task-quick-actions--minimal"/);
+  assert.match(app,/advancedView==='settings'&&<section/);
+  assert.match(app,/advancedView==='actions'&&canEdit&&<div/);
+  assert.equal((app.match(/className="task-primary-section"/g)||[]).length,3);
+  const nav=app.match(/<nav ref=\{quickNavRef\}[\s\S]*?<\/nav>/)?.[0]||'';
+  for(const action of ['اعضا','تاریخ','برچسب','چک‌لیست','فایل','بیشتر']) assert.ok(nav.includes(action),action);
+  assert.ok(!nav.includes('پیش‌نیازها'));
   assert.match(app,/className="task-activity-panel"/);
-  assert.doesNotMatch(nav,/AutomationButtonsLauncher/);
-  assert.match(body,/id="task-section-settings"/);
+  assert.match(app,/id="task-section-settings"/);
   assert.match(app,/onArchive=\{\(\)=>archiveTask\(activeTask\.id\)\}/);
 });
 test('board automation buttons live in Settings and remain readable for viewers',()=>{

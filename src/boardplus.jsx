@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {AlignLeft,AlignRight,Bold,Check,ChevronDown,ChevronUp,Filter,Italic,Link2,
+import {AlignLeft,AlignRight,Bold,Check,ChevronDown,ChevronUp,Filter,HelpCircle,Italic,Link2,
  List,Save,Search,TextCursorInput,Trash2,Undo2,X} from 'lucide-react';
 import {MarkdownPreview} from './markdown.jsx';
 import {FILTER_LIMITS,matchFilterTree,validateFilterTree} from './advanced_filter_engine.js';
@@ -216,6 +216,8 @@ export function RichDescription({value='',direction='auto',onChange,onDirection,
    </div>
    {preview?<MarkdownPreview value={value} direction={direction}/>:
      <textarea ref={area} rows={Math.min(8,Math.max(3,value.split('\n').length+1))} placeholder="توضیحات کار؛ با نوار بالا متن را قالب‌بندی کنید." dir={direction} disabled={disabled} value={value} onChange={e=>onChange(e.target.value)}/>}
-   <small className="rich-hint">برای ذخیره نوشته‌ها از Markdown ساده استفاده می‌شود؛ HTML اجرا نمی‌شود.</small>
+   <details className="rich-hint-help"><summary aria-label="راهنمای قالب‌بندی توضیحات" title="راهنمای قالب‌بندی توضیحات"><HelpCircle size={15}/></summary>
+     <small className="rich-hint">برای ذخیره نوشته‌ها از Markdown ساده استفاده می‌شود؛ HTML اجرا نمی‌شود.</small>
+   </details>
  </div>;
 }

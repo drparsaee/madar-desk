@@ -17,10 +17,10 @@ test('task detail remains parseable and imports its separately scoped density st
 });
 
 test('every visible quick action has a unique, real destination or contextual editor',()=>{
-  const nav=app.match(/<nav ref=\{quickNavRef\} className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0];
+  const nav=app.match(/<nav ref=\{quickNavRef\} className="task-quick-actions task-quick-actions--minimal"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(nav,'the task edit toolbar exists');
   const ids=Array.from(nav.matchAll(/aria-controls="(task-section-[a-z]+)"/g),m=>m[1]);
-  assert.equal(ids.length,10,'the complete ordered toolbar now includes metadata, time, dependencies and cover');
+  assert.deepEqual(ids,['task-section-attachments'],'only the file shortcut targets a full content section');
   assert.equal(new Set(ids).size,ids.length);
   for(const id of ids){
     assert.match(app,new RegExp('id="'+id+'" tabIndex=\\{-1\\}'),id+' should be keyboard focusable');
@@ -28,13 +28,14 @@ test('every visible quick action has a unique, real destination or contextual ed
   assert.match(app,/target\.scrollIntoView\(/);
   assert.match(app,/\(focusTarget\|\|target\)\.focus\(\{preventScroll:true\}\)/);
   assert.match(nav,/type="button"/,'navigation buttons must never submit forms');
-  assert.match(nav,/aria-expanded=\{showExtraActions\}/,'secondary shortcuts should have an accessible disclosure');
-  for(const quick of ['date','members','labels','checklist']){
+  assert.match(nav,/aria-expanded=\{quickMenu==='more'\}/,'advanced actions should have a single accessible menu');
+  for(const quick of ['date','members','labels','checklist','more']){
     assert.match(nav,new RegExp("quickMenu==='"+quick+"'"));
   }
   assert.match(nav,/jumpToSection\('attachments'\)/);
   assert.match(app,/setQuickMenu\(null\)/,'context menu must have a close path');
-  assert.match(css,/\.task-quick-actions:not\(\.task-quick-actions--expanded\) \.task-quick-action--extra\{display:none\}/);
+  assert.match(css,/\.task-quick-actions\.task-quick-actions--minimal\{/);
+  assert.doesNotMatch(nav,/پیش‌نیازها/);
 });
 
 test('compact task layout reserves legible inputs and responsive columns',()=>{
@@ -47,20 +48,24 @@ test('compact task layout reserves legible inputs and responsive columns',()=>{
   assert.match(css,/@media\(max-width:720px\)\{[\s\S]*?\.drawer \.task-quick-actions\{[\s\S]*?position:static;top:auto;z-index:auto;/);
 });
 
-test('less-used card features collapse safely while existing data opens them',()=>{
-  // All detail panels, including cover, use the same per-user disclosure contract.
-  assert.match(app, /className="task-optional-block task-shared-disclosure" id="task-section-cover" tabIndex=\{-1\} open=\{sectionOpen\.cover\}/);
-  for(const key of ['assignees','time','dependencies']){
-    assert.match(app,new RegExp('open=\\{sectionOpen\\.'+key+'\\}'));
+test('only core card content stays exposed; advanced tools are requested individually',()=>{
+  for(const key of ['description','checklist','attachments']){
+    assert.match(app,new RegExp('className="task-primary-section" id="task-section-'+key+'"'));
   }
+  assert.match(app,/advancedView==='cover'&&<section/);
+  assert.match(app,/advancedView==='time'&&<section/);
+  assert.match(app,/advancedView==='settings'&&<section/);
+  assert.doesNotMatch(app,/CardDependencyPanel/);
+  assert.doesNotMatch(app,/id="task-section-dependencies"/);
   assert.match(app, /className="task-activity-panel" id="task-section-reports" tabIndex=\{-1\}/);
   assert.match(app, /activityOpen&&<div className="task-activity-panel__content"/);
   assert.match(app, /ChecklistTaskRow key=\{step\.id\}/);
   const checklist=fs.readFileSync(path.join(root,'src/checklist_task_row.jsx'),'utf8');
   assert.match(checklist, /StageExpenseFields task=\{task\} step=\{step\}/);
   for(const action of ['date','members','cost','more']) assert.match(checklist,new RegExp("menu==='"+action+"'"));
-  assert.match(app, /<summary>چک‌لیست‌های بیشتر<\/summary>/);
-  assert.match(css, /\.task-optional-block\[open\]/);
+  assert.doesNotMatch(app, /<summary>چک‌لیست‌های بیشتر<\/summary>/);
+  assert.match(app,/\(task\.checklists\|\|\[\]\)\.some\(group=>group\.id!==/);
+  assert.match(css, /\.task-primary-section\{/);
 });
 
 test('Trello reference keeps contextual edits and a separate conversation timeline',()=>{

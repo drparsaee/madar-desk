@@ -494,6 +494,74 @@
 }
 
 /* Project documents stay one accessible disclosure when empty. */
+
+/* Compact Trello-like card: only the content is always visible.
+   Advanced operational tools are reached through one overflow menu. */
+.drawer .task-quick-actions.task-quick-actions--minimal{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;
+  gap:6px;position:relative;top:auto;z-index:20;
+  width:100%;margin:3px 0 12px;padding:3px 0 10px;
+  background:transparent;border-bottom:1px solid var(--border,#dbe4ee);
+}
+.drawer .task-quick-actions.task-quick-actions--minimal > button{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  flex:none;min-width:auto;width:auto;min-height:31px;
+  padding:5px 9px;border-radius:7px;
+  font-size:11px;line-height:1.3;white-space:nowrap;
+}
+.drawer .task-quick-actions.task-quick-actions--minimal > button.task-quick-actions__more{
+  border-style:solid;
+}
+.drawer .task-quick-actions.task-quick-actions--minimal .task-quick-popover{
+  top:calc(100% + 3px);width:min(390px,100%);
+}
+.drawer .task-more-menu{display:grid;gap:4px;min-width:0}
+.drawer .task-more-menu > button{
+  display:flex;align-items:center;justify-content:flex-start;gap:9px;
+  border:0;border-radius:7px;min-height:34px;padding:7px 9px;
+  text-align:start;background:transparent;color:inherit;font-size:12px;
+}
+.drawer .task-more-menu > button:hover,.drawer .task-more-menu > button:focus-visible{
+  background:var(--surface-soft,#eaf0f8);
+}
+.drawer .task-primary-section{padding:10px 0 14px;margin:0 0 8px;border-bottom:1px solid var(--border,#dce5f0)}
+.drawer .task-primary-section > h3{
+  display:flex;align-items:center;gap:8px;margin:0 0 10px;
+  color:var(--text,#344b69);font-size:13px;font-weight:750;
+}
+.drawer .task-primary-section > .edit-section{
+  border:0;box-shadow:none;background:transparent;
+  padding:0;margin:0;min-width:0;
+}
+.drawer .task-primary-section .task-optional-block{margin:8px 0 0}
+.drawer .task-primary-section .section-header h3{font-size:12px}
+.drawer .task-editor-due{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted,#7a8ca3)}
+.drawer .task-advanced-surface{
+  padding:12px;margin:13px 0 18px;
+  background:var(--surface-soft,#f3f7fc);
+  border:1px solid var(--border,#cddaea);border-radius:10px;
+}
+.drawer .task-advanced-surface__head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border,#cddaea);
+}
+.drawer .task-advanced-surface__head strong{font-size:13px;color:var(--text,#344b69)}
+.drawer .task-advanced-surface__head button{
+  border:0;background:transparent;color:var(--text-muted,#61758f);
+  padding:4px;display:inline-flex;align-items:center;border-radius:6px;
+}
+.drawer .task-advanced-content{min-width:0;outline-offset:3px}
+.drawer .task-advanced-content > .edit-section{padding:8px 0;background:transparent}
+.drawer .task-advanced-surface .drawer-danger{margin:0;display:flex;gap:9px;flex-wrap:wrap}
+:root[data-theme="dark"] .drawer .task-advanced-surface{background:#1b2a40;border-color:#405670}
+:root[data-theme="dark"] .drawer .task-advanced-surface__head strong,
+:root[data-theme="dark"] .drawer .task-primary-section > h3{color:#e2efff}
+:root[data-theme="dark"] .drawer .task-more-menu > button:hover,
+:root[data-theme="dark"] .drawer .task-more-menu > button:focus-visible{background:#324b69}
+@media(max-width:720px){
+  .drawer .task-quick-actions.task-quick-actions--minimal{position:relative;top:auto;display:flex;gap:4px}
+  .drawer .task-quick-actions.task-quick-actions--minimal > button{width:auto;min-height:30px;padding:5px 8px}
+}
 .project-file-panel--compact{
   padding:0;
   overflow:hidden;

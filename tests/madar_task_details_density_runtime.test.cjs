@@ -77,9 +77,11 @@ test('full App card details keep checklist costs folded and board definitions se
           await drawer.waitFor({state:'visible'});
           // Board-level custom field definitions were intentionally moved under
           // per-card Settings to keep the primary task editor compact.
+          assert.equal(await drawer.locator('#task-section-settings').count(),0,'settings hidden until requested');
+          await drawer.locator('.task-quick-actions').getByRole('button',{name:'بیشتر'}).click();
+          await drawer.locator('.task-more-menu').getByRole('button',{name:'تنظیمات پیشرفته'}).click();
           const taskSettings=drawer.locator('#task-section-settings');
-          if(await taskSettings.getAttribute('open')===null)
-            await taskSettings.locator(':scope > summary').click();
+          await taskSettings.waitFor({state:'visible'});
           const custom=drawer.locator('details.task-card-custom-fields');
           assert.notEqual(await custom.getAttribute('open'),null);
           assert.match(await custom.locator(':scope > summary').innerText(),/فیلدهای سفارشی/);
@@ -96,11 +98,8 @@ test('full App card details keep checklist costs folded and board definitions se
           assert.equal(directColumns,width===480?2:3,'direct expense controls use a compact grid');
           const categoryBg=await directCost.locator('.expense-category-field input').evaluate(el=>getComputedStyle(el).backgroundColor);
           assert.notEqual(categoryBg,'rgb(255, 255, 255)','direct expense input must respect dark theme');
-          // Checklist is now independently collapsible and persists its state
-          // across cards instead of always rendering expanded under metadata.
           const checklist=drawer.locator('#task-section-checklist');
-          if(await checklist.getAttribute('open')===null)
-            await checklist.locator(':scope > summary').click();
+          assert.equal(await checklist.isVisible(),true,'checklist shows without another accordion');
           const steps=drawer.locator('.task-compact-step');
           assert.equal(await steps.count(),2);
           assert.equal(await steps.locator('.task-checklist-item__panel').count(),0,'secondary fields start collapsed');
