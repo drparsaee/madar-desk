@@ -16,8 +16,8 @@ test('task detail remains parseable and imports its separately scoped density st
   assert.doesNotMatch(css,/\.task-quick-actions(?:\s|\{)[^}]*display\s*:\s*none/s,'quick access must stay available');
 });
 
-test('every visible quick action has a unique, actual and focusable destination',()=>{
-  const nav=app.match(/<nav className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0];
+test('every visible quick action has a unique, real destination or contextual editor',()=>{
+  const nav=app.match(/<nav ref=\{quickNavRef\} className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0];
   assert.ok(nav,'the task edit toolbar exists');
   const ids=Array.from(nav.matchAll(/aria-controls="(task-section-[a-z]+)"/g),m=>m[1]);
   assert.equal(ids.length,10,'the complete ordered toolbar now includes metadata, time, dependencies and cover');
@@ -29,6 +29,10 @@ test('every visible quick action has a unique, actual and focusable destination'
   assert.match(app,/\(focusTarget\|\|target\)\.focus\(\{preventScroll:true\}\)/);
   assert.match(nav,/type="button"/,'navigation buttons must never submit forms');
   assert.match(nav,/aria-expanded=\{showExtraActions\}/,'secondary shortcuts should have an accessible disclosure');
+  for(const quick of ['date','members','labels','checklist','attachments']){
+    assert.match(nav,new RegExp("quickMenu==='"+quick+"'"));
+  }
+  assert.match(app,/setQuickMenu\(null\)/,'context menu must have a close path');
   assert.match(css,/\.task-quick-actions:not\(\.task-quick-actions--expanded\) \.task-quick-action--extra\{display:none\}/);
 });
 
@@ -45,12 +49,25 @@ test('compact task layout reserves legible inputs and responsive columns',()=>{
 test('less-used card features collapse safely while existing data opens them',()=>{
   // All detail panels, including cover, use the same per-user disclosure contract.
   assert.match(app, /className="task-optional-block task-shared-disclosure" id="task-section-cover" tabIndex=\{-1\} open=\{sectionOpen\.cover\}/);
-  for(const key of ['assignees','time','dependencies','reports']){
+  for(const key of ['assignees','time','dependencies']){
     assert.match(app,new RegExp('open=\\{sectionOpen\\.'+key+'\\}'));
   }
+  assert.match(app, /className="task-activity-panel" id="task-section-reports" tabIndex=\{-1\}/);
+  assert.match(app, /activityOpen&&<div className="task-activity-panel__content"/);
   assert.match(app, /className="task-optional-block task-step-expenses" defaultOpen=\{!!step\.expenseItems\?\.length\}/);
   assert.match(app, /<summary>چک‌لیست‌های بیشتر<\/summary>/);
   assert.match(css, /\.task-optional-block\[open\]/);
+});
+
+test('Trello reference keeps contextual edits and a separate conversation timeline',()=>{
+  assert.match(app,/className="task-editor-layout"/);
+  assert.match(app,/className="task-editor-main"/);
+  assert.match(app,/task-quick-popover__create/);
+  assert.match(app,/CardComments cardId=\{task.id\}/);
+  assert.match(app,/className="task-activity-panel__reports"/);
+  assert.match(css,/\.task-editor-layout\{display:grid;grid-template-columns:/);
+  assert.match(css,/@media\(max-width:820px\)/);
+  assert.match(css,/\.drawer \.task-quick-popover\{/);
 });
 
 test('task drawer has a keyboard focus trap, escape close and restores previous focus',()=>{

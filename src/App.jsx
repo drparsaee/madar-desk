@@ -34,7 +34,7 @@ import {LabelEditor} from './labels.jsx';
 import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
 import {TrelloImportPanel} from './trello_import.jsx';
-import {CardCover,CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor} from './cardextras.jsx';
+import {CardCover,CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
 import {PlannerPanel} from './planner.jsx';
 import {removeUnpaidLegacyStep} from './checklistguard.js';
 import {plannerIdentity} from './planner_identity.js';
@@ -236,6 +236,13 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
+  const [newChecklistName,setNewChecklistName]=useState('');
+  const [quickError,setQuickError]=useState('');
+  const [quickMenu,setQuickMenu]=useState(null);
+  const [activityOpen,setActivityOpen]=useState(true);
+  const quickNavRef=useRef(null);
+  const quickMenuRef=useRef(null);
+  quickMenuRef.current=quickMenu;
   const [showExtraActions,setShowExtraActions]=useState(false);
   const [customFieldsOpen,setCustomFieldsOpen]=useState(()=>Boolean(boards.find(board=>board.id===task.boardId)?.customFields?.length));
   const [automationButtonsOpen,setAutomationButtonsOpen]=useState(false);
@@ -249,6 +256,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     if(!drawer)return;
     drawer.querySelector('.task-edit-title:not(:disabled),.task-quick-actions button')?.focus();
     const handleKey=event=>{
+      if(event.key==='Escape'&&quickMenuRef.current){
+        event.stopPropagation();
+        setQuickMenu(null);
+        quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();
+        return;
+      }
       if(event.key==='Escape'){
         event.stopPropagation();
         onCloseRef.current();
@@ -292,6 +305,11 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   };
   const update=changes=>{if(canEdit)onUpdate(task.id,changes);};
   const addStep=()=>{if(!newStep.trim())return;update({checklist:[...task.checklist,{id:uid(),text:newStep.trim(),done:false}]});setNewStep('');};
+  const addChecklistGroup=()=>{
+    if(!canEdit||!newChecklistName.trim())return;
+    try{update(editCardChecklists(task,{type:'add-group',name:newChecklistName}));setNewChecklistName('');setQuickError('');}
+    catch(error){setQuickError(error.message||'ساخت چک‌لیست امکان‌پذیر نیست.');}
+  };
   const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');setReportComposerOpen(false);};
   const total=task.checklist.length,done=task.checklist.filter(i=>i.done).length;
   const priceEnabled=canManage&&showCosts&&cardCostEnabled(task,projects.find(p=>p.id===task.projectId));
@@ -300,6 +318,8 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   const listName=stages.find(stage=>stage.id===(task.listId||task.status))?.label||'فهرست';
   const suggestedTasks=useMemo(()=>similarTasks(task.title,allTasks,task.id),[task.title,task.id,allTasks]);
   const jumpToSection=(section,focusSelector=null)=>{
+    setQuickMenu(null);
+    if(section==='reports')setActivityOpen(true);
     if(CARD_SECTIONS.includes(section))setSectionOpen(previous=>{
       if(previous[section])return previous;
       return saveCardSectionPreferences(localStorage,username,{...previous,[section]:true});
@@ -314,6 +334,16 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       (focusTarget||target).focus({preventScroll:true});
     });
   };
+  const toggleQuickMenu=menu=>{setQuickError('');setQuickMenu(current=>current===menu?null:menu);};
+  useEffect(()=>{
+    if(!quickMenu)return;
+    const handleOutside=event=>{
+      if(!quickNavRef.current?.contains(event.target))setQuickMenu(null);
+    };
+    document.addEventListener('pointerdown',handleOutside,true);
+    const focus=requestAnimationFrame(()=>quickNavRef.current?.querySelector('.task-quick-popover input:not([disabled]), .task-quick-popover button:not([disabled])')?.focus());
+    return()=>{document.removeEventListener('pointerdown',handleOutside,true);cancelAnimationFrame(focus);};
+  },[quickMenu]);
   useEffect(()=>{
     if(!initialSection)return;
     const frame=requestAnimationFrame(()=>jumpToSection(initialSection));
@@ -325,27 +355,37 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       {onRedo&&<button type="button" onClick={onRedo} className="icon-btn" disabled={!canRedo} title="انجام دوباره ویرایش کارت" aria-label="انجام دوباره ویرایش کارت"><Redo2 size={19}/></button>}
       <button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div></div>
     <div className="drawer-scroll">
+    <div className="task-editor-layout"><div className="task-editor-main">
       <input className="task-edit-title" aria-label="عنوان کار" maxLength={300} value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
       <div className="task-editor-location" aria-label="موقعیت کارت"><span>{projectName}</span><ChevronLeft size={14} aria-hidden="true"/><strong>{listName}</strong></div>
       <div className="task-editor-summary" aria-label="وضعیت کارت">
         <button type="button" onClick={()=>jumpToSection('metadata')}><Flag size={14}/>{priorityById(priorities,task.priority).label}</button>
-        {task.dueDate&&<button type="button" onClick={()=>jumpToSection('metadata')}><CalendarDays size={14}/>{displayDate(task.dueDate,calendar,true)}</button>}
-        {!!task.assignees?.length&&<button type="button" onClick={()=>jumpToSection('assignees')}><Users size={14}/>{task.assignees.length.toLocaleString('fa-IR')} مسئول</button>}
-        {!!task.labels?.length&&<button type="button" onClick={()=>jumpToSection('tags')}><Tag size={14}/>{task.labels.length.toLocaleString('fa-IR')} برچسب</button>}
+        {task.dueDate&&<button type="button" onClick={()=>toggleQuickMenu('date')}><CalendarDays size={14}/>{displayDate(task.dueDate,calendar,true)}</button>}
+        {!!task.assignees?.length&&<button type="button" onClick={()=>toggleQuickMenu('members')}><Users size={14}/>{task.assignees.length.toLocaleString('fa-IR')} مسئول</button>}
+        {!!task.labels?.length&&<button type="button" onClick={()=>toggleQuickMenu('labels')}><Tag size={14}/>{task.labels.length.toLocaleString('fa-IR')} برچسب</button>}
       </div>
-      <nav className={'task-quick-actions'+(showExtraActions?' task-quick-actions--expanded':'')} aria-label="دسترسی سریع به بخش‌های کارت">
-        <button type="button" onClick={()=>jumpToSection('metadata')} aria-controls="task-section-metadata"><CalendarDays size={15}/> مشخصات</button>
+      <nav ref={quickNavRef} className={'task-quick-actions'+(showExtraActions?' task-quick-actions--expanded':'')} aria-label="دسترسی سریع به بخش‌های کارت">
+        <button type="button" onClick={()=>toggleQuickMenu('date')} aria-expanded={quickMenu==='date'} aria-controls="task-section-metadata"><CalendarDays size={15}/> تاریخ</button>
         <button type="button" onClick={()=>jumpToSection('description','.rich-description textarea')} aria-controls="task-section-description"><FileText size={15}/> توضیحات</button>
-        <button type="button" onClick={()=>jumpToSection('assignees')} aria-controls="task-section-assignees"><Users size={15}/> مسئولان</button>
-        <button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
-        <button type="button" onClick={()=>jumpToSection('checklist','.inline-create input')} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
-        <button type="button" onClick={()=>jumpToSection('tags')} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
+        <button type="button" onClick={()=>toggleQuickMenu('members')} aria-expanded={quickMenu==='members'} aria-controls="task-section-assignees"><Users size={15}/> اعضا</button>
+        <button type="button" className="task-quick-action--extra" onClick={()=>toggleQuickMenu('attachments')} aria-expanded={quickMenu==='attachments'} aria-controls="task-section-attachments"><FolderOpen size={15}/> پیوست‌ها</button>
+        <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'} aria-controls="task-section-checklist"><ListChecks size={15}/> چک‌لیست <span className="task-quick-count">{done}/{total}</span></button>
+        <button type="button" onClick={()=>toggleQuickMenu('labels')} aria-expanded={quickMenu==='labels'} aria-controls="task-section-tags"><Tag size={15}/> برچسب‌ها</button>
         <button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('cover')} aria-controls="task-section-cover"><Palette size={15}/> کاور</button>
         {showOperations&&<button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('time')} aria-controls="task-section-time"><Clock3 size={15}/> زمان</button>}
         {showOperations&&<button type="button" className="task-quick-action--extra" onClick={()=>jumpToSection('dependencies')} aria-controls="task-section-dependencies"><ShieldCheck size={15}/> پیش‌نیازها</button>}
         <button type="button" className="task-quick-action--extra" onClick={()=>{setReportComposerOpen(true);jumpToSection('reports');}} aria-controls="task-section-reports"><MessageCircle size={15}/> گزارش</button>
         <button type="button" className="task-quick-actions__more" aria-expanded={showExtraActions} onClick={()=>setShowExtraActions(open=>!open)}><MoreHorizontal size={15}/>{showExtraActions?'کمتر':'بیشتر'}</button>
+        {quickMenu&&<div className="task-quick-popover" role="group" aria-label={'ویرایش سریع '+({date:'تاریخ',members:'اعضا',labels:'برچسب‌ها',checklist:'چک‌لیست',attachments:'پیوست‌ها'}[quickMenu]||'کارت')} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setQuickMenu(null);quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();}}}>
+          <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',attachments:'پیوست‌های کارت'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
+          {quickMenu==='date'&&<div className="task-quick-popover__body"><CalendarField value={task.dueDate||''} calendar={calendar} disabled={!canEdit} label="موعد انجام" popupOnClick onChange={dueDate=>update({dueDate})}/><button type="button" onClick={()=>jumpToSection('metadata')}>مرحله و اولویت کارت <ChevronLeft size={14}/></button></div>}
+          {quickMenu==='members'&&<div className="task-quick-popover__body"><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>}
+          {quickMenu==='labels'&&<div className="task-quick-popover__body"><LabelEditor labels={task.labels||[]} colors={task.labelColors||{}} onChange={({labels,labelColors})=>update({labels,labelColors})} disabled={!canEdit}/></div>}
+          {quickMenu==='checklist'&&<div className="task-quick-popover__body"><label className="task-quick-popover__label">مرحله جدید<div className="task-quick-popover__create"><input aria-label="مرحله جدید چک‌لیست" placeholder="مرحله بعدی را بنویس..." maxLength={5000} value={newStep} disabled={!canEdit} onChange={event=>setNewStep(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addStep();}}}/><button type="button" disabled={!canEdit||!newStep.trim()} onClick={addStep}><Plus size={15}/> افزودن</button></div></label><label className="task-quick-popover__label">چک‌لیست جداگانه<div className="task-quick-popover__create"><input aria-label="نام چک‌لیست جدید" placeholder="مثلاً کارهای قبل از تحویل" maxLength={180} value={newChecklistName} disabled={!canEdit} onChange={event=>setNewChecklistName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addChecklistGroup();}}}/><button type="button" disabled={!canEdit||!newChecklistName.trim()} onClick={addChecklistGroup}><Plus size={15}/> ساخت</button></div></label>{!!quickError&&<p className="field-error" role="alert">{quickError}</p>}<button type="button" onClick={()=>jumpToSection('checklist','.inline-create input')}>نمایش مراحل و چک‌لیست‌ها <ChevronLeft size={14}/></button></div>}
+          {quickMenu==='attachments'&&<div className="task-quick-popover__body"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/><button type="button" onClick={()=>jumpToSection('attachments')}>مشاهده همه پیوست‌ها <ChevronLeft size={14}/></button></div>}
+        </div>}
       </nav>
+      {!!task.labels?.length&&<div className="task-editor-labels" aria-label="برچسب‌های کارت">{task.labels.map((label,index)=><LabelChip key={index} label={task.labelColors?.[label]?{name:label,color:task.labelColors[label]}:label}/>)}<button type="button" disabled={!canEdit} onClick={()=>toggleQuickMenu('labels')}><Plus size={14}/> ویرایش برچسب‌ها</button></div>}
       <details className="task-optional-block task-shared-disclosure" id="task-section-metadata" tabIndex={-1}
         open={sectionOpen.metadata} onToggle={event=>onSectionToggle('metadata',event)}>
         <summary><CalendarDays size={16}/> مشخصات</summary>
@@ -377,7 +417,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         open={sectionOpen.attachments} onToggle={event=>onSectionToggle('attachments',event)}>
         <summary><FolderOpen size={16}/> پیوست‌ها</summary>
       <div className="edit-section"><CardAttachments cardId={task.id} api={api} canEdit={canEdit}/></div>
-      {showOperations&&<div className="edit-section"><CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/></div>}
       <details className="task-optional-block" defaultOpen={!!task.fileLinks?.length}>
         <summary><span>لینک فایل‌های اشتراکی</span>{!!task.fileLinks?.length&&<small>{task.fileLinks.length} لینک</small>}</summary>
         <div className="edit-section"><SharedLinks links={task.fileLinks||[]} canEdit={canEdit} api={api} onChange={fileLinks=>update({fileLinks})}/></div>
@@ -441,17 +480,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <summary><ShieldCheck size={16}/> پیش‌نیازها و موانع انجام <small>{(task.dependencies||[]).length.toLocaleString('fa-IR')} مورد</small></summary>
         <CardDependencyPanel task={task} allTasks={allTasks} canEdit={canEdit} onChange={dependencies=>update({dependencies})}/>
       </details>}
-      <details className="task-optional-block task-shared-disclosure" id="task-section-reports" tabIndex={-1}
-        open={sectionOpen.reports} onToggle={event=>onSectionToggle('reports',event)}>
-        <summary><MessageCircle size={16}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')} گزارش</small></summary>
-        <div className="edit-section">
-        <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت</h3>
-          {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
-        </div>
-        <div className="report-list">{task.reports.length?task.reports.slice().reverse().map(r=><div className="report-entry" key={r.id}><div className="report-entry-top"><span className="agent-avatar"><Zap size={12}/></span><strong>{r.agent}</strong><small>{shortDate(r.createdAt)}</small></div><p>{r.summary}</p></div>):<div className="empty-reports">هنوز گزارشی ثبت نشده است.</div>}</div>
-        {canEdit&&reportComposerOpen&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام ایجنت یا مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="یک خط درباره آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
-        </div>
-      </details>
       <details className="task-optional-block task-shared-disclosure" id="task-section-accounting" tabIndex={-1}
         open={sectionOpen.accounting} onToggle={event=>onSectionToggle('accounting',event)}>
         <summary><Wallet size={16}/> ثبت در حسابداری</summary>
@@ -499,6 +527,20 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           :<button className="danger-link task-archive-link" onClick={()=>{setConfirmArchive(true);setConfirmDelete(false);}}><Archive size={16}/> آرشیو</button>}
         {confirmDelete?<div className="delete-confirm"><span>کارت به زباله‌دان منتقل شود؟ تمام هزینه‌ها، فایل‌ها و گزارش‌ها حفظ می‌شوند.</span><button onClick={onDelete}>تأیید حذف</button><button onClick={()=>setConfirmDelete(false)}>انصراف</button></div>:<button className="danger-link" onClick={()=>{setConfirmDelete(true);setConfirmArchive(false);}}><Trash2 size={16}/> حذف</button>}
       </div>}
+    </div>
+    <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
+      <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
+      {activityOpen&&<div className="task-activity-panel__content">
+        {showOperations&&<CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/>}
+        <div className="task-activity-panel__reports">
+          <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
+            {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
+          </div>
+          {canEdit&&reportComposerOpen&&<div className="report-composer"><input value={agent} onChange={e=>setAgent(e.target.value)} placeholder="نام مسئول (اختیاری)" aria-label="نام مسئول"/><textarea rows={2} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="آخرین نتیجه کار..." aria-label="گزارش یک‌خطی"/><button className="btn primary" onClick={addReport} disabled={!summary.trim()}><Plus size={16}/> ثبت گزارش</button></div>}
+          <div className="report-list">{task.reports.length?task.reports.slice().reverse().map(r=><div className="report-entry" key={r.id}><div className="report-entry-top"><span className="agent-avatar"><Zap size={12}/></span><strong>{r.agent}</strong><small>{shortDate(r.createdAt)}</small></div><p>{r.summary}</p></div>):<div className="empty-reports">هنوز گزارشی ثبت نشده است.</div>}</div>
+        </div>
+      </div>}
+    </aside></div>
     </div>
   </aside></div>;
 }

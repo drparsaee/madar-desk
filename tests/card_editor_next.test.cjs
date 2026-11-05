@@ -20,7 +20,7 @@ test('disclosure layout is per-user and reused across cards without modifying ta
   const {readCardSectionPreferences,saveCardSectionPreferences}=load('src/card_section_preferences.js');
   const memory=new Map(),storage={getItem:key=>memory.get(key)??null,setItem:(key,val)=>memory.set(key,val)};
   assert.deepEqual(readCardSectionPreferences(storage,'employee'),{
-    metadata:true,description:true,assignees:false,attachments:false,checklist:true,
+    metadata:false,description:true,assignees:false,attachments:false,checklist:true,
     tags:false,cover:false,time:false,dependencies:false,reports:false,
     accounting:false,settings:false});
   saveCardSectionPreferences(storage,'employee',{assignees:true,reports:true});
@@ -31,15 +31,17 @@ test('disclosure layout is per-user and reused across cards without modifying ta
   assert.equal(readCardSectionPreferences(storage,'viewer').reports,false);
   assert.doesNotThrow(()=>saveCardSectionPreferences({setItem(){throw Error('no storage')}},'employee',{time:true}));
 });
-test('card editor all native disclosures and exact user-specified toolbar and DOM order',()=>{
+test('card editor retains native advanced disclosures and opens activity beside the main column',()=>{
   const app=text('src/App.jsx');
   for(const group of ['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports','accounting','settings']){
     assert.match(app,new RegExp('id="task-section-'+group+'"'));
-    assert.match(app,new RegExp('open=\\{sectionOpen\\.'+group+'\\}'));
-    assert.match(app,new RegExp("onSectionToggle\\('"+group+"'"));
+    if(group!=='reports'){
+      assert.match(app,new RegExp('open=\\{sectionOpen\\.'+group+'\\}'));
+      assert.match(app,new RegExp("onSectionToggle\\('"+group+"'"));
+    }
   }
   const ids=['metadata','description','assignees','attachments','checklist','tags','cover','time','dependencies','reports'];
-  const nav=app.match(/<nav className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0]||'';
+  const nav=app.match(/<nav ref=\{quickNavRef\} className=\{'task-quick-actions'[\s\S]*?<\/nav>/)?.[0]||'';
   assert.ok(nav,'the card quick navigation exists');
   let previous=-1;
   for(const id of ids){
@@ -49,11 +51,13 @@ test('card editor all native disclosures and exact user-specified toolbar and DO
   }
   const body=app.slice(app.indexOf(nav),app.indexOf('{canEdit&&<div className="drawer-danger">'));
   previous=-1;
-  for(const id of ids){
+  for(const id of [...ids.slice(0,-1),'accounting','settings']){
     const at=body.indexOf('id="task-section-'+id+'"');
     assert.ok(at>previous,'rendered section DOM order: '+id);
     previous=at;
   }
+  assert.ok(app.indexOf('id="task-section-reports"')>app.indexOf('className="drawer-danger"'));
+  assert.match(app,/className="task-activity-panel"/);
   assert.doesNotMatch(nav,/AutomationButtonsLauncher/);
   assert.match(body,/id="task-section-settings"/);
   assert.match(app,/onArchive=\{\(\)=>archiveTask\(activeTask\.id\)\}/);

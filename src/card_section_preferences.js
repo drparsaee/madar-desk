@@ -7,7 +7,9 @@ export const CARD_SECTIONS=Object.freeze([
   'tags','cover','time','dependencies','reports','accounting','settings'
 ]);
 export const DEFAULT_CARD_SECTIONS=Object.freeze(Object.fromEntries(
-  CARD_SECTIONS.map(section=>[section,['metadata','description','checklist'].includes(section)])));
+  // Keep the first view focused on the work itself. Dates, people and labels
+  // are one click away in the contextual bar; full metadata stays optional.
+  CARD_SECTIONS.map(section=>[section,['description','checklist'].includes(section)])));
 const keyFor=identity=>'madar-card-sections-v1:'+encodeURIComponent(
   typeof identity==='string'&&identity.trim()?identity:'local');
 
