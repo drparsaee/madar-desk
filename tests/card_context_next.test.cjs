@@ -22,17 +22,18 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       "import {createRoot} from 'react-dom/client';",
       "import {CardContextMenu} from './src/card_context_menu.jsx';",
       "window.events=[];",
-      "function App(){const [request,setRequest]=useState(null);const [canEdit,setCanEdit]=useState(true);",
+      "function App(){const [request,setRequest]=useState(null);const [canEdit,setCanEdit]=useState(true);const [card,setCard]=useState({id:'synthetic-1',title:'کارت آزمایشی',cover:null});",
       "window.setEdit=setCanEdit;return <><div id='card' role='button' onContextMenu={e=>{e.preventDefault();setRequest({id:Date.now(),cardId:'synthetic-1',title:'کارت آزمایشی',x:e.clientX,y:e.clientY});}}>Card</div>",
-      "<CardContextMenu request={request} canEdit={canEdit} onClose={()=>setRequest(null)}",
+      "<CardContextMenu request={request} task={card} canEdit={canEdit} onClose={()=>setRequest(null)}",
       "onOpen={id=>window.events.push('open:'+id)} onArchive={id=>window.events.push('archive:'+id)}",
       "onDelete={id=>window.events.push('delete:'+id)} onDuplicate={id=>window.events.push('copy:'+id)}",
       "onToggleComplete={id=>window.events.push('complete:'+id)}",
-      "onOpenSection={(id,section)=>window.events.push('section:'+section+':'+id)}/></>;}",
+      "onOpenSection={(id,section)=>window.events.push('section:'+section+':'+id)}",
+      "onCoverChange={(id,changes)=>{setCard(current=>({...current,...changes}));window.events.push('cover:'+id+':'+changes.cover?.size)}}/></>;}",
       "createRoot(document.getElementById('root')).render(<App/>);"
     ].join('\n');
     const js=esbuild.buildSync({stdin:{contents:source,resolveDir:root,sourcefile:'card-context-test.jsx',loader:'jsx'},
-      bundle:true,platform:'browser',format:'iife',write:false}).outputFiles[0].text;
+      bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}}).outputFiles[0].text;
     const browser=await chromium.launch({headless:true,executablePath:chrome});
     try{
       const page=await browser.newPage({viewport:{width:700,height:500},locale:'fa-IR'});
@@ -46,11 +47,21 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       await menu.getByRole('menuitem',{name:'ویرایش برچسب‌ها'}).click();
       assert.deepEqual(await page.evaluate(()=>window.events),['section:tags:synthetic-1']);
       await page.mouse.click(80,45,{button:'right'});
+      await menu.getByRole('menuitem',{name:'کاور و رنگ کارت'}).click();
+      const editor=menu.getByRole('group',{name:'تنظیم کاور کارت'});
+      await editor.waitFor({state:'visible'});
+      await editor.getByRole('button',{name:'رنگ تمام کارت'}).click();
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'cover:synthetic-1:full');
+      assert.equal(await editor.getByRole('img',{name:/نمایش کاور تمام کارت/}).count(),1);
+      assert.equal(await menu.isVisible(),true,'cover edit must remain in right-click menu');
+      await page.keyboard.press('Escape');
+      await menu.waitFor({state:'hidden'});
+      await page.mouse.click(80,45,{button:'right'});
       await menu.getByRole('menuitem',{name:'کپی کارت'}).click();
       assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');
       await page.mouse.click(80,45,{button:'right'});
       await menu.getByRole('menuitem',{name:'بایگانی کارت'}).click();
-      assert.deepEqual(await page.evaluate(()=>window.events),['section:tags:synthetic-1','copy:synthetic-1'],
+      assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1',
         'archive must not mutate without an explicit confirmation');
       await menu.getByRole('button',{name:'انصراف'}).click();
       assert.equal((await page.evaluate(()=>window.events)).at(-1),'copy:synthetic-1');

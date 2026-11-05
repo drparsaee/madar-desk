@@ -33,9 +33,12 @@ test('disclosure layout is per-user and reused across cards without modifying ta
 });
 test('card editor shows only three main sections, with optional advanced tools in one menu',()=>{
   const app=text('src/App.jsx');
-  for(const group of ['metadata','description','attachments','checklist','cover','time','reports','accounting','settings']){
+  for(const group of ['metadata','description','attachments','checklist','time','reports','accounting','settings']){
     assert.match(app,new RegExp('id="task-section-'+group+'"'));
   }
+  assert.doesNotMatch(app,/id="task-section-cover"/);
+  assert.doesNotMatch(app,/CardCover task=\{task\}/);
+  assert.match(app,/onCoverChange=\{\(id,changes\)=>/);
   assert.doesNotMatch(app,/id="task-section-dependencies"/);
   assert.doesNotMatch(app,/CardDependencyPanel/);
   assert.match(app,/className="task-quick-actions task-quick-actions--minimal"/);

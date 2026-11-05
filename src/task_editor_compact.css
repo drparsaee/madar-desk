@@ -66,45 +66,44 @@
 }
 .drawer .task-editor-summary button:is(:hover,:focus-visible){border-color:#9ebceb;outline-offset:2px}
 .drawer .task-quick-actions{
-  display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
-  align-items:stretch;
+  display:flex;flex-wrap:wrap;
+  align-items:center;justify-content:flex-start;
   gap:6px;
-  position:sticky;
-  top:-14px;
-  z-index:6;
-  margin:2px -2px 11px;
-  padding:8px 2px;
-  border-bottom:1px solid var(--border,#e5eaf1);
-  background:var(--surface,#fff);
-}
-.drawer .task-quick-actions button{
-  min-height:36px;
-  min-width:0;
+  position:relative;isolation:isolate;
+  top:auto;
+  z-index:20;
   width:100%;
+  margin:3px 0 12px;
+  padding:3px 0 10px;
+  border-bottom:1px solid var(--border,#e5eaf1);
+  background:transparent;
+}
+.drawer .task-quick-actions > button{
+  min-height:31px;
+  min-width:auto;
+  width:auto;
+  flex:none;
   display:inline-flex;
   align-items:center;
-  gap:6px;
+  gap:5px;
   justify-content:center;
-  padding:6px 10px;
-  border-radius:9px;
+  padding:5px 9px;
+  border-radius:7px;
   border:1px solid var(--border,#dbe4ee);
   background:var(--surface-soft,#f6f8fc);
   color:var(--text,#344b69);
   white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  line-height:1.3;
   font-size:11px;
   font-weight:680;
   transition:background .15s, border-color .15s;
 }
-.drawer .task-quick-actions button:hover{
+.drawer .task-quick-actions > button:hover{
   background:#e7f0ff;
   border-color:#9ebceb;
 }
-.drawer .task-quick-actions:not(.task-quick-actions--expanded) .task-quick-action--extra{display:none}
 .drawer .task-quick-actions .task-quick-actions__more{
-  border-style:dashed;
+  border-style:solid;
   background:transparent;
 }
 .drawer .task-quick-actions button:focus-visible{
@@ -382,10 +381,7 @@
   .drawer{width:min(100%,620px)}
   .drawer .edit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   /* Allow the small primary toolbar to scroll naturally without hiding dates. */
-  .drawer .task-quick-actions{
-    grid-template-columns:repeat(4,minmax(0,1fr));
-    position:static;top:auto;z-index:auto;
-  }
+  .drawer .task-quick-actions{gap:4px}
   .drawer [id^="task-section-"]{scroll-margin-top:14px}
 }
 @media(max-width:480px){
@@ -393,8 +389,7 @@
   .drawer .drawer-top{padding:7px 13px;min-height:43px}
   .drawer .drawer-scroll{padding:12px 13px 19px}
   .drawer .task-edit-title{font-size:19px}
-  .drawer .task-quick-actions{top:-12px;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible;margin-inline:-4px;padding-inline:4px}
-  .drawer .task-quick-actions button{white-space:normal;line-height:1.2}
+  .drawer .task-quick-actions > button{min-height:30px;padding:5px 8px}
   .drawer .edit-grid{gap:7px}
   .drawer .edit-grid :is(input,select){font-size:12px}
   .drawer .assignee-picker{grid-template-columns:1fr}
@@ -407,7 +402,6 @@
 }
 @media(max-width:359px){
   .drawer .edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .drawer .task-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
   .drawer .step-check{min-width:34px;min-height:34px}
 }
 @media(prefers-reduced-motion:reduce){
@@ -457,10 +451,9 @@
 .task-activity-panel .report-entry-top{flex-wrap:wrap}
 .task-activity-panel .report-composer{display:grid;gap:7px}
 .task-activity-panel .report-composer > :is(input,textarea){min-width:0;width:100%}
-.drawer .task-quick-actions{position:sticky;isolation:isolate}
 .drawer .task-quick-actions > button[aria-expanded="true"]{border-color:#4f8dd1;background:#e4efff;color:#19477c}
 .drawer .task-quick-popover{
-  position:absolute;z-index:40;top:calc(100% - 1px);inset-inline-start:0;
+  position:absolute;z-index:40;top:calc(100% + 3px);inset-inline-start:0;
   width:min(390px,100%);max-height:min(520px,calc(100dvh - 165px));overflow-y:auto;
   background:var(--surface,#fff);color:var(--text,#233247);
   border:1px solid var(--border,#d1dbe7);border-radius:12px;
@@ -493,28 +486,8 @@
   .drawer .task-quick-popover__body .label-editor-row{flex-wrap:wrap}
 }
 
-/* Project documents stay one accessible disclosure when empty. */
-
 /* Compact Trello-like card: only the content is always visible.
    Advanced operational tools are reached through one overflow menu. */
-.drawer .task-quick-actions.task-quick-actions--minimal{
-  display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;
-  gap:6px;position:relative;top:auto;z-index:20;
-  width:100%;margin:3px 0 12px;padding:3px 0 10px;
-  background:transparent;border-bottom:1px solid var(--border,#dbe4ee);
-}
-.drawer .task-quick-actions.task-quick-actions--minimal > button{
-  display:inline-flex;align-items:center;justify-content:center;gap:5px;
-  flex:none;min-width:auto;width:auto;min-height:31px;
-  padding:5px 9px;border-radius:7px;
-  font-size:11px;line-height:1.3;white-space:nowrap;
-}
-.drawer .task-quick-actions.task-quick-actions--minimal > button.task-quick-actions__more{
-  border-style:solid;
-}
-.drawer .task-quick-actions.task-quick-actions--minimal .task-quick-popover{
-  top:calc(100% + 3px);width:min(390px,100%);
-}
 .drawer .task-more-menu{display:grid;gap:4px;min-width:0}
 .drawer .task-more-menu > button{
   display:flex;align-items:center;justify-content:flex-start;gap:9px;
@@ -558,10 +531,6 @@
 :root[data-theme="dark"] .drawer .task-primary-section > h3{color:#e2efff}
 :root[data-theme="dark"] .drawer .task-more-menu > button:hover,
 :root[data-theme="dark"] .drawer .task-more-menu > button:focus-visible{background:#324b69}
-@media(max-width:720px){
-  .drawer .task-quick-actions.task-quick-actions--minimal{position:relative;top:auto;display:flex;gap:4px}
-  .drawer .task-quick-actions.task-quick-actions--minimal > button{width:auto;min-height:30px;padding:5px 8px}
-}
 .project-file-panel--compact{
   padding:0;
   overflow:hidden;

@@ -185,6 +185,17 @@ test('real App: list context-menu target matrix and action availability',
       await cardMenu.waitFor({state:'visible'});
       assert.ok(await cardMenu.getByRole('menuitem',{name:'بایگانی کارت'}).isVisible());
       assert.equal(await menu.count(),0,'card menu must not trigger the lane menu');
+      await cardMenu.getByRole('menuitem',{name:'کاور و رنگ کارت'}).click();
+      const coverEditor=cardMenu.getByRole('group',{name:'تنظیم کاور کارت'});
+      assert.equal(await coverEditor.isVisible(),true);
+      await coverEditor.getByRole('button',{name:'رنگ تمام کارت'}).click();
+      await page.waitForFunction(()=>{
+        const data=JSON.parse(localStorage.getItem('madar-preview')||'{}');
+        return data.tasks?.find(task=>task.id==='c1')?.cover?.size==='full';
+      });
+      assert.equal(await lane.locator('.task-card.task-card--cover-full').count(),1);
+      assert.equal(await page.getByRole('dialog',{name:'جزئیات کار'}).count(),0,
+        'cover editing must not open the card dialog');
       await page.keyboard.press('Escape');
       await cardMenu.waitFor({state:'hidden'});
       assert.ok(results.filter(item=>!item.selector.includes('task-'))

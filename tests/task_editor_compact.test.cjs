@@ -34,25 +34,28 @@ test('every visible quick action has a unique, real destination or contextual ed
   }
   assert.match(nav,/jumpToSection\('attachments'\)/);
   assert.match(app,/setQuickMenu\(null\)/,'context menu must have a close path');
-  assert.match(css,/\.task-quick-actions\.task-quick-actions--minimal\{/);
+  assert.match(css,/\.drawer \.task-quick-actions\{[\s\S]*?display:flex;flex-wrap:wrap/);
   assert.doesNotMatch(nav,/پیش‌نیازها/);
 });
 
 test('compact task layout reserves legible inputs and responsive columns',()=>{
   assert.match(css,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(css,/min-height:36px/);
+  assert.match(css,/min-height:31px/);
   assert.match(css,/scroll-margin-top:80px/);
   assert.match(css,/data-theme="dark"/);
   assert.match(css,/prefers-reduced-motion:reduce/);
-  assert.match(css,/@media\(max-width:720px\)\{[\s\S]*?\.drawer \.task-quick-actions\{[\s\S]*?position:static;top:auto;z-index:auto;/);
+  assert.match(css,/@media\(max-width:720px\)\{[\s\S]*?\.drawer \.task-quick-actions\{gap:4px\}/);
 });
 
 test('only core card content stays exposed; advanced tools are requested individually',()=>{
   for(const key of ['description','checklist','attachments']){
     assert.match(app,new RegExp('className="task-primary-section" id="task-section-'+key+'"'));
   }
-  assert.match(app,/advancedView==='cover'&&<section/);
+  assert.doesNotMatch(app,/advancedView==='cover'&&<section/);
+  assert.doesNotMatch(app,/<Palette size=\{15\}\/> کاور کارت/);
+  const nav=app.match(/<nav ref=\{quickNavRef\}[\s\S]*?<\/nav>/)?.[0]||'';
+  assert.doesNotMatch(nav,/ثبت گزارش<\/button>/);
   assert.match(app,/advancedView==='time'&&<section/);
   assert.match(app,/advancedView==='settings'&&<section/);
   assert.doesNotMatch(app,/CardDependencyPanel/);

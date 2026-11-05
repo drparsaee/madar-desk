@@ -2,19 +2,21 @@ import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Archive, CheckCircle2, Copy, ExternalLink, Image, Move, Tag, Trash2, Users, CalendarDays, X} from 'lucide-react';
 import {laneContextPopupPosition} from './board_lane_actions.jsx';
+import {CardCover} from './cardextras.jsx';
 
 /** Context actions on an individual card. Caller owns permission checks. */
-export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicate,onArchive,onDelete,
+export function CardContextMenu({request,task,onClose,onOpen,onOpenSection,onCoverChange,onDuplicate,onArchive,onDelete,
   onToggleComplete,canEdit=false}) {
   const panel=useRef(null);
   const [position,setPosition]=useState(null);
   const [pendingDanger,setPendingDanger]=useState(null);
-  useEffect(()=>setPendingDanger(null),[request?.id]);
+  const [coverOpen,setCoverOpen]=useState(false);
+  useEffect(()=>{setPendingDanger(null);setCoverOpen(false);},[request?.id]);
   useLayoutEffect(()=>{
     if(!request||!panel.current)return;
     const bounds=panel.current.getBoundingClientRect();
     setPosition(laneContextPopupPosition(request,bounds,window.innerWidth,window.innerHeight));
-  },[request]);
+  },[request,coverOpen]);
   useEffect(()=>{
     if(!request)return;
     const close=event=>{
@@ -22,7 +24,7 @@ export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicat
         event.preventDefault();event.stopPropagation();onClose();return;
       }
       if(event.type==='pointerdown'&&!panel.current?.contains(event.target))onClose();
-      if(event.type==='scroll')onClose();
+      if(event.type==='scroll'&&!panel.current?.contains(event.target))onClose();
     };
     document.addEventListener('pointerdown',close,true);
     document.addEventListener('keydown',close,true);
@@ -37,7 +39,7 @@ export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicat
   },[request,onClose]);
   if(!request)return null;
   return createPortal(<div ref={panel} role="menu" aria-label={'عملیات کارت '+request.title}
-    className="madar-card-context-menu" dir="rtl"
+    className={'madar-card-context-menu'+(coverOpen?' madar-card-context-menu--cover':'')} dir="rtl"
     style={{left:position?.left??request.x,top:position?.top??request.y,visibility:position?'visible':'hidden'}}>
     <div className="madar-card-context-menu__head"><strong>{request.title}</strong>
       <button type="button" aria-label="بستن منوی کارت" onClick={onClose}><X size={15}/></button></div>
@@ -49,8 +51,11 @@ export function CardContextMenu({request,onClose,onOpen,onOpenSection,onDuplicat
           <Tag size={16}/> ویرایش برچسب‌ها</button>
         <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'assignees');}}>
           <Users size={16}/> تغییر مسئولان</button>
-        <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'cover');}}>
-          <Image size={16}/> تغییر کاور</button>
+        {task&&onCoverChange&&<button type="button" role="menuitem" aria-expanded={coverOpen}
+          onClick={()=>setCoverOpen(open=>!open)}><Image size={16}/> کاور و رنگ کارت</button>}
+        {coverOpen&&task&&onCoverChange&&<div className="madar-card-context-menu__cover" role="group" aria-label="تنظیم کاور کارت">
+          <CardCover task={task} disabled={!canEdit} onChange={changes=>onCoverChange(request.cardId,changes)}/>
+        </div>}
         <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'metadata');}}>
           <CalendarDays size={16}/> تغییر تاریخ و مشخصات</button>
         <button type="button" role="menuitem" onClick={()=>{onClose();onOpenSection?.(request.cardId,'metadata');}}>

@@ -34,7 +34,7 @@ import {LabelEditor} from './labels.jsx';
 import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
 import {TrelloImportPanel} from './trello_import.jsx';
-import {CardCover,CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
+import {CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
 import {PlannerPanel} from './planner.jsx';
 import {removeUnpaidLegacyStep} from './checklistguard.js';
 import {plannerIdentity} from './planner_identity.js';
@@ -321,7 +321,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     setQuickMenu(null);
     if(section==='assignees'){setQuickMenu('members');return;}
     if(section==='tags'){setQuickMenu('labels');return;}
-    if(['metadata','cover','time','accounting','settings'].includes(section)){
+    if(['metadata','time','accounting','settings'].includes(section)){
       setAdvancedView(section);
       return;
     }
@@ -392,11 +392,9 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           {quickMenu==='checklist'&&<div className="task-quick-popover__body"><label className="task-quick-popover__label">مرحله جدید<div className="task-quick-popover__create"><input aria-label="مرحله جدید چک‌لیست" placeholder="مرحله بعدی را بنویس..." maxLength={5000} value={newStep} disabled={!canEdit} onChange={event=>setNewStep(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addStep();}}}/><button type="button" disabled={!canEdit||!newStep.trim()} onClick={addStep}><Plus size={15}/> افزودن</button></div></label><label className="task-quick-popover__label">چک‌لیست جداگانه<div className="task-quick-popover__create"><input aria-label="نام چک‌لیست جدید" placeholder="مثلاً کارهای قبل از تحویل" maxLength={180} value={newChecklistName} disabled={!canEdit} onChange={event=>setNewChecklistName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addChecklistGroup();}}}/><button type="button" disabled={!canEdit||!newChecklistName.trim()} onClick={addChecklistGroup}><Plus size={15}/> ساخت</button></div></label>{!!quickError&&<p className="field-error" role="alert">{quickError}</p>}<button type="button" onClick={()=>jumpToSection('checklist','.inline-create input')}>نمایش مراحل و چک‌لیست‌ها <ChevronLeft size={14}/></button></div>}
           {quickMenu==='more'&&<div className="task-more-menu">
             <button type="button" onClick={()=>jumpToSection('metadata')}><Flag size={15}/> مرحله و اولویت</button>
-            <button type="button" onClick={()=>jumpToSection('cover')}><Palette size={15}/> کاور کارت</button>
             {showOperations&&<button type="button" onClick={()=>jumpToSection('time')}><Clock3 size={15}/> برآورد زمان</button>}
             {canManage&&<button type="button" onClick={()=>jumpToSection('accounting')}><Wallet size={15}/> حسابداری</button>}
             <button type="button" onClick={()=>jumpToSection('settings')}><Settings2 size={15}/> تنظیمات پیشرفته</button>
-            <button type="button" onClick={()=>{setReportComposerOpen(true);jumpToSection('reports');}}><MessageCircle size={15}/> ثبت گزارش</button>
             {canEdit&&<button type="button" onClick={()=>{setAdvancedView('actions');setQuickMenu(null);}}><Archive size={15}/> بایگانی یا حذف</button>}
           </div>}
         </div>}
@@ -427,7 +425,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         </div>
       </section>
       {advancedView&&<div className="task-advanced-surface" aria-label="جزئیات تکمیلی کارت">
-        <div className="task-advanced-surface__head"><strong>{({metadata:'مرحله و اولویت',cover:'کاور کارت',time:'برآورد زمان',accounting:'حسابداری',settings:'تنظیمات پیشرفته',actions:'بایگانی یا حذف'}[advancedView])}</strong><button type="button" onClick={()=>setAdvancedView(null)} aria-label="بستن جزئیات تکمیلی"><X size={16}/></button></div>
+        <div className="task-advanced-surface__head"><strong>{({metadata:'مرحله و اولویت',time:'برآورد زمان',accounting:'حسابداری',settings:'تنظیمات پیشرفته',actions:'بایگانی یا حذف'}[advancedView])}</strong><button type="button" onClick={()=>setAdvancedView(null)} aria-label="بستن جزئیات تکمیلی"><X size={16}/></button></div>
       {advancedView==='metadata'&&<section className="task-advanced-content" id="task-section-metadata" tabIndex={-1}>
       <div className="edit-grid">
         <label>پروژه<select disabled={!canEdit} value={task.projectId} onChange={e=>update({projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
@@ -442,9 +440,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       </div>
       <div className="task-created-date"><CalendarDays size={15}/> تاریخ ثبت: {displayDate(task.createdAt,calendar,true)}</div>
       {!!task.orderCustomerName&&<div className="task-created-date">سفارش‌دهنده: {task.orderCustomerName}</div>}
-      </section>}
-      {advancedView==='cover'&&<section className="task-advanced-content" id="task-section-cover" tabIndex={-1}>
-        <div className="edit-section"><CardCover task={task} disabled={!canEdit} onChange={update}/></div>
       </section>}
       {showOperations&&advancedView==='time'&&<section className="task-advanced-content" id="task-section-time" tabIndex={-1}>
         <div className="edit-section"><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>
@@ -2195,9 +2190,10 @@ export default function App(){
       </div>
     </main>
     {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}
-    <CardContextMenu request={cardContext} onClose={()=>setCardContext(null)}
+    <CardContextMenu request={cardContext} task={tasks.find(item=>item.id===cardContext?.cardId&&item.deleted!==true)} onClose={()=>setCardContext(null)}
       onOpen={id=>{setEditorInitialSection(null);setEditorId(id);}}
       onOpenSection={(id,section)=>{setEditorInitialSection(section);setEditorId(id);}}
+      onCoverChange={(id,changes)=>{if(canEdit)taskUpdate(id,changes);}}
       onDuplicate={id=>{const found=tasks.find(task=>task.id===id&&task.deleted!==true);if(found)duplicateTask(found);}}
       onToggleComplete={toggleCardComplete} onArchive={archiveTask} onDelete={deleteTask}
       canEdit={canEdit}/>

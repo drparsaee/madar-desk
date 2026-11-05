@@ -45,11 +45,12 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
       await server.listen();
       browser=await chromium.launch({headless:true,executablePath:chrome});
       for(const width of [1440,480]){
+        const theme=width===1440?'dark':'light';
         const context=await browser.newContext({viewport:{width,height:900},locale:'fa-IR'});
         await context.addInitScript(state=>{
           localStorage.setItem('madar-preview',JSON.stringify(state));
           localStorage.setItem('madar-preferences',JSON.stringify({calendar:'jalali',clockWidget:'hidden'}));
-        },fixture);
+        },{...fixture,settings:{...fixture.settings,theme}});
         const page=await context.newPage(),errors=[];
         page.on('pageerror',err=>errors.push(err.message));
         page.setDefaultTimeout(12000);
@@ -78,6 +79,27 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].labels.includes('آماده'));
           await nav.getByRole('button',{name:'چک‌لیست',exact:true}).click();
           await popover.getByRole('textbox',{name:'مرحله جدید چک‌لیست'}).fill('کار قابل انجام');
+          const contrast=await popover.evaluate(el=>{
+            const rgb=value=>(value.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
+            const luminance=value=>rgb(value).map(channel=>{
+              const c=channel/255;return c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4;
+            }).reduce((value,channel,index)=>value+channel*[0.2126,0.7152,0.0722][index],0);
+            const ratio=(a,b)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+            const input=el.querySelector('input[aria-label="مرحله جدید چک‌لیست"]');
+            const label=input.closest('label'),button=label.querySelector('button');
+            const panel=getComputedStyle(el),field=getComputedStyle(input),action=getComputedStyle(button);
+            const placeholder=getComputedStyle(input,'::placeholder');
+            return {theme:document.documentElement.dataset.theme,
+              label:ratio(getComputedStyle(label).color,panel.backgroundColor),
+              input:ratio(field.color,field.backgroundColor),
+              placeholder:ratio(placeholder.color,field.backgroundColor),
+              button:ratio(action.color,action.backgroundColor)};
+          });
+          assert.equal(contrast.theme,theme);
+          for(const [element,ratio] of Object.entries(contrast)){
+            if(element==='theme')continue;
+            assert.ok(ratio>=4.5,`${theme} ${element} contrast ratio: ${ratio}`);
+          }
           await popover.getByRole('button',{name:'افزودن',exact:true}).click();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.some(x=>x.text==='کار قابل انجام'));
           await drawer.locator('#task-section-checklist .step-row').filter({hasText:'کار قابل انجام'}).locator('button.step-check').click();

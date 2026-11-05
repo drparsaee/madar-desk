@@ -3,11 +3,23 @@
 @import './mini_calendar.css';
 @import './common_color_palette.css';
 @font-face{font-family:Vazirmatn;src:url('/fonts/Vazirmatn.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
-:root{--madar-ui-font:"Estedad Variable",Vazirmatn,Tahoma,"Segoe UI",Arial,sans-serif;font-family:var(--madar-ui-font);color:#233149;background:#f7f8fa;font-synthesis:none;font-size:14px;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+:root{
+  --madar-ui-font:"Estedad Variable",Vazirmatn,Tahoma,"Segoe UI",Arial,sans-serif;
+  --surface:#fff;--surface-soft:#f0f4fa;--text:#24334c;--text-muted:#536781;--border:#cbd7e5;
+  --field-background:#fff;--field-foreground:#24334c;--field-placeholder:#64748b;
+  color-scheme:light;font-family:var(--madar-ui-font);color:#233149;background:#f7f8fa;
+  font-synthesis:none;font-size:14px;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
+}
 *{box-sizing:border-box}
 html,body,#root{height:100%;margin:0}
 body{overflow:hidden}
-.madar-card-context-menu{position:fixed;z-index:100000;width:250px;max-width:calc(100vw - 16px);padding:8px;background:var(--panel-bg,#fff);color:var(--text,#243349);border:1px solid #96a6bd55;border-radius:12px;box-shadow:0 12px 36px #101d3655;display:grid;gap:3px;direction:rtl}
+.madar-card-context-menu{position:fixed;z-index:100000;width:250px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow-y:auto;overscroll-behavior:contain;padding:8px;background:var(--surface);color:var(--text);border:1px solid #96a6bd55;border-radius:12px;box-shadow:0 12px 36px #101d3655;display:grid;gap:3px;direction:rtl}
+.madar-card-context-menu--cover{width:340px}
+.madar-card-context-menu__cover{padding:9px 4px 12px;border-top:1px solid var(--border);min-width:0;min-height:0}
+.madar-card-context-menu__cover .card-cover-editor__header h3{font-size:12px}
+.madar-card-context-menu__cover .card-cover-editor__preview{min-height:68px}
+.madar-card-context-menu__cover .card-cover-editor__preview--strip .card-cover-editor__preview-title{min-height:42px}
+.madar-card-context-menu__cover .cardextras button{width:auto}
 .madar-card-context-menu__head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px 8px;border-bottom:1px solid #8796ae44}
 .madar-card-context-menu__head strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .madar-card-context-menu button{display:flex;gap:8px;align-items:center;text-align:right;width:100%;border-radius:7px;padding:9px;background:transparent;color:inherit}
@@ -23,6 +35,13 @@ body{overflow:hidden}
 [data-theme="dark"] .backup-easy-limitation--error{background:#4d241e!important;color:#ffcdc2!important}
 [data-theme="dark"] .madar-card-context-menu{background:#1e293b;color:#edf2fa;border-color:#52637e}
 button,input,select,textarea{font:inherit}
+/* Shared contrast contract: controls inherit matching foreground/background
+   tokens from the active theme. Purposeful accent/cover surfaces keep their
+   own explicit high-contrast colors rather than receiving blanket overrides. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),textarea,select){
+  background-color:var(--field-background);color:var(--field-foreground);
+}
+:where(input,textarea)::placeholder{color:var(--field-placeholder);opacity:1}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.6}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #8dabf1;outline-offset:2px}
@@ -348,7 +367,11 @@ button{border:0}
 .scope-list label{display:flex;align-items:center;gap:8px;font-size:11px;color:#66778e}
 .scope-list input{width:15px;height:15px;accent-color:#416cce}
 /* A deliberately quiet dark theme: strong contrast and identical behavior. */
-:root[data-theme="dark"]{color-scheme:dark;background:#101724;color:#dae6f6}
+:root[data-theme="dark"]{
+  --surface:#1c283a;--surface-soft:#263a53;--text:#eaf2ff;--text-muted:#c1d2e7;--border:#435a76;
+  --field-background:#152236;--field-foreground:#eaf2ff;--field-placeholder:#a8bdd5;
+  color-scheme:dark;background:#101724;color:#dae6f6;
+}
 :root[data-theme="dark"] body,:root[data-theme="dark"] .workspace{background:#101724}
 :root[data-theme="dark"] .sidebar{background:#0c1421}
 :root[data-theme="dark"] .topbar,:root[data-theme="dark"] .stat-card,:root[data-theme="dark"] .task-card,:root[data-theme="dark"] .dialog,:root[data-theme="dark"] .drawer,:root[data-theme="dark"] .finance-summary,:root[data-theme="dark"] .list-mode,:root[data-theme="dark"] .list-row{background:#1c283a;border-color:#304159}
