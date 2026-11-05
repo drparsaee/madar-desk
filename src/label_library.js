@@ -53,6 +53,36 @@ export function editSharedLabelState(state,command,idFactory=()=> 'label-'+Math.
     return {...state,settings:{...state.settings,labelLibrary:[...library,{id,name,color}]}};
   }
   if(!existing)throw Error('برچسب موردنظر در کتابخانه وجود ندارد.');
+  if(action==='delete'){
+    // The shared definition and all of its legacy references disappear in one
+    // state update. Local board IDs may collide, so resolve IDs per board.
+    const boards=state.boards||[];
+    const removedIdsByBoard=new Map(boards.map(board=>[
+      board.id,new Set((board.labelDefinitions||[])
+        .filter(item=>item.name===existing.name).map(item=>item.id))
+    ]));
+    const boardById=new Map(boards.map(board=>[board.id,board]));
+    return {...state,
+      settings:{...state.settings,labelLibrary:library.filter(item=>item.id!==existing.id)},
+      boards:boards.map(board=>({
+        ...board,labelDefinitions:(board.labelDefinitions||[]).filter(item=>item.name!==existing.name)
+      })),
+      tasks:(state.tasks||[]).map(task=>{
+        const labels=Array.isArray(task.labels)?task.labels:[];
+        const hasLabel=labels.some(item=>labelName(item)===existing.name);
+        const hasColor=Object.hasOwn(task.labelColors||{},existing.name);
+        const board=boardById.get(task.boardId);
+        const removedIds=removedIdsByBoard.get(task.boardId)||new Set();
+        const ids=Array.isArray(task.labelIds)?task.labelIds:[];
+        const nextIds=ids.filter(id=>!removedIds.has(id)&&!(id===existing.id&&
+          !(board?.labelDefinitions||[]).some(item=>item.id===id&&item.name!==existing.name)));
+        if(!hasLabel&&!hasColor&&nextIds.length===ids.length)return task;
+        const colors={...(task.labelColors||{})};
+        delete colors[existing.name];
+        return {...task,labels:labels.filter(item=>labelName(item)!==existing.name),
+          labelColors:colors,...(Array.isArray(task.labelIds)?{labelIds:nextIds}:{})};
+      })};
+  }
   if(action==='toggle'){
     const task=state.tasks.find(item=>item.id===command.taskId&&item.deleted!==true);
     if(!task)throw Error('کارت موردنظر پیدا نشد.');

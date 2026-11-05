@@ -74,11 +74,14 @@ test('legacy Toman conversion control is gone, old nonzero money is not silently
   assert.match(source,/disabled=\{!canEdit\|\|legacySale\}/);
   assert.match(source,/saleCurrency:'RIAL'/);
 });
-test('all six native color-pickers expose named common presets',()=>{
-  for(const file of ['src/priorities.jsx','src/labels.jsx','src/members.jsx','src/features.jsx',
+test('shared color-pickers expose named common presets; global labels use Trello palette',()=>{
+  for(const file of ['src/priorities.jsx','src/members.jsx','src/features.jsx',
     'src/board_lane_actions.jsx','src/accounting_print_designer.jsx']){
     assert.match(text(file),/CommonColorOptions/,file);
   }
+  const labels=text('src/labels.jsx');
+  assert.match(labels,/LABEL_PALETTE/);
+  assert.match(labels,/label-editor-palette-color/);
   const {CommonColorOptions,COMMON_COLORS}=load('src/common_color_palette.jsx');
   assert.ok(COMMON_COLORS.length>=12);
   const html=renderToStaticMarkup(React.createElement(CommonColorOptions,{value:'#EF4444',onChange:()=>{},label:'اولویت'}));

@@ -63,3 +63,36 @@ test('global rename respects existing board definitions and rejects duplicate na
   assert.throws(()=>editSharedLabelState(current,{action:'edit',id:'old-1',name:'تولید',color:'#ff0000'}),/نام/);
   assert.throws(()=>editSharedLabelState(current,{action:'create',name:'X',color:'red'}),/رنگ/);
 });
+
+test('global deletion atomically prunes every selected card and legacy definition without touching a colliding local ID',()=>{
+  const initial=start();
+  initial.tasks[0].labelIds=['old-1','keep-a'];
+  initial.tasks[0].labelColors.باقی='#112233';
+  initial.tasks[1].labelColors={'چاپ':'#aaaaaa'};
+  initial.tasks[2].labelIds=['old-1'];
+  initial.tasks[2].labelColors.چاپ='#aabbcc';
+  const before=JSON.stringify(initial);
+  const next=editSharedLabelState(initial,{action:'delete',id:'old-1'});
+  assert.equal(JSON.stringify(initial),before,'deletion is a pure state update');
+  assert.deepEqual(sharedLabelLibrary(next).map(item=>item.name),['تولید']);
+  assert.deepEqual(next.boards.map(board=>board.labelDefinitions.map(item=>item.name)),[[],['تولید']]);
+  assert.deepEqual(next.tasks.map(task=>task.labels),[[],[],['تولید']]);
+  assert.deepEqual(next.tasks[0].labelIds,['keep-a']);
+  assert.deepEqual(next.tasks[2].labelIds,['old-1'], 'same local ID on another board must survive');
+  for(const task of next.tasks)assert(!Object.hasOwn(task.labelColors||{},'چاپ'));
+  assert.equal(next.tasks[0].labelColors.باقی,'#112233');
+  assert.equal(next.tasks[2].labelColors.تولید,'#abcdef');
+  assert.throws(()=>editSharedLabelState(next,{action:'delete',id:'old-1'}),/وجود ندارد/);
+  const restored=editSharedLabelState(next,{action:'create',name:'چاپ',color:'#123456'},()=> 'again');
+  assert.equal(restored.tasks[0].labels.length,0,'recreated labels do not reassign deleted selections');
+});
+
+test('deleting a global-only label also clears selections on every board and keeps unrelated task references',()=>{
+  let state=editSharedLabelState(start(),{action:'create',name:'آماده',color:'#abcdef'},()=> 'global-ready');
+  state=editSharedLabelState(state,{action:'toggle',id:'global-ready',taskId:'a',selected:true});
+  state=editSharedLabelState(state,{action:'toggle',id:'global-ready',taskId:'b',selected:true});
+  const next=editSharedLabelState(state,{action:'delete',id:'global-ready'});
+  assert.deepEqual(next.tasks.map(task=>task.labels),[['چاپ'],[],['تولید']]);
+  assert.deepEqual(sharedLabelLibrary(next).map(item=>item.name),['چاپ','تولید']);
+  assert.equal(next.settings.labelLibrary.some(item=>item.id==='global-ready'),false);
+});

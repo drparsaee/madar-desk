@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {Pipette} from 'lucide-react';
-import {CommonColorPalette} from './common_color_swatches.jsx';
+import {CommonColorPalette,useColorDisclosure} from './common_color_swatches.jsx';
 
 const HEX=/^#[0-9A-F]{6}$/i;
 export function hsvToHex(h,s,v){
@@ -25,7 +25,8 @@ const clamp=(value)=>Math.max(0,Math.min(1,value));
  * Compact solid color picker. All color values applied to CSS or emitted to
  * callers are validated #RRGGBB; untrusted free-form text is never painted.
  */
-export function CoverColorPicker({value='#5672CA',onChange,disabled=false,label='کاور'}){
+export function CoverColorPicker({value='#5672CA',onChange,onCommit,disabled=false,label='کاور'}){
+  const advancedRef=useColorDisclosure();
   const current=HEX.test(value)?value.toUpperCase():'#5672CA';
   const [hue,setHue]=useState(()=>Math.round(hexToHsv(current).h));
   const [draft,setDraft]=useState(current);
@@ -37,13 +38,21 @@ export function CoverColorPicker({value='#5672CA',onChange,disabled=false,label=
     // spectrum does not jump to red during a pointer drag through grayscale.
     if(incoming.s>0)setHue(Math.round(incoming.h));
   },[current]);
-  const commit=color=>{
+  const commit=(color,dismiss=false)=>{
     if(disabled||!HEX.test(color))return;
     const clean=color.toUpperCase();
     setDraft(clean);
     const next=hexToHsv(clean);
     if(next.s>0)setHue(Math.round(next.h));
     onChange?.(clean);
+    if(dismiss){
+      if(advancedRef.current?.open){
+        const focusWasInside=advancedRef.current.contains(document.activeElement);
+        advancedRef.current.open=false;
+        if(focusWasInside)advancedRef.current.querySelector(':scope > summary')?.focus();
+      }
+      onCommit?.();
+    }
   };
   const fromSpectrum=(s,v)=>commit(hsvToHex(hue,clamp(s),clamp(v)));
   const movePointer=e=>{
@@ -68,8 +77,8 @@ export function CoverColorPicker({value='#5672CA',onChange,disabled=false,label=
     if(!disabled)fromSpectrum(s,v);
   };
   return <div className="cover-picker" dir="rtl">
-    <CommonColorPalette value={current} onChange={commit} disabled={disabled} label={label}/>
-    <details className="cover-picker__advanced">
+    <CommonColorPalette value={current} onChange={color=>commit(color,true)} disabled={disabled} label={label}/>
+    <details ref={advancedRef} className="cover-picker__advanced">
       <summary><Pipette size={15} aria-hidden="true"/> ساخت رنگ دلخواه <span dir="ltr">{current}</span></summary>
       <div className="cover-picker__panel">
         <div className="cover-picker__spectrum" role="slider" tabIndex={disabled?-1:0}
@@ -106,10 +115,14 @@ export function CoverColorPicker({value='#5672CA',onChange,disabled=false,label=
         </label>
         <div className="cover-picker__custom">
           <input type="color" aria-label={'رنگ '+label} disabled={disabled}
-            value={HEX.test(draft)?draft:current} onChange={e=>commit(e.target.value)}/>
+            value={HEX.test(draft)?draft:current} onChange={e=>{
+              const color=e.currentTarget.value;
+              e.currentTarget.blur();
+              commit(color,true);
+            }}/>
           <input type="text" aria-label="کد شش رقمی رنگ" dir="ltr" maxLength={7}
             value={draft} disabled={disabled} onChange={e=>setDraft(e.target.value)} placeholder="#RRGGBB"/>
-          <button type="button" disabled={disabled||!HEX.test(draft)} onClick={()=>commit(draft)}>
+          <button type="button" disabled={disabled||!HEX.test(draft)} onClick={()=>commit(draft,true)}>
             اعمال
           </button>
         </div>

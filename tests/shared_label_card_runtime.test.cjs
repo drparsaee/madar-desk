@@ -76,9 +76,9 @@ test('shared labels are reusable but never automatically applied; complete icon 
           await drawer.waitFor();
           await drawer.getByRole('button',{name:'برچسب',exact:true}).click();
           let picker=drawer.locator('.task-quick-popover');
-          await picker.getByRole('button',{name:'ساخت برچسب مشترک'}).click();
+          await picker.getByRole('button',{name:'ساخت برچسب',exact:true}).click();
           await picker.getByRole('textbox',{name:'نام برچسب جدید'}).fill('بازبینی');
-          await picker.getByRole('button',{name:'افزودن برچسب'}).click();
+          await picker.getByRole('button',{name:'ایجاد',exact:true}).click();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).settings.labelLibrary?.some(l=>l.name==='بازبینی')===true);
           let state=await page.evaluate(()=>JSON.parse(localStorage.getItem('madar-preview')));
           assert.deepEqual(state.tasks.map(t=>t.labels),[[],[]],
@@ -110,6 +110,24 @@ test('shared labels are reusable but never automatically applied; complete icon 
           state=await page.evaluate(()=>JSON.parse(localStorage.getItem('madar-preview')));
           assert.deepEqual(state.tasks.map(t=>t.labels),[['آماده'],[]]);
           assert.equal(state.settings.labelLibrary[0].name,'آماده');
+          await drawer.getByRole('button',{name:'بستن',exact:true}).first().click();
+          await first.locator('.task-label-context-trigger').first().click({button:'right'});
+          const manager=page.getByRole('dialog',{name:'مدیریت برچسب‌ها'});
+          await manager.waitFor();
+          assert.equal(await manager.getByRole('checkbox').count(),0,
+            'right-click editor is global; it must not select a label on any card');
+          await manager.getByRole('textbox',{name:'نام جدید برچسب آماده'}).fill('فاز نهایی');
+          await manager.getByRole('button',{name:'ذخیره',exact:true}).click();
+          await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].labels.includes('فاز نهایی'));
+          await manager.getByRole('button',{name:'ویرایش برچسب فاز نهایی'}).click();
+          await manager.getByRole('button',{name:'حذف برچسب',exact:true}).click();
+          await manager.getByRole('button',{name:'حذف از همهٔ کارت‌ها'}).click();
+          await page.waitForFunction(()=>{
+            const state=JSON.parse(localStorage.getItem('madar-preview'));
+            return state.tasks.every(task=>task.labels.length===0)&&
+              state.settings.labelLibrary.length===0&&
+              state.boards.every(board=>board.labelDefinitions.length===0);
+          });
           assert.deepEqual(errors,[]);
           console.log('SHARED_LABEL_CARD_RUNTIME_PASSED',width,theme,geometry);
         }finally{await context.close();}

@@ -1,4 +1,34 @@
-import React from 'react';
+import React,{useEffect,useRef} from 'react';
+
+// Keep native details disclosures keyboard-accessible, while allowing the
+// spectrum and form fields inside them to remain interactive.
+export function useColorDisclosure(){
+  const ref=useRef(null);
+  useEffect(()=>{
+    const disclosure=ref.current;
+    if(!disclosure)return;
+    const dismissOutside=event=>{
+      if(disclosure.open&&!disclosure.contains(event.target))disclosure.open=false;
+    };
+    const dismissEscape=event=>{
+      if(event.key!=='Escape'||event.defaultPrevented||!disclosure.open)return;
+      // A nested color disclosure gets the first Escape; the next closes its parent.
+      if(disclosure.querySelector('details[open]'))return;
+      disclosure.open=false;
+      event.preventDefault();
+      // Parent editors may also use Escape to leave the entire form.
+      event.stopPropagation();
+      disclosure.querySelector(':scope > summary')?.focus();
+    };
+    document.addEventListener('pointerdown',dismissOutside,true);
+    document.addEventListener('keydown',dismissEscape,true);
+    return ()=>{
+      document.removeEventListener('pointerdown',dismissOutside,true);
+      document.removeEventListener('keydown',dismissEscape,true);
+    };
+  },[]);
+  return ref;
+}
 
 // Both the standalone picker and disclosure picker use these same presets.
 export const COMMON_COLORS=Object.freeze([

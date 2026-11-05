@@ -142,7 +142,8 @@
     inset-inline-start:unset;
     right:96px;
     left:auto;
-    width:310px;
+    width:264px;
+    max-width:calc(100vw - 116px);
     max-height:calc(100dvh - 32px);
     margin:0;
     padding:15px 12px;
@@ -498,19 +499,20 @@
 }
 @media (min-width:861px) {
   .vitrea-quickdock {
-    width:61px;
+    width:58px;
     align-items:stretch;
-    transition:width .2s ease,border-radius .2s ease;
+    transition:background-color .15s ease;
   }
-  .vitrea-quickdock:is(:hover,:focus-within) {width:174px;border-radius:24px;}
+  /* Hovering the dock must not consume 174px of the user's board. */
+  .vitrea-quickdock:is(:hover,:focus-within) {width:58px;border-radius:999px;}
   .vitrea-quickdock button {
     width:100%;
     display:flex;
     align-items:center;
-    justify-content:flex-start;
+    justify-content:center;
     gap:0;
-    padding-inline:12px;
-    border-radius:14px;
+    padding-inline:8px;
+    border-radius:50%;
     white-space:nowrap;
   }
   .vitrea-quickdock button svg {flex:none;}
@@ -526,12 +528,12 @@
     transition:max-width .2s ease,opacity .18s ease,margin .2s ease;
   }
   .vitrea-quickdock:is(:hover,:focus-within) .vitrea-quickdock__label {
-    max-width:120px;
-    opacity:1;
-    visibility:visible;
-    margin-inline-start:10px;
+    max-width:0;
+    opacity:0;
+    visibility:hidden;
+    margin-inline-start:0;
   }
-  .vitrea-quickdock:is(:hover,:focus-within) .vitrea-quickdock__divider {width:100%;}
+  .vitrea-quickdock:is(:hover,:focus-within) .vitrea-quickdock__divider {width:70%;}
 }
 @media (max-width:860px) {
   .vitrea-quickdock__label {display:none;}

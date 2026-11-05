@@ -176,7 +176,7 @@ function Empty({title,description,onAdd}){
   return <div className="lane-empty"><span className="lane-empty-icon"><Plus size={18}/></span><strong>{title}</strong><small>{description}</small>{onAdd&&<button onClick={onAdd}>افزودن کار <Plus size={14}/></button>}</div>;
 }
 
-function TaskCard({task,project,users,onOpen,onContextRequest,onDrag,onToggleStep,onToggleComplete,onCardDrop,onKeyboardReorder,calendar,priorities,labelLibrary=[],canEdit=true,canManage=false,showCosts=true}){
+function TaskCard({task,project,users,onOpen,onContextRequest,onLabelContext,onDrag,onToggleStep,onToggleComplete,onCardDrop,onKeyboardReorder,calendar,priorities,labelLibrary=[],canEdit=true,canManage=false,showCosts=true}){
   const [collapsed,setCollapsed]=useState(true);
   const done=task.checklist.filter(i=>i.done).length;
   const percent=task.checklist.length?Math.round(done/task.checklist.length*100):0;
@@ -190,7 +190,15 @@ function TaskCard({task,project,users,onOpen,onContextRequest,onDrag,onToggleSte
       <button type="button" disabled={!canEdit} className="task-complete-toggle" aria-label={(task.completed===true?'برگرداندن از تکمیل ':'تکمیل کارت ')+task.title} title={task.completed===true?'برگرداندن از تکمیل':'تکمیل کارت'} aria-pressed={task.completed===true} onClick={e=>{e.preventDefault();e.stopPropagation();onToggleComplete?.(task.id);}} onKeyDown={e=>e.stopPropagation()}><Check size={11}/></button>
     </div>
     {task.description&&<div className="task-description">{task.description}</div>}
-    {!!task.labels?.length&&<div className="tags">{task.labels.map((l,i)=><LabelChip key={i} label={{name:l,color:sharedLabelColor(labelLibrary,l,task.labelColors)}}/>)}</div>}
+    {!!task.labels?.length&&<div className="tags">{task.labels.map((l,i)=><span key={i}
+      className="task-label-context-trigger" role="button" tabIndex={0}
+      aria-label={'ویرایش برچسب '+l} title="کلیک راست برای ویرایش برچسب"
+      onContextMenu={event=>{event.preventDefault();event.stopPropagation();onLabelContext?.(l);}}
+      onKeyDown={event=>{
+        if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){
+          event.preventDefault();event.stopPropagation();onLabelContext?.(l);
+        }
+      }}><LabelChip label={{name:l,color:sharedLabelColor(labelLibrary,l,task.labelColors)}}/></span>)}</div>}
     {task.checklist.length>0&&<div className="progress-block"><div className="progress-caption"><span><ListChecks size={13}/> {done} از {task.checklist.length} مرحله</span><b>{percent}٪</b></div><div className="progress-track"><i style={{width:percent+'%'}}/></div></div>}
     <InlineChecklist items={task.checklist} taskId={task.id} canEdit={canEdit} collapsed={collapsed} onCollapse={()=>setCollapsed(x=>!x)} onToggle={onToggleStep}/>
     {canManage&&showCosts&&cardCostEnabled(task,project)&&<div className="card-cost"><WalletIcon/>{money((task.cost||0)+task.checklist.reduce((x,c)=>x+(c.cost||0),0))} تومان</div>}
@@ -234,7 +242,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
   const [newStep,setNewStep]=useState('');
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
@@ -400,7 +408,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',more:'گزینه‌های تکمیلی'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
           {quickMenu==='date'&&<div className="task-quick-popover__body"><CalendarField value={task.dueDate||''} calendar={calendar} disabled={!canEdit} label="موعد انجام" popupOnClick onChange={dueDate=>update({dueDate})}/></div>}
           {quickMenu==='members'&&<div className="task-quick-popover__body"><AssigneeSelector users={users} projectId={task.projectId} value={task.assignees||[]} disabled={!canEdit} onChange={assignees=>update({assignees})}/></div>}
-          {quickMenu==='labels'&&<div className="task-quick-popover__body"><LabelEditor library={labelLibrary} labels={task.labels||[]} disabled={!canEdit} canManage={canManage} onToggle={(id,selected)=>onLabelToggle?.(task.id,id,selected)} onCreate={onLabelCreate} onEdit={onLabelEdit}/></div>}
+          {quickMenu==='labels'&&<div className="task-quick-popover__body"><LabelEditor library={labelLibrary} labels={task.labels||[]} disabled={!canEdit} canManage={canManage} onToggle={(id,selected)=>onLabelToggle?.(task.id,id,selected)} onCreate={onLabelCreate} onEdit={onLabelEdit} onDelete={onLabelDelete}/></div>}
           {quickMenu==='checklist'&&<div className="task-quick-popover__body"><label className="task-quick-popover__label">مرحله جدید<div className="task-quick-popover__create"><input aria-label="مرحله جدید چک‌لیست" placeholder="مرحله بعدی را بنویس..." maxLength={5000} value={newStep} disabled={!canEdit} onChange={event=>setNewStep(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addStep();}}}/><button type="button" disabled={!canEdit||!newStep.trim()} onClick={addStep}><Plus size={15}/> افزودن</button></div></label><label className="task-quick-popover__label">چک‌لیست جداگانه<div className="task-quick-popover__create"><input aria-label="نام چک‌لیست جدید" placeholder="مثلاً کارهای قبل از تحویل" maxLength={180} value={newChecklistName} disabled={!canEdit} onChange={event=>setNewChecklistName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addChecklistGroup();}}}/><button type="button" disabled={!canEdit||!newChecklistName.trim()} onClick={addChecklistGroup}><Plus size={15}/> ساخت</button></div></label>{!!quickError&&<p className="field-error" role="alert">{quickError}</p>}<button type="button" onClick={()=>jumpToSection('checklist','.inline-create input')}>نمایش مراحل و چک‌لیست‌ها <ChevronLeft size={14}/></button></div>}
           {quickMenu==='more'&&<div className="task-more-menu">
             <button type="button" onClick={()=>jumpToSection('metadata')}><Flag size={15}/> مرحله و اولویت</button>
@@ -809,6 +817,7 @@ export default function App(){
   const [cardContext,setCardContext]=useState(null);
   const [cardArchiveOpen,setCardArchiveOpen]=useState(false);
   const [adding,setAdding]=useState(null);
+  const laneComposerRef=useRef(null);
   const [pendingQuickCardId,setPendingQuickCardId]=useState(null);
   const [collapsedLists,setCollapsedLists]=useState({});
   const [laneContextRequest,setLaneContextRequest]=useState(null);
@@ -819,6 +828,7 @@ export default function App(){
   const [projectName,setProjectName]=useState('');
   const [cloudOpen,setCloudOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [labelManager,setLabelManager]=useState(null);
   const [lanOpen,setLanOpen]=useState(false);
   const [lanInitialView,setLanInitialView]=useState('connection');
   const [notificationsOpen,setNotificationsOpen]=useState(false);
@@ -873,6 +883,18 @@ export default function App(){
       if(!updateDownloaded){await api.releaseDownload();setUpdateDownloaded(true);setToast('نسخه جدید با بررسی SHA-256 دانلود شد.');}
       else {await api.releaseInstall();setToast('آپدیت پس از خروج کامل از مدار نصب می‌شود. برنامه را ببندید.');}
     }catch(error){setToast('خطای آپدیت: '+(error?.message||String(error)));}
+    finally{setUpdateBusy(false);}
+  };
+  const checkForAppUpdate=async()=>{
+    if(!isDesktop){setToast('بررسی نسخه فقط در برنامهٔ ویندوز فعال است.');return;}
+    if(updateBusy)return;
+    setUpdateBusy(true);
+    try{
+      const result=await api.releaseCheck();
+      setUpdateInfo(result?.available?result:null);
+      if(result?.available)setToast('نسخهٔ '+result.latest+' برای دریافت آماده است.');
+      else setToast('نسخهٔ جدیدی برای مدار پیدا نشد.');
+    }catch(error){setToast('بررسی به‌روزرسانی ناموفق بود: '+(error?.message||String(error)));}
     finally{setUpdateBusy(false);}
   };
   const [savingError,setSavingError]=useState('');
@@ -1304,6 +1326,14 @@ export default function App(){
     if(!canManage)return;
     changeAdmin(s=>editSharedLabelState(s,{action:'edit',id,name,color}));
   };
+  const deleteSharedLabel=({id})=>{
+    if(!canManage)return;
+    changeAdmin(s=>editSharedLabelState(s,{action:'delete',id}));
+  };
+  const openSharedLabelManager=(name=null)=>{
+    const item=name?labelLibrary.find(label=>label.name===name):null;
+    setLabelManager({id:item?.id||null});
+  };
   const updateBoardListArchive=(listId,restore=false)=>{
     if(!canManage||!activeBoard)return;
     const action=restore?restoreListState:archiveListState;
@@ -1690,7 +1720,29 @@ export default function App(){
     setDraftPriority('medium');setDraftTitle('');
     setAdding({boardId:board.id,projectId,listId:status,placement,anchorCardId});
   };
-  const renderLaneComposer=stage=><form className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
+  useEffect(()=>{
+    if(!adding||pendingQuickCardId)return;
+    const dismissIfOutside=event=>{
+      if(event.target?.isConnected&&laneComposerRef.current?.contains(event.target))return;
+      // An unfinished title must never vanish on an incidental click. An
+      // untouched composer, however, should disappear like Trello's insert UI.
+      if(draftTitle.trim())return;
+      setAdding(null);
+      setDraftTitle('');
+    };
+    const onEscape=event=>{
+      if(event.key==='Escape'&&!laneComposerRef.current?.contains(event.target)){
+        setAdding(null);setDraftTitle('');
+      }
+    };
+    document.addEventListener('pointerdown',dismissIfOutside,true);
+    document.addEventListener('keydown',onEscape,true);
+    return()=>{
+      document.removeEventListener('pointerdown',dismissIfOutside,true);
+      document.removeEventListener('keydown',onEscape,true);
+    };
+  },[adding,pendingQuickCardId,draftTitle]);
+  const renderLaneComposer=stage=><form ref={laneComposerRef} className="lane-quick-add" aria-label={'افزودن کارت به '+stage.label}
     onSubmit={event=>{event.preventDefault();createTask();}}>
     <textarea autoFocus rows={3} maxLength={300} required
       readOnly={!!pendingQuickCardId||blocked.current}
@@ -1986,11 +2038,6 @@ export default function App(){
       onExit={()=>setRialJournalOpen(false)}/>
   </div>;
   return <div className="app-shell vitrea-layout">
-    {updateInfo&&<div role="status" style={{position:'fixed',bottom:16,left:16,zIndex:1500,padding:12,borderRadius:12,background:'var(--surface, #eef3fa)',color:'var(--text, #17324b)',boxShadow:'0 4px 22px #0003',display:'flex',alignItems:'center',gap:12,maxWidth:440}}>
-      <span>نسخه {updateInfo.latest} مدار منتشر شده است.</span>
-      <button type="button" className="btn primary" disabled={updateBusy} onClick={actOnUpdate}>{updateBusy?'در حال پردازش…':updateDownloaded?'نصب بعد از خروج':'دریافت آپدیت'}</button>
-      <button type="button" className="tiny-icon" aria-label="بعداً" onClick={()=>setUpdateInfo(null)}><X size={15}/></button>
-    </div>}
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
@@ -1999,6 +2046,11 @@ export default function App(){
       <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
         disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
         <RefreshCw size={19} className={syncing?'spin':''}/><span className="vitrea-quickdock__label" aria-hidden="true">تازه‌سازی</span></button>
+      <button type="button" className={'vitrea-quickdock__update'+(updateInfo?' vitrea-quickdock__update--available':'')}
+        onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}
+        aria-label={updateBusy?'در حال بررسی به‌روزرسانی':updateInfo?(updateDownloaded?'نصب نسخهٔ جدید بعد از خروج':'دریافت نسخهٔ جدید '+updateInfo.latest):'بررسی به‌روزرسانی نرم‌افزار'}
+        title={updateInfo?'نسخهٔ جدید '+updateInfo.latest+' آماده است':'بررسی نسخهٔ جدید مدار'}>
+        <Download size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">به‌روزرسانی</span></button>
       <span className="vitrea-quickdock__divider" aria-hidden="true"/>
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
@@ -2082,6 +2134,9 @@ export default function App(){
             {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> کلید API امن</button>}
           </nav>
         </details>}
+        <button type="button" className="sidebar-settings" onClick={()=>openSharedLabelManager()}><Tag size={18}/> مدیریت برچسب‌ها</button>
+        <button type="button" className="sidebar-settings sidebar-update" onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}>
+          <Download size={18}/> {updateBusy?'در حال بررسی…':updateInfo?(updateDownloaded?'نصب پس از خروج':'دریافت نسخهٔ '+updateInfo.latest):'بررسی به‌روزرسانی'}</button>
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری</button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات</button>
         <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
@@ -2200,7 +2255,7 @@ export default function App(){
                     ?renderLaneComposer(stage)
                     :<button type="button" className="lane-insert-before" aria-label={i===0?'افزودن کارت در ابتدای '+stage.label:'افزودن کارت پیش از '+t.title} title={i===0?'افزودن کارت در بالا':'افزودن کارت در این موقعیت'} onClick={()=>openAdd(stage.id,'before',t.id)}><Plus size={13}/> افزودن کارت</button>}
                 </div>}
-                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} labelLibrary={labelLibrary} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onContextRequest={requestCardMenu} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
+                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} labelLibrary={labelLibrary} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onContextRequest={requestCardMenu} onLabelContext={openSharedLabelManager} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
               </React.Fragment>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
               {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id&&
                 (adding.placement==='end'||(adding.placement==='start'&&items.length===0))
@@ -2308,7 +2363,12 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!labelManager&&<Modal title="مدیریت برچسب‌ها" width={420} onClose={()=>setLabelManager(null)}>
+      <div className="dialog-body"><LabelEditor key={labelManager.id||'global-library'} library={labelLibrary} labels={null} disabled={!canEdit}
+        initialEditId={labelManager.id} canManage={canManage} onCreate={createSharedLabel}
+        onEdit={editSharedLabel} onDelete={deleteSharedLabel} onClose={()=>setLabelManager(null)}/></div>
+    </Modal>}
 
     {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}

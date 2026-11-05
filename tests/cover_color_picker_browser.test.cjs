@@ -17,6 +17,7 @@ const output=esbuild.buildSync({
   stdin:{contents:`import React from 'react';
     import {createRoot} from 'react-dom/client';
     import {CoverColorPicker} from './src/cover_color_picker.jsx';
+    import {CommonColorOptions} from './src/common_color_palette.jsx';
     import './src/cardextras.css';
     import './src/common_color_palette.css';
     window.__coverChanges=[];
@@ -25,7 +26,16 @@ const output=esbuild.buildSync({
       return React.createElement(CoverColorPicker,{value,
         onChange:color=>{window.__coverChanges.push(color);setValue(color)}});
     }
-    createRoot(document.getElementById('picker')).render(React.createElement(Fixture));`,
+    window.__commonChanges=[];
+    function CommonFixture(){
+      const [value,setValue]=React.useState('#5672CA');
+      return React.createElement(CommonColorOptions,{value,label:'اولویت',
+        onChange:color=>{window.__commonChanges.push(color);setValue(color)}});
+    }
+    if(document.getElementById('picker'))
+      createRoot(document.getElementById('picker')).render(React.createElement(Fixture));
+    if(document.getElementById('commonpicker'))
+      createRoot(document.getElementById('commonpicker')).render(React.createElement(CommonFixture));`,
     resolveDir:root,sourcefile:'synthetic-picker-entry.jsx',loader:'jsx'},
   bundle:true,write:false,outdir:'synthetic-build',format:'iife',platform:'browser',loader:{'.css':'css'}
 }).outputFiles;
@@ -87,6 +97,7 @@ test('synthetic Chromium computed geometry: narrow/wide RTL LTR light/dark and k
   await button.focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>window.__coverChanges.at(-1)),'#EF4444');
+  await page.locator('.cover-picker__advanced>summary').click();
   await page.getByRole('slider',{name:'طیف رنگ کاور'}).focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('.cover-picker__spectrum').count(),1);
@@ -95,6 +106,7 @@ test('synthetic Chromium computed geometry: narrow/wide RTL LTR light/dark and k
   await page.keyboard.press('ArrowLeft');
   assert.match(await page.evaluate(()=>window.__coverChanges.at(-1)),/^#[A-F0-9]{6}$/);
   await page.mouse.click(20,20); // leave focus and start a pointer check by geometry
+  await page.locator('.cover-picker__advanced>summary').click();
   const bounds=await spectrum.boundingBox();
   await page.mouse.move(bounds.x+30,bounds.y+20);
   await page.mouse.down();
@@ -102,10 +114,80 @@ test('synthetic Chromium computed geometry: narrow/wide RTL LTR light/dark and k
   await page.mouse.up();
   assert.match(await page.evaluate(()=>window.__coverChanges.at(-1)),/^#[A-F0-9]{6}$/);
   await page.getByRole('button',{name:'انتخاب سفید برای کاور'}).click();
+  await page.locator('.cover-picker__advanced>summary').click();
   await page.getByRole('slider',{name:'طیف رنگ کاور'}).fill('140');
   const before=await spectrum.evaluate(el=>getComputedStyle(el).backgroundImage);
   await page.mouse.click(bounds.x+bounds.width*.8,bounds.y+bounds.height*.2);
   assert.match(await page.evaluate(()=>window.__coverChanges.at(-1)),/^#[A-F0-9]{6}$/);
   assert.notEqual(await page.evaluate(()=>window.__coverChanges.at(-1)),'#FFFFFF');
   assert.match(before,/linear-gradient/);
+});
+
+test('shared color disclosure dismisses on outside pointer, Escape and final selection',async(t)=>{
+  const browser=await playwright.chromium.launch({channel:'msedge',headless:true});
+  t.after(()=>browser.close());
+  const page=await browser.newPage({viewport:{width:600,height:700}});
+  await page.setContent('<html dir="rtl"><head><meta charset="utf-8"></head><body>'+
+    '<section id="parent-editor"><main id="commonpicker"></main><form id="other-form">'+
+    '<input id="other-field" aria-label="فیلد دیگر">'+
+    '<button type="button" id="outside">بیرون</button></form></section></body></html>');
+  await page.addStyleTag({content:css});
+  await page.addScriptTag({content:js});
+  await page.evaluate(()=>{
+    window.__parentEscapes=0;
+    document.getElementById('parent-editor').addEventListener('keydown',event=>{
+      if(event.key==='Escape')window.__parentEscapes++;
+    });
+  });
+  const outer=page.locator('.madar-common-colors__details');
+  const outerSummary=outer.locator(':scope > summary');
+  const advanced=outer.locator('.cover-picker__advanced');
+  await outerSummary.click();
+  assert.equal(await outer.evaluate(el=>el.open),true);
+  await page.locator('#other-field').click();
+  await page.locator('#other-field').fill('متن آزمایشی');
+  assert.equal(await outer.evaluate(el=>el.open),false,'outside input closes picker without changing the form');
+  assert.equal(await page.locator('#other-field').inputValue(),'متن آزمایشی');
+
+  await outerSummary.click();
+  await advanced.locator('summary').click();
+  assert.equal(await advanced.evaluate(el=>el.open),true);
+  await page.locator('.cover-picker__custom input[type=text]').focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await advanced.evaluate(el=>el.open),false,'first Escape closes nested custom picker');
+  assert.equal(await outer.evaluate(el=>el.open),true,'parent remains open after first Escape');
+  await page.keyboard.press('Escape');
+  assert.equal(await outer.evaluate(el=>el.open),false,'second Escape closes parent picker');
+  assert.equal(await outerSummary.evaluate(el=>document.activeElement===el),true);
+  assert.equal(await page.evaluate(()=>window.__parentEscapes),0,
+    'color picker Escape does not bubble into parent editor');
+
+  await outerSummary.click();
+  await page.getByRole('button',{name:'انتخاب سبز برای اولویت'}).click();
+  assert.equal(await outer.evaluate(el=>el.open),false,'preset selection dismisses color menu');
+  assert.equal(await outerSummary.evaluate(el=>document.activeElement===el),true,
+    'keyboard focus returns to the color menu summary');
+  assert.deepEqual(await page.evaluate(()=>window.__commonChanges),['#22C55E']);
+
+  await outerSummary.click();
+  await advanced.locator('summary').click();
+  await advanced.locator('.cover-picker__hue input').fill('140');
+  assert.equal(await outer.evaluate(el=>el.open),true,'hue adjustment keeps disclosure available');
+  assert.equal(await advanced.evaluate(el=>el.open),true);
+  await advanced.locator('.cover-picker__custom input[type=text]').fill('#A1B2C3');
+  await advanced.getByRole('button',{name:'اعمال'}).click();
+  assert.equal(await outer.evaluate(el=>el.open),false,'Apply closes parent picker');
+  assert.equal(await advanced.evaluate(el=>el.open),false,'Apply closes custom picker');
+  assert.equal(await page.evaluate(()=>window.__commonChanges.at(-1)),'#A1B2C3');
+
+  await outerSummary.click();
+  await advanced.locator('summary').click();
+  await advanced.locator('input[type=color]').fill('#ABCDEF');
+  assert.equal(await outer.evaluate(el=>el.open),false,'native color change dismisses menu');
+  assert.equal(await advanced.evaluate(el=>el.open),false);
+  assert.equal(await page.evaluate(()=>window.__commonChanges.at(-1)),'#ABCDEF');
+  await page.locator('#other-field').focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>window.__parentEscapes),1,
+    'closed picker does not intercept unrelated form Escape');
 });

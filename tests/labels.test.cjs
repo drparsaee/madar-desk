@@ -14,7 +14,7 @@ const loader = new Module(path.join(root, 'src/labels-test.cjs'), module);
 loader.filename = path.join(root, 'src/labels-test.cjs');
 loader.paths = Module._nodeModulePaths(root);
 loader._compile(bundled, loader.filename);
-const {normalizeTaskLabels, editTaskLabels, TaskLabelChip, LabelEditor, validLabelColor} = loader.exports;
+const {normalizeTaskLabels, editTaskLabels, TaskLabelChip, LabelEditor, validLabelColor, LABEL_PALETTE} = loader.exports;
 
 test('normalizes legacy strings and transitional objects into string-compatible task labels', () => {
   const original = ['  طراحی  ', {name: 'ارسال', color: '#AABBCC'}, 'طراحی', '  ', null];
@@ -71,13 +71,35 @@ test('shared label editor renders a searchable catalogue with independent checkb
   assert.match(html,/انتخاب برچسب کار/);
   assert.match(html,/انتخاب برچسب مهم/);
   assert.match(html,/checked=""/);
-  assert.match(html,/ساخت برچسب مشترک/);
+  assert.match(html,/ساخت برچسب/);
+  assert.doesNotMatch(html,/ساخت برچسب مشترک/);
   assert.match(html,/ویرایش برچسب کار/);
   assert.doesNotMatch(html,/--label-color/);
   const chip = renderToStaticMarkup(React.createElement(TaskLabelChip, {label: 'کار', colors: {'کار': '#123456'}}));
   assert.match(chip, /--label-color:#123456/);
   const disabled = renderToStaticMarkup(React.createElement(LabelEditor, {
     library:[{id:'tag-1',name:'کار',color:'#123456'}],labels:[],disabled:true,canManage:false}));
-  assert(!disabled.includes('ساخت برچسب مشترک'));
+  assert(!disabled.includes('ساخت برچسب'));
   assert.match(disabled, /disabled=""/);
+});
+
+test('global management mode hides card checkboxes and can jump directly into Trello-like detail',()=>{
+  const library=[{id:'global-1',name:'فوری',color:'#123456'}];
+  const manager=renderToStaticMarkup(React.createElement(LabelEditor,{
+    library,labels:null,canManage:true,onEdit:()=>{},onDelete:()=>{}}));
+  assert.match(manager,/مدیریت برچسب‌ها/);
+  assert.match(manager,/ویرایش برچسب فوری/);
+  assert.doesNotMatch(manager,/type="checkbox"/);
+  const detail=renderToStaticMarkup(React.createElement(LabelEditor,{
+    library,labels:null,initialEditId:'global-1',canManage:true,onEdit:()=>{},onDelete:()=>{}}));
+  assert.match(detail,/نام جدید برچسب فوری/);
+  assert.match(detail,/حذف برچسب/);
+  assert.match(detail,/بازگشت به فهرست برچسب‌ها/);
+  assert.match(detail,/پیش‌نمایش/);
+  assert.equal(LABEL_PALETTE.length,30);
+  assert.equal((detail.match(/class="label-editor-palette-color"/g)||[]).length,30);
+  assert.match(detail,/aria-pressed="true"|رنگ دلخواه برچسب/);
+  const guest=renderToStaticMarkup(React.createElement(LabelEditor,{
+    library,labels:null,initialEditId:'global-1',canManage:false}));
+  assert.doesNotMatch(guest,/حذف برچسب|ساخت برچسب|ویرایش برچسب فوری/);
 });

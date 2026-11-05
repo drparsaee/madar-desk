@@ -36,7 +36,7 @@ const freePort=()=>new Promise((resolve,reject)=>{
     server.close(error=>error?reject(error):resolve(port));
   });
 });
-test('Madar opens board by default, expands navigation labels and keeps accounting graphite',
+test('Madar opens board by default, keeps side dock compact and accounting graphite',
   {skip:!runnable,timeout:65000},async()=>{
     const {preview}=await import('vite');
     const {chromium}=require(playwrightPath);
@@ -83,11 +83,12 @@ test('Madar opens board by default, expands navigation labels and keeps accounti
         .getBoundingClientRect().width<=65);
       const collapsed=await rail.evaluate(el=>el.getBoundingClientRect().width);
       await page.locator('.vitrea-quickdock__refresh').hover();
-      await page.waitForFunction(()=>document.querySelector('.vitrea-quickdock')
-        .getBoundingClientRect().width>=150,null,{timeout:5000});
-      const wide=await rail.evaluate(el=>el.getBoundingClientRect().width);
-      assert.ok(wide>=150&&wide>collapsed,JSON.stringify({collapsed,wide}));
-      assert.ok(await page.locator('.vitrea-quickdock__refresh .vitrea-quickdock__label').isVisible());
+      const afterHover=await rail.evaluate(el=>el.getBoundingClientRect().width);
+      assert.ok(afterHover<=65&&Math.abs(afterHover-collapsed)<=3,
+        'Side dock must stay narrow on hover '+JSON.stringify({collapsed,afterHover}));
+      assert.equal(await page.locator('.vitrea-quickdock__refresh .vitrea-quickdock__label').isVisible(),false);
+      assert.equal(await page.locator('.vitrea-quickdock__update').count(),1,
+        'Software update action must be in the compact side dock');
       await capture(page,'board-expanded-labels');
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
       await overview.click();

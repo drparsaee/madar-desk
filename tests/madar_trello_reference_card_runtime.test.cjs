@@ -74,9 +74,9 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
           await page.screenshot({path:path.join(screenshotDir,'card-opening-'+width+'.png')});
           await nav.getByRole('button',{name:'برچسب',exact:true}).click();
           const popover=nav.locator('.task-quick-popover');
-          await popover.getByRole('button',{name:'ساخت برچسب مشترک'}).click();
+          await popover.getByRole('button',{name:'ساخت برچسب',exact:true}).click();
           await popover.getByRole('textbox',{name:'نام برچسب جدید'}).fill('آماده');
-          await popover.getByRole('button',{name:'افزودن برچسب'}).click();
+          await popover.getByRole('button',{name:'ایجاد',exact:true}).click();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).settings.labelLibrary?.some(x=>x.name==='آماده')===true);
           await popover.getByRole('checkbox',{name:'انتخاب برچسب آماده'}).check();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].labels.includes('آماده'));
