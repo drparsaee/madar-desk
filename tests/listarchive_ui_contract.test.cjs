@@ -92,7 +92,7 @@ function actionButtons(html, title) {
 
 test('App uses presentation-only active stages; SettingsPanel receives full authoritative stages', () => {
   assert.match(appText, /import\s*\{archiveListState,restoreListState,activeBoardLists\}/);
-  assert.match(appText, /const viewStages=activeBoard\?activeBoardLists\(activeBoard\):stages/);
+  assert.match(appText, /const viewStages=useMemo\(\(\)=>activeBoard\?activeBoardLists\(activeBoard\):stages,\[activeBoard,stages\]\)/);
   assert.match(appText, /data=\{activeBoard\?\{\.\.\.data,stages:activeBoard\.stages\}:data\}/);
   assert.match(appText, /onArchiveList=\{id=>updateBoardListArchive\(id,false\)\}/);
   assert.match(appText, /onRestoreList=\{id=>updateBoardListArchive\(id,true\)\}/);

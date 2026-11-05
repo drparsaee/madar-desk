@@ -158,6 +158,20 @@ test('covers accept only solid HEX colors with fixed size, no URLs or arbitrary 
   assert.equal(coverTextColor('url(https://evil)'), '#152238');
 });
 
+test('full cover always selects foreground with WCAG AA contrast for 6-digit colors',()=>{
+  const luminance=hex=>{
+    const rgb=[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)/255);
+    const values=rgb.map(channel=>channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4);
+    return values[0]*.2126+values[1]*.7152+values[2]*.0722;
+  };
+  const ratio=(a,b)=>{const l=[luminance(a),luminance(b)].sort((x,y)=>y-x);return (l[0]+.05)/(l[1]+.05);};
+  for(const color of ['#000000','#FFFFFF','#808080','#777777','#AAAAAA','#123456',
+    '#00A9BD','#008800','#FF0000','#FFFF00','#DDAAFF','#234567','#5B5B5B']){
+    const foreground=coverTextColor(color);
+    assert.ok(ratio(color,foreground)>=4.5,`${color} ${foreground} contrast ${ratio(color,foreground)}`);
+  }
+});
+
 test('typed field editing preserves values and rejects invalid numbers/dates/options',()=>{
   let task=baseCard();
   for(const [field,value] of [[board.customFields[0],'<script>alert(1)</script>'],

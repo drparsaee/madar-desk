@@ -31,7 +31,7 @@ async function safePort(){
   }
   throw new Error('No browser safe port');
 }
-test('full App reuses disclosure preference, offers Jalali popup, keeps full-cover text readable and archives',
+test('full App compact card keeps drafts, Jalali date, cover readability and archive search',
   {skip:!available,timeout:90000},async()=>{
     const {createServer}=await import('vite');
     const {chromium}=require(playwrightHome);
@@ -58,59 +58,51 @@ test('full App reuses disclosure preference, offers Jalali popup, keeps full-cov
       assert.match(await drawer.locator('.task-editor-location').innerText(),/پروژه تست/);
       assert.equal(await drawer.locator('.task-quick-actions > button:visible').count(),6,
         'five common actions and one More control are visible at first');
-      assert.equal(await drawer.locator('.task-quick-action--extra:visible').count(),0);
+      assert.equal(await drawer.locator('#task-section-description').count(),1);
+      assert.equal(await drawer.locator('#task-section-checklist').count(),1);
+      assert.equal(await drawer.locator('#task-section-attachments').count(),1);
+      assert.equal(await drawer.locator('.task-activity-panel#task-section-reports').count(),1);
+      assert.equal(await drawer.locator('#task-section-cover').count(),0,
+        'cover editor belongs to the board right-click menu, never inside the drawer');
+      assert.equal(await drawer.locator('#task-section-dependencies').count(),0);
       await drawer.getByRole('button',{name:'بیشتر'}).click();
-      assert.equal(await drawer.locator('.task-quick-action--extra:visible').count(),5);
-      await drawer.getByRole('button',{name:'کمتر'}).click();
-      assert.notEqual(await drawer.locator('#task-section-checklist').getAttribute('open'),null,
-        'the checklist is immediately available for a first-time user');
-      await drawer.locator('.task-quick-actions [aria-controls="task-section-checklist"]').click();
-      const newStep=drawer.locator('#task-section-checklist .inline-create input');
-      assert.equal(await newStep.evaluate(node=>node===document.activeElement),true,
-        'one click on checklist should focus the quick-add field');
+      assert.equal(await drawer.locator('.task-more-menu').count(),1);
+      assert.equal(await drawer.locator('.task-more-menu').getByText('ثبت گزارش').count(),0,
+        'report composer stays in the activity column');
+      assert.equal(await drawer.locator('.task-more-menu').getByText('کاور').count(),0);
+      await drawer.getByRole('button',{name:'چک‌لیست',exact:true}).click();
+      const newStep=drawer.getByRole('textbox',{name:'مرحله جدید چک‌لیست'});
+      await newStep.waitFor();
       await newStep.fill('مرحله سریع آزمایشی');
       await newStep.press('Enter');
       await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklist.length===1);
-      await drawer.locator('.task-quick-actions [aria-controls="task-section-description"]').click();
+      assert.equal(await drawer.locator('#task-section-checklist .step-list').getByText('مرحله سریع آزمایشی').count(),1);
+      await drawer.getByRole('button',{name:'چک‌لیست',exact:true}).click();
       const description=drawer.locator('#task-section-description .rich-description textarea');
-      await page.waitForFunction(()=>document.activeElement===document.querySelector('#task-section-description .rich-description textarea'));
-      assert.equal(await description.evaluate(node=>node===document.activeElement),true,
-        'one click on description should focus the writing field');
       await description.fill('توضیح آزمایشی سریع');
       await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].description==='توضیح آزمایشی سریع');
       assert.equal(await drawer.getByRole('textbox',{name:'عنوان کار'}).getAttribute('maxlength'),'300');
-      const orderedIds=['metadata','description','assignees','attachments','checklist','tags',
-        'cover','time','dependencies','reports','accounting','settings'];
-      const actualSections=await drawer.locator('.task-shared-disclosure[id^="task-section-"]')
-        .evaluateAll(items=>items.map(item=>item.id.replace('task-section-','')));
-      assert.deepEqual(actualSections,orderedIds,'actual DOM must match requested section order');
-      const navSections=await drawer.locator('.task-quick-actions button[aria-controls]')
-        .evaluateAll(items=>items.map(item=>item.getAttribute('aria-controls').replace('task-section-','')));
-      assert.deepEqual(navSections,orderedIds.slice(0,10),'toolbar exactly matches ten requested sections');
-      assert.notEqual(await drawer.locator('#task-section-metadata').getAttribute('open'),null,
-        'metadata opens by default so deadline remains accessible');
-      const assignees=drawer.locator('#task-section-assignees');
-      assert.equal(await assignees.getAttribute('open'),null);
-      await assignees.locator('summary').click();
-      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')||'{}').assignees===true);
-      await drawer.locator('#task-section-cover > summary').click();
-      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-card-sections-v1:local')||'{}').cover===true);
+      await drawer.getByRole('button',{name:'چک‌لیست',exact:true}).click();
+      await newStep.fill('مرحله نیمه‌کاره');
+      page.once('dialog',dialog=>dialog.dismiss());
+      await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
+      assert.equal(await drawer.isVisible(),true,'draft must survive dismissal of close confirmation');
+      await drawer.getByRole('button',{name:'چک‌لیست',exact:true}).click();
+      assert.equal(await newStep.inputValue(),'مرحله نیمه‌کاره');
+      page.once('dialog',dialog=>dialog.accept());
       await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
       await page.locator('.task-card .task-title').nth(1).click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
-      assert.notEqual(await drawer.locator('#task-section-assignees').getAttribute('open'),null,
-        'second card inherits the first card disclosure preference');
-      assert.notEqual(await drawer.locator('#task-section-cover').getAttribute('open'),null,
-        'cover disclosure also persists per user across cards');
-      // Clicking the compact deadline box itself opens the small picker.
+      await drawer.getByRole('button',{name:'تاریخ',exact:true}).click();
       await drawer.getByRole('textbox',{name:'موعد انجام'}).click();
       const calendar=page.getByRole('group',{name:'تقویم انتخاب تاریخ'});
       await calendar.waitFor();
       assert.equal(await calendar.locator('.madar-mini-calendar__days button').count(),42);
       await calendar.getByRole('button',{name:'انتخاب 2026-11-05'}).click();
       await calendar.waitFor({state:'hidden'});
-      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[1].dueDate==='2026-11-05');
+      await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview'))
+        .tasks.some(task=>task.id==='card-1'&&task.dueDate==='2026-11-05'));
       await drawer.locator('.drawer-top button[aria-label="بستن"]').click();
       const coverCard=page.locator('.task-card').filter({hasText:'کارت دوم آزمایشی'});
       const bounds=await coverCard.evaluate(card=>{
@@ -123,6 +115,8 @@ test('full App reuses disclosure preference, offers Jalali popup, keeps full-cov
       assert.equal(bounds.hasStripe,false);
       await coverCard.locator('.task-title').click();
       drawer=page.getByRole('dialog',{name:'جزئیات کار'});
+      await drawer.getByRole('button',{name:'بیشتر'}).click();
+      await drawer.getByRole('button',{name:'بایگانی یا حذف'}).click();
       await drawer.getByRole('button',{name:'آرشیو',exact:true}).click();
       await drawer.getByText('کارت بایگانی شود؟',{exact:false}).waitFor();
       await drawer.getByRole('button',{name:'تأیید آرشیو'}).click();

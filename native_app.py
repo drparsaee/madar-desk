@@ -1171,6 +1171,14 @@ class Bridge:
     def _replace_local_state(self, incoming):
         validated = normalize_state(incoming)
         is_valid(validated)
+        # JSON/Drive are tasks-only snapshots, not full-domain recovery.
+        # Validate preserved collaboration, permission and financial identities
+        # before creating any restore backup or changing authoritative data.
+        from project_integrity import ensure_partial_restore_safe
+        ensure_partial_restore_safe(
+            self._load(), validated, collaboration=self._load_collab(),
+            finance=self._load_finance(),
+            accounts=self.lan.users if self.lan else None)
         if self._unified_store is not None:
             current = self._unified_store.load()
             self._replace_local_bundle({**current.bundle, "tasks": validated})
@@ -1763,10 +1771,22 @@ class Bridge:
         state = normalize_state(state)
         is_valid(state)
         prior = self._load()
+        from project_integrity import ensure_project_identity_preserved
+        previous_project_ids = {p["id"] for p in prior["projects"]}
+        next_project_ids = {p["id"] for p in state["projects"]}
+        ensure_project_identity_preserved(
+            prior, state,
+            accounts=accounts if accounts is not None else
+            (self.lan.users if self.lan else None),
+            collaboration=(self._load_collab() if
+                           previous_project_ids - next_project_ids else None))
         # A board edit must not silently sever task/invoice/GL source links.
         # Perform the cross-domain check before any outbox or backup write.
         from finance_reference_guard import ensure_finance_references_preserved
         ensure_finance_references_preserved(prior, state, self._load_finance())
+        # All bounded event computations must finish before the legacy JSON
+        # completion outbox is written. A 3001-event batch must fail atomically.
+        events = card_change_events(prior, state)
         before = {t["id"]: t for t in prior["tasks"]}
         completions = [t for t in state["tasks"] if t["id"] in before
                        and before[t["id"]].get("status") != "done"
@@ -1784,7 +1804,6 @@ class Bridge:
                                 "actor": acting, "at": datetime.now(timezone.utc).isoformat()})
             if self._unified_store is None:
                 atomic_json(self.finance_outbox_path, pending)
-        events = card_change_events(prior, state)
         if events and self._unified_store is None:
             queued = self._pending_automation_events()
             queued.extend({"actor": acting, "command": event} for event in events)

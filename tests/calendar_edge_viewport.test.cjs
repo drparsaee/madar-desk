@@ -54,6 +54,7 @@ test('calendar floats above a narrow drawer, tracks scrolling and scaled card co
       await page.locator('.task-card .task-title').first().click();
       const drawer=page.getByRole('dialog',{name:'جزئیات کار'});
       await drawer.waitFor();
+      await drawer.getByRole('button',{name:'تاریخ',exact:true}).click();
       const deadline=drawer.getByRole('textbox',{name:'موعد انجام'});
       // Use a real pointer click. A formerly sticky quick-actions dock could
       // intercept this field on narrow screens even when DOM click worked.

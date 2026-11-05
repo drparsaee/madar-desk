@@ -135,14 +135,8 @@ class Cumulative110UpgradeTests(unittest.TestCase):
 
 class Cumulative110SourceContract(unittest.TestCase):
     def test_historical_110_builder_is_preserved_and_current_build_advances(self):
-        import madar_update
-        package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-        lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
-        self.assertEqual((package["version"], lock["version"],
-                          lock["packages"][""]["version"], madar_update.CURRENT_VERSION),
-                         ("1.0.13",) * 4)
-        self.assertIn("scripts/build_integrated_v113.py", package["scripts"]["dist:rc"])
-        self.assertEqual(package["scripts"]["dist"], "npm run dist:rc")
+        from tests._current_release_contract import assert_current_release_aligned
+        assert_current_release_aligned(self, ROOT, minimum="1.0.13")
         self.assertTrue(BUILD_110.is_file())
 
     def test_build_refuses_mismatch_without_invoking_binary_build(self):

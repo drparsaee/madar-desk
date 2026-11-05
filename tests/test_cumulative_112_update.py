@@ -45,13 +45,8 @@ class Cumulative112SourceContract(unittest.TestCase):
                 release.validate_source_metadata(package, updater, lock)
 
     def test_one_full_installer_for_accounting_and_task_manager(self):
-        package = json.loads((ROOT / "package.json").read_text(encoding="utf8"))
-        lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf8"))
-        from madar_update import CURRENT_VERSION
-        self.assertEqual((package["version"],lock["version"],
-                          lock["packages"][""]["version"],CURRENT_VERSION),
-                         ("1.0.13",)*4)
-        self.assertIn("build_integrated_v113.py",package["scripts"]["dist:rc"])
+        from tests._current_release_contract import assert_current_release_aligned
+        assert_current_release_aligned(self, ROOT, minimum="1.0.13")
         source = (SCRIPTS / "madar-update.iss").read_text(encoding="utf8")
         self.assertIn('DestDir: "{app}\\versions\\{#MadarVersion}"',source)
         self.assertIn("Madar-Upgrade-Preflight.ps1",source)

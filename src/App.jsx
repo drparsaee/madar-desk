@@ -26,7 +26,6 @@ import {ProfitPeek} from './financeoverview.jsx';
 import {AccountingPanel} from './accounting_panel.jsx';
 import {AccountingWorkspace} from './accounting_workspace.jsx';
 import {RialJournalPanel} from './rial_journal_panel.jsx';
-import {filterTasks} from './searchplus.js';
 import {SearchPlus} from './searchplus.jsx';
 import {searchTaskLocations} from './task_search_results.js';
 import {SearchResultsPanel} from './task_search_results.jsx';
@@ -251,6 +250,14 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   const drawerRef=useRef(null);
   const onCloseRef=useRef(onClose);
   onCloseRef.current=onClose;
+  const draftRef=useRef(null);
+  const requestClose=()=>{
+    if(draftRef.current&&
+      !window.confirm('متن گزارش یا مرحله هنوز ثبت نشده است. بدون ذخیره از کارت خارج شوید؟'))return;
+    onClose();
+  };
+  const requestCloseRef=useRef(requestClose);
+  requestCloseRef.current=requestClose;
   useEffect(()=>{
     const before=document.activeElement;
     const drawer=drawerRef.current;
@@ -265,7 +272,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       }
       if(event.key==='Escape'){
         event.stopPropagation();
-        onCloseRef.current();
+        requestCloseRef.current();
         return;
       }
       if(event.key!=='Tab')return;
@@ -291,6 +298,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   },[api,canManage]);
   const [agent,setAgent]=useState('');
   const [summary,setSummary]=useState('');
+  draftRef.current=Boolean(newStep.trim()||newChecklistName.trim()||summary.trim()||agent.trim());
   const [reportComposerOpen,setReportComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(false);
   const [confirmArchive,setConfirmArchive]=useState(false);
@@ -354,6 +362,9 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   useEffect(()=>{
     if(!quickMenu)return;
     const handleOutside=event=>{
+      // The date picker is portaled to document.body; its buttons still
+      // belong to this quick action. Do not unmount it on pointerdown.
+      if(quickMenu==='date'&&event.target?.closest?.('.madar-mini-calendar'))return;
       if(!quickNavRef.current?.contains(event.target))setQuickMenu(null);
     };
     document.addEventListener('pointerdown',handleOutside,true);
@@ -365,11 +376,11 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     const frame=requestAnimationFrame(()=>jumpToSection(initialSection));
     return()=>cancelAnimationFrame(frame);
   },[initialSection,task.id]);
-  return <div className="drawer-overlay task-editor-overlay" onMouseDown={onClose}><aside ref={drawerRef} tabIndex={-1} className="drawer task-editor-drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
+  return <div className="drawer-overlay task-editor-overlay" onMouseDown={requestClose}><aside ref={drawerRef} tabIndex={-1} className="drawer task-editor-drawer" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="جزئیات کار">
     <div className="drawer-top"><span className="small-overline"><ClipboardCheck size={17}/> جزئیات کار</span><div style={{display:'flex',alignItems:'center',gap:4,marginInlineStart:'auto'}}>
       {onUndo&&<button type="button" onClick={onUndo} className="icon-btn" disabled={!canUndo} title="بازگرداندن ویرایش کارت" aria-label="بازگرداندن ویرایش کارت"><Undo2 size={19}/></button>}
       {onRedo&&<button type="button" onClick={onRedo} className="icon-btn" disabled={!canRedo} title="انجام دوباره ویرایش کارت" aria-label="انجام دوباره ویرایش کارت"><Redo2 size={19}/></button>}
-      <button onClick={onClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div></div>
+      <button onClick={requestClose} className="icon-btn" aria-label="بستن"><X size={21}/></button></div></div>
     <div className="drawer-scroll">
     <div className="task-editor-layout"><div className="task-editor-main">
       <input className="task-edit-title" aria-label="عنوان کار" maxLength={300} value={task.title} disabled={!canEdit} onChange={e=>update({title:e.target.value})}/>
@@ -412,12 +423,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         </div>
         <div className="step-list">{task.checklist.map(step=><ChecklistTaskRow key={step.id} task={task} step={step}
           users={users} calendar={calendar} canEdit={canEdit} canManage={canManage}
-          priceEnabled={priceEnabled} accountView={accountView} onUpdate={update} onOpenPurchase={onOpenPurchase}/>)}</div>
+          priceEnabled={priceEnabled} showCosts={showCosts} accountView={accountView} onUpdate={update} onOpenPurchase={onOpenPurchase}/>)}</div>
         {priceEnabled&&((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))>0&&<div className="step-total">جمع هزینه‌های ثبت‌شده: <strong>{money((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))} تومان</strong></div>}
         {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
       </div>
       {(task.checklists||[]).some(group=>group.id!=='checklist-legacy')&&
-        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} canManage={canManage} accountView={accountView} onOpenPurchase={onOpenPurchase} onChange={update}/></div>}
+        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} canManage={canManage&&showCosts} accountView={accountView} onOpenPurchase={onOpenPurchase} onChange={update}/></div>}
       </section>
       <section className="task-primary-section" id="task-section-attachments" tabIndex={-1} aria-label="فایل‌های کارت">
         <h3><Paperclip size={17}/> فایل‌ها</h3>
@@ -1064,6 +1075,7 @@ export default function App(){
   const toggleTheme=()=>chooseTheme(uiTheme==='dark'?'light':'dark');
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
   const tasks=data?.tasks||[];
+  const allActiveTasks=useMemo(()=>tasks.filter(task=>task.deleted!==true),[tasks]);
   useEffect(()=>{
     if(!pendingQuickCardId)return;
     if(!data?.tasks?.some(task=>task.id===pendingQuickCardId)){
@@ -1084,7 +1096,7 @@ export default function App(){
   },[data,pendingQuickCardId]);
   const projects=data?.projects||[];
   const stages=data?.stages||DEFAULT_STAGES;
-  const priorities=priorityDefs(data?.settings);
+  const priorities=useMemo(()=>priorityDefs(data?.settings),[data?.settings]);
   const boards=data?.boards||[];
   const labelLibrary=useMemo(()=>sharedLabelLibrary(data),[data]);
   const workspaces=data?.workspaces||[];
@@ -1126,7 +1138,7 @@ export default function App(){
     setMode(next);
     saveBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,{mode:next},boardViewColumns);
   };
-  const viewStages=activeBoard?activeBoardLists(activeBoard):stages;
+  const viewStages=useMemo(()=>activeBoard?activeBoardLists(activeBoard):stages,[activeBoard,stages]);
   const canManage=lanStatus?.user?.role==='admin';
   const canViewStandalone=canManage||
     lanStatus?.user?.financeView===true||
@@ -1184,17 +1196,15 @@ export default function App(){
   const boardIndex=useMemo(()=>data?createBoardPerformanceIndex(data,{
     permittedProjectIds:(data.projects||[]).map(p=>p.id)
   }):null,[data]);
-  const filtered=useMemo(()=>{
-    if(!boardIndex)return [];
-    const candidates=boardIndex.selectActiveCards({
-      workspaceId:activeWorkspaceId||'workspace-legacy',
-      projectId:selected==='all'?undefined:selected,
-      boardId:activeBoard?.id,
-      highOnly:filter==='high',withReports:filter==='with-reports'
-    });
-    const found=search.trim()?new Set(filterTasks(candidates,{query:search,projects,users,stages:viewStages}).map(t=>t.id)):null;
-    return candidates.filter(t=>(!found||found.has(t.id))&&matchAdvanced(t,advanced,activeBoard?.id));
-  },[boardIndex,activeWorkspaceId,projects,users,viewStages,selected,activeBoard?.id,search,filter,advanced]);
+  // A single authorized search drives both the board and the global results.
+  // Debounce expensive 10k-card rich-text matching while keeping typing fluid.
+  const [settledSearch,setSettledSearch]=useState('');
+  useEffect(()=>{
+    if(!search.trim()){setSettledSearch('');return;}
+    const timer=setTimeout(()=>setSettledSearch(search),160);
+    return()=>clearTimeout(timer);
+  },[search]);
+  const activeSearch=search.trim()?settledSearch:'';
   // Never infer a search grant from a task. Intersect the host's authenticated
   // profile grants with the already redacted project snapshot.
   const permittedSearchProjects=useMemo(()=>{
@@ -1206,11 +1216,22 @@ export default function App(){
     return projects.filter(project=>allow.has(project.id)).map(project=>project.id);
   },[lanStatus.mode,lanStatus.user?.role,lanStatus.user?.projects,projects]);
   const globalSearch=useMemo(()=>{
-    if(!data||!search.trim())return {results:[],error:null};
-    try{return {results:searchTaskLocations(data,{query:search,
+    if(!data||!activeSearch.trim())return {results:[],error:null};
+    try{return {results:searchTaskLocations(data,{query:activeSearch,
       permittedProjectIds:permittedSearchProjects,users}),error:null};}
     catch(error){return {results:[],error:'جست‌وجوی ایمن انجام نشد: '+error.message};}
-  },[data,search,permittedSearchProjects,users]);
+  },[data,activeSearch,permittedSearchProjects,users]);
+  const filtered=useMemo(()=>{
+    if(!boardIndex)return [];
+    const candidates=boardIndex.selectActiveCards({
+      workspaceId:activeWorkspaceId||'workspace-legacy',
+      projectId:selected==='all'?undefined:selected,
+      boardId:activeBoard?.id,
+      highOnly:filter==='high',withReports:filter==='with-reports'
+    });
+    const found=search.trim()?new Set(globalSearch.results.map(item=>item.id)):null;
+    return candidates.filter(task=>(!found||found.has(task.id))&&matchAdvanced(task,advanced,activeBoard?.id));
+  },[boardIndex,activeWorkspaceId,selected,activeBoard?.id,search,filter,advanced,globalSearch]);
   const boardGroups=useMemo(()=>boardIndex?boardIndex.groupActiveCards({
     workspaceId:activeWorkspaceId||'workspace-legacy',
     projectId:selected==='all'?undefined:selected,
@@ -1442,6 +1463,25 @@ export default function App(){
     }catch(error){setToast('انتقال انجام نشد: '+error.message);}
   };
   const taskUpdate=(id,fields)=>{
+    const originalTask=data.tasks.find(t=>t.id===id);
+    if(originalTask&&fields.projectId&&fields.projectId!==originalTask.projectId){
+      setToast('انتقال کارت به پروژه دیگر تا آماده‌شدن انتقال اتمیک نظرات، دسترسی و اسناد مالی غیرفعال است؛ کارت تغییری نکرد.');
+      return;
+    }
+    // Check a cross-board/project change before scheduling a React state update.
+    // An unmatched custom field must never disappear silently during a move.
+    if(fields.boardId||fields.projectId){
+      const current=data.tasks.find(t=>t.id===id);
+      const destination=fields.projectId&&fields.projectId!==current?.projectId
+        ?data.boards.find(b=>b.projectId===fields.projectId&&!b.archived)
+        :data.boards.find(b=>b.id===(fields.boardId||current?.boardId));
+      if(current&&destination?.id!==current.boardId){
+        try{moveCardToBoard({...current,...fields,boardId:current.boardId},destination,
+          data.stages,data.boards.find(b=>b.id===current.boardId));}
+        catch(error){setToast('انتقال انجام نشد: '+error.message);return;}
+      }
+      if(!destination){setToast('برد مقصد پیدا نشد؛ کارت تغییری نکرد.');return;}
+    }
     const eligible=lanStatus.mode==='solo'&&!blocked.current&&isUndoableCardPatch(fields);
     const actionId=uid();
     change(s=>{
@@ -1459,11 +1499,15 @@ export default function App(){
     if(fields.projectId&&fields.projectId!==t.projectId){
       const board=base.boards?.find(b=>b.projectId===fields.projectId&&!b.archived);
       if(!board)return t;
-      const {cardOrder:oldOrder,...relocated}=moveCardToBoard({...changed,boardId:t.boardId,projectId:fields.projectId},board,base.stages);
+      let relocated;
+      try{const {cardOrder:staleOrder,...transfer}=moveCardToBoard({...changed,boardId:t.boardId,projectId:fields.projectId},board,base.stages,base.boards?.find(b=>b.id===t.boardId));relocated=transfer;}
+      catch{return t;}
       changed={...relocated,updatedAt:changed.updatedAt};
     }else if(fields.boardId&&fields.boardId!==t.boardId){
       const board=base.boards?.find(b=>b.id===fields.boardId);
-      const {cardOrder:oldOrder,...relocated}=moveCardToBoard({...changed,boardId:t.boardId},board,base.stages);
+      let relocated;
+      try{const {cardOrder:staleOrder,...transfer}=moveCardToBoard({...changed,boardId:t.boardId},board,base.stages,base.boards?.find(b=>b.id===t.boardId));relocated=transfer;}
+      catch{return t;}
       changed={...relocated,updatedAt:changed.updatedAt};
     }else if(fields.listId||fields.status){
       const stageBoard=base.boards?.find(b=>b.id===t.boardId);
@@ -1471,6 +1515,7 @@ export default function App(){
     }
     return changed;
     })};
+    if(next.tasks.every((task,index)=>task===base.tasks[index]))return s;
     if(eligible)cardUndo.current=recordCardEdit(cardUndo.current,s,next,id,fields,cardUndoScope,actionId);
     return next;
   },eligible);
@@ -1725,6 +1770,10 @@ export default function App(){
     // accounting journals retain the original legal project association.
     if(tasks.some(t=>t.projectId===projectSettings)){
       setToast('حذف پروژه دارای کارت مجاز نیست؛ کارت‌ها و اسناد مالی آن باید حفظ شوند.');
+      return;
+    }
+    if(lanStatus.mode!=='solo'){
+      setToast('حذف پروژه در حالت شبکه فعلاً مجاز نیست؛ ابتدا باید دسترسی کاربران و تاریخچه همکاری به‌صورت اتمیک بررسی شوند.');
       return;
     }
     const fallback=projects.find(p=>p.id!==projectSettings);
@@ -2227,7 +2276,7 @@ export default function App(){
       </div>
     </Modal>}
     {show('projectFinance')&&financeOpen&&selectedProject&&<FinancePanel api={api} project={selectedProject} tasks={tasks.filter(t=>t.projectId===selectedProject.id)} onClose={()=>setFinanceOpen(false)}/>}
-    {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} stages={viewStages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
+    {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} boards={boards} stages={stages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
     {trashOpen&&<Modal title="زباله‌دان کارت‌ها" width={680} onClose={()=>setTrashOpen(false)}>
       <div className="dialog-body">
         <p className="board-info-note">حذف دائمی انجام نمی‌شود. کارت، هزینه‌ها، فاکتورها و پیوست‌ها با شناسه اصلی نگهداری می‌شوند.</p>
@@ -2259,12 +2308,12 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={tasks.filter(t=>t.deleted!==true)} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
 
     {projectModal&&<Modal title="پروژه جدید" onClose={()=>setProjectModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثلاً: برنامه‌های شخصی" required/></label><div className="form-footer"><button className="btn secondary" type="button" onClick={()=>setProjectModal(false)}>انصراف</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Plus size={17}/> ساخت پروژه</button></div></form></Modal>}
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
-    {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه حذف شود؟ کارهایش به پروژه دیگری منتقل خواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
+    {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه خالی حذف شود؟ کارتها و اسناد مالی منتقل نخواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
     {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}

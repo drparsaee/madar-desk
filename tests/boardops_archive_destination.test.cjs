@@ -27,18 +27,23 @@ const card = Object.freeze({
   labelIds: ['label-1']
 });
 function target(stages) {
-  return {id: 'board-target', projectId: 'project-1', archived: false, stages};
+  return {id: 'board-target', projectId: 'project-1', archived: false, stages,
+    labelDefinitions:[{id:'label-2',name:'بازبینی'}],customFields:[{id:'custom2',name:'جزئیات',type:'text'}]};
 }
 
 test('cross-board move skips archived first list and retains financial records', () => {
   const board = target([{id: 'inbox', archived: true}, {id: 'review', archived: false}]);
-  const moved = moveCardToBoard(card, board, stages);
+  const moved = moveCardToBoard(card, board, stages,
+    {id:'board-origin',labelDefinitions:[{id:'label-1',name:'بازبینی'}],
+      customFields:[{id:'custom',name:'جزئیات',type:'text'}]});
   assert.equal(moved.boardId, 'board-target');
   assert.equal(moved.listId, 'review');
   assert.equal(moved.status, 'review');
   assert.equal(moved.cost, card.cost);
   assert.equal(moved.invoiceId, card.invoiceId);
   assert.deepEqual(moved.checklist, card.checklist);
+  assert.deepEqual(moved.labelIds,['label-2']);
+  assert.deepEqual(moved.customFieldValues,{custom2:'data'});
   assert.equal(card.boardId, 'board-origin');
   assert.equal(card.listId, 'inbox');
 });

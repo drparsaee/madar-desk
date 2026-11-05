@@ -2,11 +2,15 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const path=require('node:path');
+const fs=require('node:fs');
 const {measureRenderedContrast,resolveRenderedContrast,pageMetrics}=
   require('../scripts/madar_ux_completion_audit_20261103.cjs');
 
 const playwright=process.env.MADAR_UXQA_PLAYWRIGHT||
-  path.join(process.env.APPDATA||'','npm','node_modules','playwright');
+  [path.resolve(__dirname,'../node_modules/playwright'),
+    path.join(process.env.APPDATA||'','npm','node_modules','playwright'),
+    path.join(process.env.USERPROFILE||'','AppData','Roaming','npm','node_modules','playwright')]
+    .find(candidate=>fs.existsSync(path.join(candidate,'package.json')))||'playwright';
 
 test('actual Chromium glyph-background raster: gradients, overlays, alpha, scrolling and fail-closed cases',
   {timeout:90000},async t=>{

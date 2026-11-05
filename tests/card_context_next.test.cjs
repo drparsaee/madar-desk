@@ -23,7 +23,7 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       "import {CardContextMenu} from './src/card_context_menu.jsx';",
       "window.events=[];",
       "function App(){const [request,setRequest]=useState(null);const [canEdit,setCanEdit]=useState(true);const [card,setCard]=useState({id:'synthetic-1',title:'کارت آزمایشی',cover:null});",
-      "window.setEdit=setCanEdit;return <><div id='card' role='button' onContextMenu={e=>{e.preventDefault();setRequest({id:Date.now(),cardId:'synthetic-1',title:'کارت آزمایشی',x:e.clientX,y:e.clientY});}}>Card</div>",
+      "window.setEdit=setCanEdit;return <><div id='card' role='button' tabIndex={0} onContextMenu={e=>{e.preventDefault();setRequest({id:Date.now(),cardId:'synthetic-1',title:'کارت آزمایشی',x:e.clientX,y:e.clientY});}}>Card</div>",
       "<CardContextMenu request={request} task={card} canEdit={canEdit} onClose={()=>setRequest(null)}",
       "onOpen={id=>window.events.push('open:'+id)} onArchive={id=>window.events.push('archive:'+id)}",
       "onDelete={id=>window.events.push('delete:'+id)} onDuplicate={id=>window.events.push('copy:'+id)}",
@@ -41,8 +41,22 @@ test('real card context opens by mouse, archives only for editors, dismisses on 
       await page.setContent('<style>#card{width:320px;height:100px;background:#eee}.madar-card-context-menu{position:fixed;width:240px;background:white;border:1px solid black}.madar-card-context-menu button{display:block}</style><div id="root"></div>');
       await page.addScriptTag({content:js});
       await page.locator('#card').waitFor();
+      await page.locator('#card').focus();
       await page.mouse.click(80,45,{button:'right'});
       const menu=page.getByRole('menu',{name:'عملیات کارت کارت آزمایشی'});
+      await menu.waitFor({state:'visible'});
+      await page.waitForFunction(()=>document.activeElement?.getAttribute('role')==='menuitem');
+      assert.match(await page.evaluate(()=>document.activeElement.textContent),/بازکردن کارت/);
+      await page.keyboard.press('ArrowDown');
+      assert.match(await page.evaluate(()=>document.activeElement.textContent),/برچسب/);
+      await page.keyboard.press('Home');
+      assert.match(await page.evaluate(()=>document.activeElement.textContent),/بازکردن کارت/);
+      await page.keyboard.press('End');
+      assert.match(await page.evaluate(()=>document.activeElement.textContent),/حذف کارت/);
+      await page.keyboard.press('Escape');
+      await menu.waitFor({state:'hidden'});
+      assert.equal(await page.evaluate(()=>document.activeElement?.id),'card');
+      await page.mouse.click(80,45,{button:'right'});
       await menu.waitFor({state:'visible'});
       await menu.getByRole('menuitem',{name:'ویرایش برچسب‌ها'}).click();
       assert.deepEqual(await page.evaluate(()=>window.events),['section:tags:synthetic-1']);

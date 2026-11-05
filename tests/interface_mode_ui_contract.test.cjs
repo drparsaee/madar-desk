@@ -93,8 +93,17 @@ test('today: card cost and card-editor finance fields retain their admin guards'
   assert.ok(guardContains(costToggle,/\bcanManage\b/));
   const directCost=exactOne('h3',/هزینه مستقیم کار/);
   assert.ok(guardContains(directCost,/\bpriceEnabled\b/));
-  const checklistCost=exactOne('div',/className="step-cost-fields"/);
-  assert.ok(guardContains(checklistCost,/\bpriceEnabled\b/));
+  // The old inline step-cost-fields form was replaced by a dedicated
+  // ChecklistTaskRow. Assert the current finance gate at the component
+  // boundary and in its own source instead of requiring removed markup.
+  const checklistCost=exactOne('ChecklistTaskRow');
+  assert.match(checklistCost.opening,/priceEnabled=\{priceEnabled\}/);
+  assert.match(checklistCost.opening,/showCosts=\{showCosts\}/);
+  assert.match(checklistCost.opening,/canManage=\{canManage\}/);
+  const stepSource=fs.readFileSync(path.resolve(__dirname,'../src/checklist_task_row.jsx'),'utf8');
+  assert.match(stepSource,/canManage&&showCosts&&<button/);
+  assert.match(stepSource,/menu==='cost'&&canManage&&showCosts/);
+  assert.match(exactOne('CardChecklists').opening,/canManage=\{canManage&&showCosts\}/);
   const total=exactOne('div',/className="step-total"/);
   assert.ok(guardContains(total,/\bpriceEnabled\b/));
   assert.match(exactOne('TaskCard').opening,/canManage=\{canManage\}/);
@@ -217,7 +226,7 @@ test('integration: finance cost widgets gated by both role and the finance displ
   }
   for(const element of [exactOne('div',/className="card-cost"/),
                         exactOne('h3',/تنظیمات هزینه همین کارت/),
-                        exactOne('div',/className="step-cost-fields"/)]){
+                        exactOne('ChecklistTaskRow')]){
     // A feature-tier string may reach this component through props or local guard.
     const componentStart=app.lastIndexOf('function ',element.start);
     const componentSegment=app.slice(componentStart,element.end);

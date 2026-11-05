@@ -116,7 +116,7 @@
   color: var(--card-cover-contrast,#152238);
 }
 .kanban .task-card--cover-full .task-footer { border-top-color: #0000002c; }
-.kanban .task-card--cover-full .task-description { opacity: .82; }
+.kanban .task-card--cover-full .task-description { opacity: 1; }
 /* General dark-mode card backgrounds and priority effects must not repaint
    the user's explicit solid cover. Applies to the entire card, not its header. */
 :root[data-theme="dark"] .kanban .task-card.task-card--cover-full,

@@ -144,7 +144,16 @@ export function coverTextColor(hex){
     return channel<=.04045?channel/12.92:Math.pow((channel+.055)/1.055,2.4);
   });
   const lum=.2126*r+.7152*g+.0722*b;
-  return lum>.24?'#142236':'#FFFFFF';
+  const dark='#142236';
+  const linear=channel=>{
+    const value=channel/255;
+    return value<=.04045?value/12.92:Math.pow((value+.055)/1.055,2.4);
+  };
+  const darkLum=.2126*linear(0x14)+.7152*linear(0x22)+.0722*linear(0x36);
+  // WCAG AA normal text: avoid unreadable white on mid-grey covers.
+  // The dark accent is retained when it passes; black is the safe fallback.
+  if(1.05/(lum+.05)>=4.5)return '#FFFFFF';
+  return (lum+.05)/(darkLum+.05)>=4.5?dark:'#000000';
 }
 
 export function editCardFieldValues(task, field, value) {

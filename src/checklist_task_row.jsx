@@ -10,7 +10,7 @@ import './checklist_task_row.css';
 const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 
 export function ChecklistTaskRow({task,step,users,calendar,canEdit,canManage,priceEnabled,
-    accountView,onUpdate,onOpenPurchase}){
+    showCosts=true,accountView,onUpdate,onOpenPurchase}){
   const [menu,setMenu]=useState('');
   const [editing,setEditing]=useState(false);
   const [text,setText]=useState(step.text);
@@ -41,7 +41,7 @@ export function ChecklistTaskRow({task,step,users,calendar,canEdit,canManage,pri
           onClick={()=>open('date')}><Clock3 size={16}/>{step.dueDate&&<span className="task-checklist-item__dot"/>}</button>
         <button type="button" title="مسئول مرحله" aria-label={'مسئول '+step.text} aria-expanded={menu==='members'}
           onClick={()=>open('members')}><Users size={16}/></button>
-        {canManage&&<button type="button" title="هزینه و طرف حساب" aria-label={'هزینه '+step.text}
+        {canManage&&showCosts&&<button type="button" title="هزینه و طرف حساب" aria-label={'هزینه '+step.text}
           aria-expanded={menu==='cost'} onClick={()=>open('cost')}><Wallet size={16}/>{paid&&<span className="task-checklist-item__dot"/>}</button>}
         <button type="button" title="گزینه‌های بیشتر" aria-label={'بیشتر '+step.text} aria-expanded={menu==='more'}
           onClick={()=>open('more')}><Ellipsis size={17}/></button>
@@ -56,7 +56,7 @@ export function ChecklistTaskRow({task,step,users,calendar,canEdit,canManage,pri
       </>}
       {menu==='members'&&<AssigneeSelector value={assigned} users={users} projectId={task.projectId}
         disabled={!canEdit} onChange={assignees=>patch({assignees})}/>}
-      {menu==='cost'&&<div className="task-checklist-item__cost">
+      {menu==='cost'&&canManage&&showCosts&&<div className="task-checklist-item__cost">
         {priceEnabled&&<div className="task-checklist-item__fields">
           <label>مبلغ هزینه (تومان)<MoneyField value={step.cost||0} disabled={!canEdit}
             label={'هزینه مرحله '+step.text} onChange={cost=>patch({cost,costDate:step.costDate||(cost?todayISO():'')})}/></label>

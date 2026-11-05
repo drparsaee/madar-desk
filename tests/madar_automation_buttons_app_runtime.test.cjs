@@ -144,10 +144,11 @@ async function openCardInline(page,width,{supported}){
   await page.getByRole('button',{name:'جزئیات کارت نمونه اتوماسیون'}).click();
   const drawer=page.getByRole('dialog',{name:'جزئیات کار'});
   await drawer.waitFor({state:'visible'});
-  // Both per-card and per-board actions live in the task Settings disclosure.
+  // The compact editor keeps uncommon actions under More > Advanced settings.
+  await drawer.getByRole('button',{name:'بیشتر',exact:true}).click();
+  await drawer.getByRole('button',{name:'تنظیمات پیشرفته'}).click();
   const cardSettings=drawer.locator('#task-section-settings');
-  if(await cardSettings.getAttribute('open')===null)
-    await cardSettings.locator(':scope > summary').click();
+  await cardSettings.waitFor({state:'visible'});
   const cardLauncher=cardSettings.locator('.ab-launcher').filter({hasText:'دکمه‌های کارت'});
   await cardLauncher.click();
   const panel=drawer.getByRole('region',{name:'دکمه‌های اتوماسیون مدار'});

@@ -12,9 +12,12 @@ const safeText=value=>String(value??'').slice(0,10000);
 export const reportRows=(tasks=[],projects=[],stages=[],options={})=>{
   const projectName=new Map(projects.map(p=>[p.id,p.name]));
   const stageName=new Map(stages.map(s=>[s.id,s.label]));
+  const boardById=new Map((options.boards||[]).map(board=>[board.id,board]));
   const start=dateKey(options.start||''),end=dateKey(options.end||'');
-  return tasks.filter(t=>!t.archived).filter(t=>{
+  return tasks.filter(t=>!t.archived&&!t.deleted&&projectName.has(t.projectId)).filter(t=>{
     if(options.projectId&&t.projectId!==options.projectId)return false;
+    if(options.boardId&&t.boardId!==options.boardId)return false;
+    if(options.member&&!(t.assignees||[]).includes(options.member))return false;
     if(options.priority&&options.priority!=='all'&&t.priority!==options.priority)return false;
     const when=dateKey(t.dueDate||t.createdAt);
     if(start&&(!when||when<start))return false;
@@ -23,8 +26,12 @@ export const reportRows=(tasks=[],projects=[],stages=[],options={})=>{
   }).map(t=>{
     const count=(t.checklist||[]).length;
     const done=(t.checklist||[]).filter(item=>item.done).length;
-    return {id:safeText(t.id),title:safeText(t.title),project:safeText(projectName.get(t.projectId)||'نامشخص'),
-      status:safeText(stageName.get(t.listId)||stageName.get(t.status)||t.status),
+    const board=boardById.get(t.boardId);
+    const localStage=board?.stages?.find(stage=>stage.id===t.listId);
+    return {id:safeText(t.id),title:safeText(t.title),projectId:t.projectId,
+      project:safeText(projectName.get(t.projectId)||'نامشخص'),
+      boardId:t.boardId||'',board:safeText(board?.name||''),
+      status:safeText(localStage?.label||stageName.get(t.listId)||stageName.get(t.status)||t.status),
       // Explicit card completion must count without moving a list/status:
       // stage transitions can trigger separate financial processing.
       completed:taskIsCompleted(t),
@@ -45,9 +52,10 @@ export const summarizeRows=rows=>{
     result.actualMinutes+=row.actualMinutes;
     result.completedSteps+=row.completedSteps;
     result.totalSteps+=row.checklistCount;
-    const group=groups.get(row.project)||{name:row.project,count:0,estimate:0,actual:0};
+    const projectId=row.projectId||row.project;
+    const group=groups.get(projectId)||{id:projectId,name:row.project,count:0,estimate:0,actual:0};
     group.count++;group.estimate+=row.estimatedMinutes;group.actual+=row.actualMinutes;
-    groups.set(row.project,group);
+    groups.set(projectId,group);
   }
   result.byProject=[...groups.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
   return result;
@@ -59,8 +67,8 @@ const csvCell=value=>{
   return '"'+text.replace(/"/g,'""')+'"';
 };
 export const taskReportCsv=rows=>{
-  const names=['عنوان','پروژه','مرحله','اولویت','تاریخ ایجاد','سررسید','برآورد دقیقه','واقعی دقیقه','درصد مراحل','مسئولان','برچسب‌ها'];
-  const keys=['title','project','status','priority','createdAt','dueDate','estimatedMinutes','actualMinutes','progress','assignees','labels'];
+  const names=['عنوان','پروژه','برد','مرحله','اولویت','تاریخ ایجاد','سررسید','برآورد دقیقه','واقعی دقیقه','درصد مراحل','مسئولان','برچسب‌ها'];
+  const keys=['title','project','board','status','priority','createdAt','dueDate','estimatedMinutes','actualMinutes','progress','assignees','labels'];
   return '\ufeff'+[names,...rows.map(row=>keys.map(k=>row[k]))].map(values=>values.map(csvCell).join(',')).join('\r\n')+'\r\n';
 };
 export const timelineBuckets=rows=>Object.entries(rows.filter(x=>x.dueDate).reduce((all,row)=>{

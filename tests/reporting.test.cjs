@@ -68,3 +68,25 @@ test('CSV escapes formula payloads, quotes and never includes finance',()=>{
   assert.doesNotMatch(csv,/999999|privateFinance|secret|هزینه|سود/);
   assert.match(csv, /\r\n/);
 });
+test('cross-board reporting uses each card local list, not the currently selected board list',()=>{
+ const boards=[
+   {id:'b1',name:'پیش‌ازچاپ',projectId:'p1',stages:[{id:'check',label:'بررسی فایل'}]},
+   {id:'b2',name:'تولید',projectId:'p2',stages:[{id:'cut',label:'برش نهایی'}]}];
+ const cards=[
+   {id:'first',title:'A',projectId:'p1',boardId:'b1',listId:'check',status:'active'},
+   {id:'second',title:'B',projectId:'p2',boardId:'b2',listId:'cut',status:'active'}];
+ const rows=reportRows(cards,projects,stages,{boards});
+ assert.deepEqual(rows.map(item=>item.status),['بررسی فایل','برش نهایی']);
+ assert.deepEqual(rows.map(item=>item.board),['پیش‌ازچاپ','تولید']);
+ assert.deepEqual(reportRows(cards,projects,stages,{boards,boardId:'b2'}).map(item=>item.id),['second']);
+});
+
+test('identically named projects remain different stable project identities in KPI',()=>{
+ const sameNames=[{id:'p1',name:'سفارشات'},{id:'p2',name:'سفارشات'}];
+ const cards=[{id:'a',title:'A',projectId:'p1',status:'active',estimatedMinutes:12},
+   {id:'b',title:'B',projectId:'p2',status:'done',estimatedMinutes:25}];
+ const summary=summarizeRows(reportRows(cards,sameNames,stages));
+ assert.equal(summary.tasks,2);
+ assert.equal(summary.byProject.length,2);
+ assert.deepEqual(summary.byProject.map(group=>group.id).sort(),['p1','p2']);
+});

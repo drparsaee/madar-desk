@@ -154,7 +154,7 @@ button{border:0}
 .project-tiny{display:flex;gap:6px;align-items:center;color:#8290a4;font-size:10px}
 .project-tiny i{width:7px;height:7px;border-radius:2px;flex:none}
 .task-title{font-size:12.5px;color:#304057;font-weight:760;line-height:1.55;overflow-wrap:anywhere;margin-bottom:5px}
-.task-description{font-size:10.5px;line-height:1.6;color:#9aa5b6;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.task-description{font-size:10.5px;line-height:1.6;color:var(--text-muted,#536781);margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tags{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
 .tag{display:inline-flex;gap:4px;align-items:center;border-radius:6px;padding:4px 8px;background:#edf2fb;color:#7b8eaf;font-size:10px}
 .progress-block{padding:6px 0 4px}

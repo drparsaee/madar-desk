@@ -70,8 +70,13 @@ export function CalendarField({value,onChange,calendar='jalali',disabled=false,l
      const viewport=window.visualViewport;
      const leftEdge=(viewport?.offsetLeft||0)+8;
      const topEdge=(viewport?.offsetTop||0)+8;
-     const rightEdge=leftEdge+(viewport?.width||window.innerWidth)-16;
-     const bottomEdge=topEdge+(viewport?.height||window.innerHeight)-16;
+     // visualViewport measurements can briefly lag window.innerHeight during
+     // Playwright/OS window resizing. Never position beyond the *smaller*
+     // viewport or the portaled calendar can become unreachable on mobile.
+     const rightEdge=Math.min(window.innerWidth-8,
+       leftEdge+Math.min(viewport?.width||window.innerWidth,window.innerWidth)-16);
+     const bottomEdge=Math.min(window.innerHeight-8,
+       topEdge+Math.min(viewport?.height||window.innerHeight,window.innerHeight)-16);
      const width=Math.max(0,Math.min(280,rightEdge-leftEdge));
      const height=Math.max(0,bottomEdge-topEdge);
      menu.style.width=width+'px';
@@ -95,16 +100,19 @@ export function CalendarField({value,onChange,calendar='jalali',disabled=false,l
    }
    // Capture scrolling on nested drawers and panels, not just the page.
    window.addEventListener('scroll',place,true);
-   window.addEventListener('resize',place);
-   window.visualViewport?.addEventListener('resize',place);
+   let resizeFrame=0;
+   const resize=()=>{place();cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(place);};
+   window.addEventListener('resize',resize);
+   window.visualViewport?.addEventListener('resize',resize);
    window.visualViewport?.addEventListener('scroll',place);
    const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(place):null;
    resizeObserver?.observe(anchor);
    resizeObserver?.observe(menu);
    return()=>{
      window.removeEventListener('scroll',place,true);
-     window.removeEventListener('resize',place);
-     window.visualViewport?.removeEventListener('resize',place);
+     cancelAnimationFrame(resizeFrame);
+     window.removeEventListener('resize',resize);
+     window.visualViewport?.removeEventListener('resize',resize);
      window.visualViewport?.removeEventListener('scroll',place);
      resizeObserver?.disconnect();
    };

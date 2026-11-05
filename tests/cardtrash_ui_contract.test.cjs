@@ -109,8 +109,8 @@ test('normal board, reporting, planner, suggestions and card editor exclude dele
   assert.match(appText,/ReportingPanel tasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
   assert.match(appText,/PlannerPanel tasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
   assert.match(appText,/className="lane-quick-add"/);
-  assert.match(appText,/allTasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
-  assert.match(appText,/allTasks=\{tasks\.filter\(t=>t\.deleted!==true\)\}/);
+  assert.match(appText,/const allActiveTasks=useMemo\(\(\)=>tasks\.filter\(task=>task\.deleted!==true\),\[tasks\]\)/);
+  assert.match(appText,/allTasks=\{allActiveTasks\}/);
 });
 
 test('Trash sidebar opens the modal and only deleted project/workspace cards are enumerated',()=>{

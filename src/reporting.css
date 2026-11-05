@@ -4,7 +4,7 @@
 .reporting-panel>header h2{font-size:19px;display:flex;align-items:center;gap:9px;margin:4px 0}.reporting-panel>header small{opacity:.6}
 .reporting-panel>header button{background:transparent;color:inherit;border:0;cursor:pointer}
 .reporting-content{overflow:auto;padding:19px 24px;display:grid;gap:18px}
-.reporting-filter{display:grid;grid-template-columns:1.5fr 1fr 1fr .85fr;gap:9px}
+.reporting-filter{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 .reporting-filter label{display:grid;gap:6px;font-size:12px}.reporting-filter select,.reporting-filter input{width:100%;min-width:0;border:1px solid var(--border,#dce3ed);background:var(--surface,#fff);color:inherit;border-radius:9px;padding:9px;font:inherit}
 .reporting-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .reporting-stats article{background:var(--background,#f5f7fa);padding:14px;border-radius:10px;display:grid;gap:9px}.reporting-stats strong{font-size:16px}.reporting-stats small{opacity:.68}

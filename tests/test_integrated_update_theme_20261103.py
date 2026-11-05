@@ -61,7 +61,8 @@ class IntegratedUpdaterTests(unittest.TestCase):
     def test_deferred_install_revalidates_file_and_waits_for_host_exit(self):
         with tempfile.TemporaryDirectory() as folder:
             payload = b"MZ" + b"fixture" * 85
-            version = "1.0.14"
+            major, minor, patch_version = madar_update.version_tuple(madar_update.CURRENT_VERSION)
+            version = f"{major}.{minor}.{patch_version + 1}"
             name = f"Madar-Desk-{version}-Setup.exe"
             file = Path(folder) / name
             file.write_bytes(payload)

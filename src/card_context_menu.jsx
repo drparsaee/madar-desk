@@ -8,6 +8,9 @@ import {CardCover} from './cardextras.jsx';
 export function CardContextMenu({request,task,onClose,onOpen,onOpenSection,onCoverChange,onDuplicate,onArchive,onDelete,
   onToggleComplete,canEdit=false}) {
   const panel=useRef(null);
+  const returnFocus=useRef(null);
+  const closeRef=useRef(onClose);
+  closeRef.current=onClose;
   const [position,setPosition]=useState(null);
   const [pendingDanger,setPendingDanger]=useState(null);
   const [coverOpen,setCoverOpen]=useState(false);
@@ -19,24 +22,42 @@ export function CardContextMenu({request,task,onClose,onOpen,onOpenSection,onCov
   },[request,coverOpen]);
   useEffect(()=>{
     if(!request)return;
+    returnFocus.current=document.activeElement;
+    const focusFrame=requestAnimationFrame(()=>panel.current?.querySelector('[role="menuitem"]')?.focus());
     const close=event=>{
       if(event.type==='keydown'&&event.key==='Escape'){
-        event.preventDefault();event.stopPropagation();onClose();return;
+        event.preventDefault();event.stopPropagation();closeRef.current();return;
       }
-      if(event.type==='pointerdown'&&!panel.current?.contains(event.target))onClose();
-      if(event.type==='scroll'&&!panel.current?.contains(event.target))onClose();
+      if(event.type==='keydown'&&['ArrowDown','ArrowUp','Home','End'].includes(event.key)
+        &&panel.current?.contains(document.activeElement)
+        &&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){
+        const choices=Array.from(panel.current.querySelectorAll('[role="menuitem"]'))
+          .filter(item=>!item.disabled&&item.getClientRects().length);
+        if(choices.length){
+          event.preventDefault();event.stopPropagation();
+          const current=choices.indexOf(document.activeElement);
+          const target=event.key==='Home'?0:event.key==='End'?choices.length-1:
+            (current+(event.key==='ArrowDown'?1:-1)+choices.length)%choices.length;
+          choices[target].focus();return;
+        }
+      }
+      if(event.type==='pointerdown'&&!panel.current?.contains(event.target))closeRef.current();
+      if(event.type==='scroll'&&!panel.current?.contains(event.target))closeRef.current();
     };
     document.addEventListener('pointerdown',close,true);
     document.addEventListener('keydown',close,true);
     document.addEventListener('scroll',close,true);
-    window.addEventListener('resize',onClose);
+    const resize=()=>closeRef.current();
+    window.addEventListener('resize',resize);
     return()=>{
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener('pointerdown',close,true);
       document.removeEventListener('keydown',close,true);
       document.removeEventListener('scroll',close,true);
-      window.removeEventListener('resize',onClose);
+      window.removeEventListener('resize',resize);
+      if(returnFocus.current?.isConnected)returnFocus.current.focus();
     };
-  },[request,onClose]);
+  },[request?.id]);
   if(!request)return null;
   return createPortal(<div ref={panel} role="menu" aria-label={'عملیات کارت '+request.title}
     className={'madar-card-context-menu'+(coverOpen?' madar-card-context-menu--cover':'')} dir="rtl"
