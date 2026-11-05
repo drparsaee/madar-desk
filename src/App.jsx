@@ -416,7 +416,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
       </div>
       {(task.checklists||[]).some(group=>group.id!=='checklist-legacy')&&
-        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} onChange={update}/></div>}
+        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} canManage={canManage} accountView={accountView} onOpenPurchase={onOpenPurchase} onChange={update}/></div>}
       </section>
       <section className="task-primary-section" id="task-section-attachments" tabIndex={-1} aria-label="فایل‌های کارت">
         <h3><Paperclip size={17}/> فایل‌ها</h3>

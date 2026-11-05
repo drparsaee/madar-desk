@@ -30,3 +30,25 @@ test('sales card has compact quantity and a single invoice action with no extran
   const css=fs.readFileSync(path.join(root,'src/order_finance_fields.css'),'utf8');
   assert.match(css,/order-sale-fields__quantity input\{[^}]*max-width:96px/);
 });
+
+test('historical stage expense prices render with their recorded currency without reinterpretation',()=>{
+  const entry=path.join(root,'src/order_finance_fields.jsx');
+  const built=esbuild.buildSync({entryPoints:[entry],platform:'node',bundle:true,format:'cjs',write:false,
+    loader:{'.css':'empty'},external:['react','react/jsx-runtime','react-dom','lucide-react']}).outputFiles[0].text;
+  const moduleInstance=new Module(entry,module);
+  moduleInstance.filename=entry;
+  moduleInstance.paths=Module._nodeModulePaths(path.dirname(entry));
+  moduleInstance._compile(built,entry);
+  const {StageExpenseFields}=moduleInstance.exports;
+  const step={id:'step-1',text:'آماده‌سازی',expenseItems:[
+    {id:'older',description:'هزینه قدیمی',partyId:'v1',quantity:2,unitPrice:1200,currency:'TOMAN'},
+    {id:'newer',description:'هزینه جدید',partyId:'v1',quantity:1,unitPrice:25000,currency:'RIAL'},
+    {id:'pending',description:'قیمت نامشخص',partyId:'v1',quantity:1,unitPrice:null,currency:'RIAL'}]};
+  const html=renderToStaticMarkup(React.createElement(StageExpenseFields,{
+    task:{checklist:[step]},step,parties:[{id:'v1',name:'تأمین‌کننده تستی',kind:'vendor'}],
+    canEdit:false,accountReady:true,onUpdate:()=>{},onPrepare:()=>{}}));
+  assert.match(html,/1200 تومان/);
+  assert.match(html,/25000 ریال/);
+  assert.match(html,/در انتظار قیمت/);
+  assert.doesNotMatch(html,/1200 ریال/);
+});

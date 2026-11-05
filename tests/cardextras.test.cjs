@@ -120,6 +120,28 @@ test('named checklist item can carry its own assignee and due date without modif
   assert.throws(()=>editCardChecklists(source,{type:'patch-item',groupId:'independent',itemId:'i1',changes:{dueDate:'bad-date'}}));
 });
 
+test('named checklist can add independent expense without changing legacy finance or losing paid history',()=>{
+  const source={...baseCard(),checklists:[...baseCard().checklists,
+    {id:'production',name:'Production',items:[{id:'s1',text:'Print',done:false,cost:0}]}]};
+  const expenses=[{id:'expense.synthetic-named',partyId:'vendor-1',description:'Print delivery',
+    quantity:2,unitPrice:100000,currency:'RIAL'}];
+  const original=JSON.stringify(source);
+  const patch=editCardChecklists(source,{type:'set-expenses',groupId:'production',itemId:'s1',expenseItems:expenses});
+  assert.equal(JSON.stringify(source),original);
+  assert.deepEqual(patch.checklist,source.checklist);
+  assert.deepEqual(patch.checklists[1].items[0].expenseItems,expenses);
+  expenses[0].description='External mutation';
+  assert.equal(patch.checklists[1].items[0].expenseItems[0].description,'Print delivery');
+  const persisted={...source,...patch};
+  assert.throws(()=>editCardChecklists(persisted,{type:'remove-item',groupId:'production',itemId:'s1'}),/هزینه/);
+  assert.throws(()=>editCardChecklists(persisted,{type:'remove-group',groupId:'production'}),/هزینه/);
+  assert.throws(()=>editCardChecklists(persisted,{type:'set-expenses',groupId:'checklist-legacy',itemId:'a',expenseItems:[]}),/اصلی/);
+  assert.throws(()=>editCardChecklists(persisted,{type:'set-expenses',groupId:'production',itemId:'s1',expenseItems:[
+    {id:'bad',partyId:'',description:'x',quantity:1,unitPrice:1,currency:'RIAL'}]}),/نامعتبر/);
+  assert.equal(renderToStaticMarkup(React.createElement(CardChecklists,{task:persisted,hideLegacy:true,canManage:false,onChange:()=>{}})).includes('هزینه Print'),false);
+  assert.match(renderToStaticMarkup(React.createElement(CardChecklists,{task:persisted,hideLegacy:true,canManage:true,onChange:()=>{}})),/هزینه Print/);
+});
+
 test('covers accept only solid HEX colors with fixed size, no URLs or arbitrary CSS',()=>{
   assert.deepEqual(normalizeCover({type:'color',color:'#cA9b11',size:'strip'}),
     {type:'color',color:'#CA9B11',size:'strip'});

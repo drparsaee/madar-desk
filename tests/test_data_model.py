@@ -323,6 +323,28 @@ class ValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     normalize_plus(bad)
 
+    def test_named_expenses_validate_financial_identity_across_legacy_and_named_groups(self):
+        state = normalize_plus(legacy())
+        task = state["tasks"][0]
+        expense = {"id": "named.source.1", "description": "Print", "partyId": "vendor.1",
+                   "quantity": 2, "unitPrice": 1500, "currency": "RIAL"}
+        task["checklists"].append({"id": "named", "name": "Named", "items": [
+            {"id": "named-step", "text": "Work", "done": False,
+             "cost": 0, "expenseItems": [copy.deepcopy(expense)]}]})
+        self.assertTrue(validate_plus(state))
+        malformed = copy.deepcopy(state)
+        malformed["tasks"][0]["checklists"][-1]["items"][0]["expenseItems"][0]["unitPrice"] = "1500"
+        with self.assertRaisesRegex(ValueError, "unitPrice"):
+            validate_plus(malformed)
+        duplicated = copy.deepcopy(state)
+        duplicated["tasks"][0]["checklist"][0]["expenseItems"] = [copy.deepcopy(expense)]
+        # The compatibility mirror may hold the same legacy source; that alone is not a duplicate.
+        duplicated["tasks"][0]["checklists"][0]["items"][0]["expenseItems"] = [copy.deepcopy(expense)]
+        with self.assertRaisesRegex(ValueError, "duplicate id"):
+            validate_plus(duplicated)
+        duplicated["tasks"][0]["checklists"][-1]["items"][0]["expenseItems"] = []
+        self.assertTrue(validate_plus(duplicated))
+
     def test_validation_has_no_side_effects(self):
         state = normalize_plus(legacy())
         reference = copy.deepcopy(state)

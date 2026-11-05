@@ -1,8 +1,9 @@
 import React, {useState} from 'react';
-import {ChevronDown, ChevronUp, ListChecks, Plus, Trash2, Clock3, Users, Ellipsis} from 'lucide-react';
+import {ChevronDown, ChevronUp, ListChecks, Plus, Trash2, Clock3, Users, Ellipsis, Wallet} from 'lucide-react';
 import {CalendarField} from './productivity.jsx';
 import {AssigneeSelector} from './members.jsx';
 import {CoverColorPicker} from './cover_color_picker.jsx';
+import {StageExpenseFields} from './order_finance_fields.jsx';
 import './cardextras.css';
 
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -78,6 +79,25 @@ export function editCardChecklists(task, command, idFactory = issueId) {
       if (index < 0) throw new Error('مرحله یافت نشد');
       const item = group.items[index];
       if (type === 'rename-item') item.text = nonEmpty(command.text,5000,'متن مرحله');
+      else if (type === 'set-expenses') {
+        if(group.id==='checklist-legacy')throw new Error('هزینه مرحله اصلی باید از ویرایشگر اصلی ثبت شود');
+        const expenses=command.expenseItems;
+        if(!Array.isArray(expenses)||expenses.length>50||expenses.some(x=>
+          !x||typeof x!=='object'||Array.isArray(x)||typeof x.id!=='string'||
+          !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(x.id)||
+          typeof x.description!=='string'||!x.description.trim()||x.description.length>300||
+          typeof x.partyId!=='string'||!x.partyId||
+          !Number.isSafeInteger(x.quantity)||x.quantity<1||x.quantity>1000000||
+          (x.unitPrice!==null&&(!Number.isSafeInteger(x.unitPrice)||x.unitPrice<=0))||
+          !['RIAL','TOMAN'].includes(x.currency))||
+          new Set(expenses.map(x=>x.id)).size!==expenses.length)throw new Error('اقلام هزینه نامعتبرند');
+        const existingIds=new Set([
+          ...(task.checklist||[]).flatMap(step=>(step.expenseItems||[]).map(x=>x.id)),
+          ...groups.flatMap(g=>g.id===group.id?[]:g.items.flatMap(s=>(s.expenseItems||[]).map(x=>x.id)))
+        ]);
+        if(expenses.some(x=>existingIds.has(x.id)))throw new Error('شناسه هزینه تکراری است');
+        item.expenseItems=expenses.map(x=>({...x}));
+      }
       else if (type === 'patch-item') {
         const changes=command.changes||{};
         if(Object.keys(changes).some(key=>!['dueDate','assignees'].includes(key))) throw new Error('تنها موعد و مسئول قابل ویرایش است');
@@ -180,7 +200,7 @@ export function editBoardFields(board, tasks = [], templates = [], command, idFa
 
 function ActionError({message}) {return message ? <p className="cardextras-error" role="alert">{message}</p> : null;}
 
-function ChecklistRow({group, item, onEdit, disabled, users=[], calendar='jalali',projectId=''}) {
+function ChecklistRow({task,group,item,onEdit,disabled,users=[],calendar='jalali',projectId='',canManage=false,accountView=null,onOpenPurchase}) {
   const [editing,setEditing] = useState(false);
   const [menu,setMenu]=useState('');
   const [draft,setDraft] = useState(item.text);
@@ -197,12 +217,17 @@ function ChecklistRow({group, item, onEdit, disabled, users=[], calendar='jalali
     <div className="cardextras-checkitem__actions">
       <button type="button" aria-label={'زمان '+item.text} aria-expanded={menu==='date'} onClick={()=>setMenu(v=>v==='date'?'':'date')}><Clock3 size={15}/></button>
       <button type="button" aria-label={'مسئول '+item.text} aria-expanded={menu==='members'} onClick={()=>setMenu(v=>v==='members'?'':'members')}><Users size={15}/></button>
+      {canManage&&<button type="button" aria-label={'هزینه '+item.text} aria-expanded={menu==='cost'} onClick={()=>setMenu(v=>v==='cost'?'':'cost')}><Wallet size={15}/>{(item.expenseItems||[]).length>0&&<span className="cardextras-checkitem__expense-count">{item.expenseItems.length}</span>}</button>}
       <button type="button" aria-label={'بیشتر '+item.text} aria-expanded={menu==='more'} onClick={()=>setMenu(v=>v==='more'?'':'more')}><Ellipsis size={15}/></button>
     </div>
    </div>
    {menu&&<div className="cardextras-checkitem__menu" role="group" aria-label={'گزینه‌های '+item.text}>
      {menu==='date'&&<CalendarField value={item.dueDate||''} calendar={calendar} disabled={disabled} label="موعد مرحله" onChange={dueDate=>edit({dueDate})} popupOnClick/>}
      {menu==='members'&&<AssigneeSelector users={users} projectId={projectId} value={item.assignees||[]} disabled={disabled} onChange={assignees=>edit({assignees})}/>}
+     {menu==='cost'&&canManage&&<StageExpenseFields task={task} step={item}
+       parties={Object.values(accountView?.parties||{})} existingJobs={accountView?.contractorJobs||{}}
+       accountReady={Boolean(accountView)} canEdit={!disabled} onPrepare={onOpenPurchase}
+       onExpenseItemsChange={expenseItems=>onEdit({type:'set-expenses',groupId:group.id,itemId:item.id,expenseItems})}/>}
      {menu==='more'&&<div className="cardextras-checkitem__more">
     <button type="button" disabled={disabled} title="یک مرحله بالاتر" aria-label={'بالا بردن '+item.text}
       onClick={()=>onEdit({type:'move-item',groupId:group.id,itemId:item.id,direction:'up'})}><ChevronUp size={14}/></button>
@@ -215,7 +240,7 @@ function ChecklistRow({group, item, onEdit, disabled, users=[], calendar='jalali
   </li>;
 }
 
-function ChecklistGroup({group,disabled,onEdit,users,calendar,projectId}) {
+function ChecklistGroup({task,group,disabled,onEdit,users,calendar,projectId,canManage,accountView,onOpenPurchase}) {
   const [newItem,setNewItem] = useState('');
   const [rename,setRename] = useState(false);
   const [name,setName] = useState(group.name);
@@ -233,13 +258,14 @@ function ChecklistGroup({group,disabled,onEdit,users,calendar,projectId}) {
       <span className="cardextras-progress">{completed.toLocaleString('fa-IR')} / {group.items.length.toLocaleString('fa-IR')}</span>
       {rename ? <button type="button" disabled={disabled||!name.trim()} onClick={saveName}>ذخیره</button>
         : <button type="button" disabled={disabled} onClick={()=>{setName(group.name);setRename(true);}}>تغییر نام</button>}
-      <button type="button" disabled={disabled||group.items.some(item=>item.cost>0)} title="حذف چک‌لیست بدون هزینه"
+      <button type="button" disabled={disabled||group.items.some(item=>item.cost>0||(item.expenseItems||[]).length>0)} title="حذف چک‌لیست بدون هزینه"
         aria-label={'حذف چک‌لیست '+group.name} onClick={()=>onEdit({type:'remove-group',groupId:group.id})}><Trash2 size={15}/></button>
     </div>
     {expanded && <>
       <div className="cardextras-track"><span style={{width:`${group.items.length?completed/group.items.length*100:0}%`}}/></div>
-      <ul className="cardextras-items">{group.items.map(item=><ChecklistRow key={item.id} group={group} item={item}
-        disabled={disabled} onEdit={onEdit} users={users} calendar={calendar} projectId={projectId}/>)}</ul>
+      <ul className="cardextras-items">{group.items.map(item=><ChecklistRow key={item.id} task={task} group={group} item={item}
+        disabled={disabled} onEdit={onEdit} users={users} calendar={calendar} projectId={projectId}
+        canManage={canManage} accountView={accountView} onOpenPurchase={onOpenPurchase}/>)}</ul>
       {!disabled&& <div className="cardextras-addrow"><input aria-label={'مرحله جدید '+group.name} placeholder="مرحله جدید..."
         value={newItem} maxLength={5000} onChange={e=>setNewItem(e.target.value)}
         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}/>
@@ -248,7 +274,7 @@ function ChecklistGroup({group,disabled,onEdit,users,calendar,projectId}) {
   </section>;
 }
 
-export function CardChecklists({task,onChange,disabled=false,hideLegacy=false,users=[],calendar='jalali'}) {
+export function CardChecklists({task,onChange,disabled=false,hideLegacy=false,users=[],calendar='jalali',canManage=false,accountView=null,onOpenPurchase}) {
   const [name,setName] = useState('');
   const [error,setError] = useState('');
   const groups=cardChecklistGroups(task);
@@ -258,7 +284,7 @@ export function CardChecklists({task,onChange,disabled=false,hideLegacy=false,us
   const add=()=>{if(name.trim()){update({type:'add-group',name});setName('');}};
   return <div className="cardextras" dir="rtl">
     <h3><ListChecks size={17}/> چک‌لیست‌های کارت</h3>
-    {visibleGroups.map(group=><ChecklistGroup key={group.id} group={group} disabled={disabled} onEdit={update} users={users} calendar={calendar} projectId={task.projectId}/>)}
+    {visibleGroups.map(group=><ChecklistGroup key={group.id} task={task} group={group} disabled={disabled} onEdit={update} users={users} calendar={calendar} projectId={task.projectId} canManage={canManage} accountView={accountView} onOpenPurchase={onOpenPurchase}/>)}
     {!visibleGroups.length&&<p className="cardextras-muted">هنوز چک‌لیست دیگری ثبت نشده است.</p>}
     {!disabled&&<div className="cardextras-addrow"><input aria-label="نام چک‌لیست جدید" value={name} maxLength={180}
       placeholder="نام چک‌لیست جدید" onChange={e=>setName(e.target.value)}

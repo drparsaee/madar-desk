@@ -76,8 +76,13 @@ def prepare_from_saved_task(store, request, *, tasks, actor, accounts, now=None)
     expense_id = request["expenseId"]
     if expense_id is not None:
         _id(expense_id, "expenseId")
-        matches = [x for step in t.get("checklist", [])
-                   if type(step) is dict for x in step.get("expenseItems", [])
+        # Named checklist expenses are first-class work items. Ignore the
+        # compatibility mirror, otherwise one legacy expense looks duplicated.
+        steps = [s for s in t.get("checklist", []) if type(s) is dict]
+        steps.extend(item for group in t.get("checklists", [])
+                     if type(group) is dict and group.get("id") != "checklist-legacy"
+                     for item in group.get("items", []) if type(item) is dict)
+        matches = [x for step in steps for x in step.get("expenseItems", [])
                    if type(x) is dict and x.get("id") == expense_id]
         if len(matches) != 1:
             raise ValueError("Expense ID must identify exactly one saved work item")

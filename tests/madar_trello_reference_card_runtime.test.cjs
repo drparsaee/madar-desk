@@ -131,6 +131,15 @@ test('Trello-like card quick menus, inline checklist and activity run in Chrome 
           await popover.getByRole('textbox',{name:'نام چک‌لیست جدید'}).fill('بررسی قبل از تحویل');
           await popover.getByRole('button',{name:'ساخت'}).click();
           await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklists?.some(x=>x.name==='بررسی قبل از تحویل'));
+          const namedGroup=drawer.locator('.cardextras-group').filter({hasText:'بررسی قبل از تحویل'});
+          await namedGroup.getByRole('textbox',{name:'مرحله جدید بررسی قبل از تحویل'}).fill('بازبینی نهایی');
+          await namedGroup.getByRole('button',{name:'افزودن',exact:true}).click();
+          await page.waitForFunction(()=>JSON.parse(localStorage.getItem('madar-preview')).tasks[0].checklists?.some(
+            group=>group.name==='بررسی قبل از تحویل'&&group.items.some(item=>item.text==='بازبینی نهایی')));
+          await namedGroup.getByRole('button',{name:'هزینه بازبینی نهایی'}).click();
+          assert.match(await namedGroup.innerText(),/اتصال امن حسابداری/,'named cost editor requires real accounting data');
+          assert.equal(await namedGroup.locator('.order-expense-item input').count(),0,'no fabricated vendor or editable expense before accounting readiness');
+          await nav.getByRole('button',{name:'چک‌لیست',exact:true}).click();
           await popover.getByRole('textbox',{name:'مرحله جدید چک‌لیست'}).press('Escape');
           assert.equal(await popover.count(),0,'Escape dismisses the menu, not the card');
           assert.equal(await drawer.isVisible(),true);

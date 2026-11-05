@@ -101,6 +101,33 @@ class TrustedHandoff(unittest.TestCase):
         self.assertNotIn("جلد شومیز", str(v))
         self.assertEqual(v["parties"]["pooya"]["payable"], 0)
 
+    def test_named_checklist_expense_uses_saved_host_data_and_unique_source(self):
+        named = {"id": "named-1", "name": "Synthetic", "items": [
+            {"id": "named-step", "text": "Synthetic delivery", "done": False,
+             "expenseItems": [{"id": "named.expense.1", "description": "Synthetic printing",
+                               "partyId": "pooya", "quantity": 2,
+                               "unitPrice": 2200, "currency": "TOMAN"}]}]}
+        self.tasks[0]["checklists"] = [
+            {"id": "checklist-legacy", "name": "Legacy mirror",
+             "items": deepcopy(self.tasks[0]["checklist"])}, named]
+        first = self.prepare("named.expense.1")
+        self.assertFalse(first["existing"])
+        self.assertEqual(first["id"], "named.expense.1")
+        self.assertTrue(self.prepare("named.expense.1")["existing"])
+        self.assertEqual(self.view()["contractorJobs"]["named.expense.1"]["partyId"], "pooya")
+        self.assertEqual(self.view()["contractorJobs"]["named.expense.1"]["unitPrice"], 2200)
+        self.assertEqual(self.view()["journals"], [])
+        # Legacy compatibility copy must not count as a second source.
+        self.assertFalse(self.prepare("courier.1")["existing"])
+        # Duplicate named expense IDs fail closed rather than selecting one.
+        self.tasks[0]["checklists"].append({"id": "named-2", "name": "Duplicate", "items": [
+            {"id": "other", "text": "Other", "done": False,
+             "expenseItems": [{"id": "named.expense.1", "description": "Ambiguous",
+                               "partyId": "pooya", "quantity": 1,
+                               "unitPrice": 1, "currency": "TOMAN"}]}]})
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            self.prepare("named.expense.1")
+
     def test_untrusted_payload_and_non_admin_denied(self):
         for actor in ("worker", "accountant"):
             with self.assertRaises(PermissionError):

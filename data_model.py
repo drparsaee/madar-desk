@@ -239,10 +239,37 @@ def _check_field_values(values, fields, path):
             _error(here, "option is not defined for this field")
 
 
-def _check_checklists(groups, path):
+def _check_expense_items(item, item_path, financial_source_ids):
+    for k, expense in enumerate(_array(item.get("expenseItems", []),
+                                       item_path + ".expenseItems", 50)):
+        path = f"{item_path}.expenseItems[{k}]"
+        if not isinstance(expense, dict) or set(expense) != {
+                "id", "description", "partyId", "quantity", "currency", "unitPrice"}:
+            _error(path, "unexpected financial work-item fields")
+        _string(expense["id"], path + ".id", limit=96)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", expense["id"]):
+            _error(path + ".id", "invalid commercial source ID")
+        _unique(expense["id"], financial_source_ids, path + ".id")
+        _string(expense["description"], path + ".description", limit=300)
+        _string(expense["partyId"], path + ".partyId", limit=96)
+        if expense["currency"] not in ("TOMAN", "RIAL"):
+            _error(path + ".currency", "expected TOMAN or RIAL")
+        if type(expense["quantity"]) is not int or not 1 <= expense["quantity"] <= 1000000:
+            _error(path + ".quantity", "expected integer 1..1000000")
+        price = expense["unitPrice"]
+        if price is not None and (type(price) is not int or not 0 < price <= 10**15):
+            _error(path + ".unitPrice", "expected null or exact positive integer")
+
+
+def _check_checklists(groups, path, financial_source_ids=None):
+    if financial_source_ids is None:
+        financial_source_ids = set()
     for group, here in _records(groups, path, 30):
         _string(group.get("name"), here + ".name", limit=180)
         item_ids = set()
+        # Legacy named group is a compatibility copy of the flat checklist.
+        # Validate its shape without double-counting its expense source IDs.
+        source_ids = set() if group["id"] == DEFAULT_CHECKLIST_ID else financial_source_ids
         for i, item in enumerate(_array(group.get("items"), here + ".items", 300)):
             item_path = f"{here}.items[{i}]"
             _object(item, item_path)
@@ -251,6 +278,7 @@ def _check_checklists(groups, path):
             _string(item.get("text"), item_path + ".text", limit=MAX_BYTES, empty=True)
             _boolean(item.get("done"), item_path + ".done")
             _amount(item.get("cost", 0), item_path + ".cost")
+            _check_expense_items(item, item_path, source_ids)
 
 
 def _check_cover(cover, path):
@@ -332,29 +360,11 @@ def _check_base(state):
             _string(item.get("text"), item_path + ".text", limit=MAX_BYTES, empty=True)
             _boolean(item.get("done"), item_path + ".done")
             _amount(item.get("cost", 0), item_path + ".cost")
-            for k, expense in enumerate(_array(item.get("expenseItems", []),
-                                               item_path + ".expenseItems", 50)):
-                path = f"{item_path}.expenseItems[{k}]"
-                if not isinstance(expense, dict) or set(expense) != {
-                        "id", "description", "partyId", "quantity", "currency", "unitPrice"}:
-                    _error(path, "unexpected financial work-item fields")
-                _string(expense["id"], path + ".id", limit=96)
-                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", expense["id"]):
-                    _error(path + ".id", "invalid commercial source ID")
-                _unique(expense["id"], financial_source_ids, path + ".id")
-                _string(expense["description"], path + ".description", limit=300)
-                _string(expense["partyId"], path + ".partyId", limit=96)
-                if expense["currency"] not in ("TOMAN", "RIAL"):
-                    _error(path + ".currency", "expected TOMAN or RIAL")
-                if type(expense["quantity"]) is not int or not 1 <= expense["quantity"] <= 1000000:
-                    _error(path + ".quantity", "expected integer 1..1000000")
-                price = expense["unitPrice"]
-                if price is not None and (type(price) is not int or not 0 < price <= 10**15):
-                    _error(path + ".unitPrice", "expected null or exact positive integer")
+            _check_expense_items(item, item_path, financial_source_ids)
         _array(task.get("reports", []), here + ".reports", 500)
         for j, label in enumerate(_array(task.get("labels", []), here + ".labels", 200)):
             _string(label, f"{here}.labels[{j}]", limit=100)
-    return projects, tasks
+    return projects, tasks, financial_source_ids
 
 
 def validate_plus(state):
@@ -378,7 +388,7 @@ def validate_plus(state):
     if len(serialized.encode("utf-8")) > MAX_BYTES:
         _error("state", "JSON exceeds 15 MB")
 
-    projects, tasks = _check_base(state)
+    projects, tasks, financial_source_ids = _check_base(state)
     project_ids = {p["id"] for p, _ in projects}
     workspaces = {}
     for workspace, here in _records(state.get("workspaces", []), "workspaces", 100):
@@ -435,7 +445,7 @@ def validate_plus(state):
             _check_field_values(task["customFieldValues"], boards[task["boardId"]][2],
                                 here + ".customFieldValues")
         if "checklists" in task:
-            _check_checklists(task["checklists"], here + ".checklists")
+            _check_checklists(task["checklists"], here + ".checklists", financial_source_ids)
         if "cover" in task:
             _check_cover(task["cover"], here + ".cover")
 

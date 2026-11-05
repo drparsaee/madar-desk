@@ -92,20 +92,23 @@ export function OrderSaleFields({task,api,onUpdate,onPrepare,canEdit,canManage})
 }
 
 export function StageExpenseFields({task,step,parties,onUpdate,onPrepare,canEdit,
-    existingJobs={},accountReady=false}){
+    existingJobs={},accountReady=false,onExpenseItemsChange}){
   const [draft,setDraft]=useState({partyId:'',description:'',quantity:'1',
     currency:'RIAL',unitPrice:''});
   const [error,setError]=useState('');
   const expenses=step.expenseItems||[];
-  const save=updated=>onUpdate({checklist:task.checklist.map(s=>
-    s.id===step.id?{...s,expenseItems:updated}:s)});
+  const save=updated=>onExpenseItemsChange
+    ?onExpenseItemsChange(updated)
+    :onUpdate({checklist:task.checklist.map(s=>
+      s.id===step.id?{...s,expenseItems:updated}:s)});
   const vendorList=parties.filter(p=>p.kind==='vendor'||p.kind==='both');
   return <div className="order-expense-list">
     {expenses.map(exp=><div key={exp.id} className="order-expense-item">
       <strong>{exp.description}</strong>
       <span>{vendorList.find(p=>p.id===exp.partyId)?.name||exp.partyId}</span>
-      <span>{exp.quantity} × {exp.unitPrice===null?'در انتظار قیمت':
-        (exp.currency==='TOMAN'?rialView(exp.unitPrice):String(exp.unitPrice))+' ریال'}</span>
+      <span>{exp.quantity} × {exp.unitPrice==null?'در انتظار قیمت':
+        exp.currency==='TOMAN'?String(exp.unitPrice)+' تومان':
+        exp.currency==='RIAL'?String(exp.unitPrice)+' ریال':'واحد پول نامشخص'}</span>
       {existingJobs[exp.id]?<small>ثبت‌شده در حسابداری: {existingJobs[exp.id].status}</small>:
         <button type="button" disabled={!accountReady}
           onClick={()=>void onPrepare(task,exp)}>ارسال کار به حسابداری</button>}

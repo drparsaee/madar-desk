@@ -48,6 +48,7 @@
 .cardextras .cardextras-checkitem__actions{display:flex;align-items:center;gap:1px;margin-inline-start:auto}
 .cardextras .cardextras-checkitem__actions button{min-height:28px;width:29px;padding:5px;border-color:transparent;background:transparent;color:var(--text-muted,#7890ac)}
 .cardextras .cardextras-checkitem__actions button:hover,.cardextras .cardextras-checkitem__actions button[aria-expanded="true"]{background:var(--surface-soft,#edf4fb);border-color:var(--border,#cedeed)}
+.cardextras-checkitem__expense-count{font-size:10px;font-variant-numeric:tabular-nums}
 .cardextras-checkitem__menu{padding:10px;background:var(--surface-soft,#f0f4fa);border:1px solid var(--border,#cedeed);border-radius:8px;min-width:0}
 .cardextras-checkitem__menu .assignee-picker{grid-template-columns:1fr}
 .cardextras-checkitem__more{display:flex;flex-wrap:wrap;gap:6px}
