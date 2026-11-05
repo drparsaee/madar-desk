@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 
 
 REPOSITORY = "drparsaee/madar-desk-updates"
-CURRENT_VERSION = "1.0.15"
+CURRENT_VERSION = "1.0.16"
 API = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest"
 MAX_RELEASE_BYTES = 400 * 1024 * 1024
 HEX64 = re.compile(r"sha256:([0-9a-f]{64})\Z")
