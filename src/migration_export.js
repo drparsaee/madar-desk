@@ -149,7 +149,11 @@ function planDate(value,path){
   const text=string(value,path,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(text))fail(path,'expected ISO date');
   const [year,month,day]=text.split('-').map(Number);
-  const stamp=new Date(Date.UTC(year,month-1,day));
+  // Date.UTC reinterprets the years 00..99 as 1900..1999. Use the same
+  // explicit UTC full-year semantics as Gantt and the native validator.
+  if(year<1)fail(path,'invalid calendar date');
+  const stamp=new Date(0);
+  stamp.setUTCFullYear(year,month-1,day);
   if(stamp.getUTCFullYear()!==year||stamp.getUTCMonth()!==month-1||
     stamp.getUTCDate()!==day)fail(path,'invalid calendar date');
   return text;
@@ -205,7 +209,10 @@ function checkReferences(data){
       fail('data.tasks','orphan project, board, list, global stage, priority or label');
     if(task.plannedStart&&task.plannedEnd&&task.plannedStart>task.plannedEnd)
       fail('data.tasks','start date is after end date');
+    const dependencyIds=new Set();
     for(const dep of task.dependencies||[]){
+      if(dependencyIds.has(dep))fail('data.tasks.dependencies','duplicate dependency reference');
+      dependencyIds.add(dep);
       const predecessor=taskById.get(dep);
       if(dep===task.id||!predecessor||predecessor.projectId!==task.projectId||
         predecessor.deleted||task.deleted)

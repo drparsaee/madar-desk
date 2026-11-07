@@ -125,6 +125,39 @@ test('portable export preserves dependency DAG and planned dates but rejects cor
   assert.throws(()=>createPortableExport(invalidDate,{acknowledgeFinancialExclusion:true}),/after end date/);
 });
 
+test('portable planned dates preserve early ISO years and reject invalid zero/leap dates',()=>{
+  const state=fixture();
+  const task=state.tasks.find(t=>t.id==='t1');
+  task.plannedStart='0001-01-01';task.plannedEnd='0099-12-31';
+  const bundle=createPortableExport(state,{acknowledgeFinancialExclusion:true});
+  const imported=importPortableSubset(portableJson(bundle));
+  assert.equal(imported.tasks.find(t=>t.id==='t1').plannedStart,'0001-01-01');
+  assert.equal(imported.tasks.find(t=>t.id==='t1').plannedEnd,'0099-12-31');
+  assert.deepEqual(createPortableExport(imported).data,bundle.data);
+  for(const invalid of ['0000-01-01','0001-02-29','0099-02-29','2026-02-30']){
+    const bad=structuredClone(state);
+    bad.tasks.find(t=>t.id==='t1').plannedStart=invalid;
+    assert.throws(()=>createPortableExport(bad,{acknowledgeFinancialExclusion:true}),/calendar date/);
+    const modified=structuredClone(bundle);
+    modified.data.tasks.find(t=>t.id==='t1').plannedStart=invalid;
+    assert.throws(()=>inspectPortableExport(modified),/calendar date/);
+  }
+});
+
+test('portable import and export reject duplicate dependency IDs like native host',()=>{
+  const state=fixture(),source=state.tasks.find(t=>t.id==='t2');
+  Object.assign(source,{projectId:'p1',boardId:'b1',listId:'todo'});
+  const dependent=state.tasks.find(t=>t.id==='t1');
+  dependent.dependencies=['t2'];
+  const bundle=createPortableExport(state,{acknowledgeFinancialExclusion:true});
+  assert.deepEqual(importPortableSubset(bundle).tasks.find(t=>t.id==='t1').dependencies,['t2']);
+  dependent.dependencies=['t2','t2'];
+  assert.throws(()=>createPortableExport(state,{acknowledgeFinancialExclusion:true}),/duplicate dependency/);
+  const malformed=structuredClone(bundle);
+  malformed.data.tasks.find(t=>t.id==='t1').dependencies=['t2','t2'];
+  assert.throws(()=>inspectPortableExport(malformed),/duplicate dependency/);
+});
+
 test('attachment manifest has metadata only and rejects binaries, incorrect associations, duplicates',()=>{
   const sha='a'.repeat(64),metadata={id:'att1',cardId:'t1',projectId:'p1',
     filename:'hello.pdf',mime:'application/pdf',size:42,sha256:sha,
