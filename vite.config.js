@@ -7,7 +7,6 @@ export default defineConfig({
   base: './',
   build: {rollupOptions: {input: {
     main: resolve(process.cwd(), 'index.html'),
-    accounting: resolve(process.cwd(), 'accounting.html'),
   }}},
   server: {
     host: '127.0.0.1', port: 5173, strictPort: true,

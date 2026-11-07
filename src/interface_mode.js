@@ -6,7 +6,7 @@ export const INTERFACE_MODES = Object.freeze(['basic', 'operations', 'finance'])
 export const INTERFACE_MODE_OPTIONS = Object.freeze([
   Object.freeze({id:'basic', label:'ساده', description:'برد، فهرست، کارت، موعد، جست‌وجو و اعلان'}),
   Object.freeze({id:'operations', label:'تیم و عملیات', description:'همه ابزارهای ساده، همراه گزارش، برنامه‌ریزی، زمان‌بندی و گردش کار'}),
-  Object.freeze({id:'finance', label:'کامل (با ابزارهای مالی)', description:'همه ابزارهای تیمی، به‌علاوه نمایش هزینه پروژه و سود برای مدیر مجاز'}),
+  Object.freeze({id:'finance', label:'پیشرفته', description:'همه ابزارهای تیمی و گردش کار پیشرفته؛ حسابداری در برنامه جداگانه تراز است'}),
 ]);
 
 export const INTERFACE_MODE_STORAGE_PREFIX = 'madar:interface-mode:v1:';
@@ -31,10 +31,7 @@ export const INTERFACE_FEATURE_TIERS = Object.freeze({
   cardComments:'operations', customFields:'operations', boardFieldEditor:'operations',
   automationRules:'operations', trelloImport:'operations', calendarInterop:'operations',
   secureApiKeys:'operations', lanUserManagement:'operations',
-  // Financial figures and entry points require the existing admin check as well.
-  financeHub:'finance', projectFinance:'finance', profitPeek:'finance',
-  taskCostControls:'finance', checklistCostControls:'finance',
-  projectPricing:'finance', accountingDashboard:'finance', aiAgent:'finance',
+  aiAgent:'finance',
 });
 
 const ADMIN_ONLY_FEATURES = new Set([

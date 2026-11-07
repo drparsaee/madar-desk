@@ -1412,11 +1412,7 @@ class LanService:
                 if endpoint not in ("/api/login", "/api/state", "/api/me", "/api/display-roles", "/api/users", "/api/user",
                                     "/api/profiles", "/api/profile", "/api/password",
                                     "/api/reset-password", "/api/comments", "/api/notifications",
-                                    "/api/activity", "/api/collab", "/api/finance", "/api/finance-status",
-                                    "/api/finance-overview", "/api/accounting",
-                                    "/api/standalone-accounting", "/api/standalone-accounting/prepare",
-                                    "/api/standalone-accounting/quote",
-                                    "/api/rial-journal", "/api/rial-journal/activate",
+                                    "/api/activity", "/api/collab",
                                     "/api/rules", "/api/scheduler", "/api/attachments",
                                     "/api/buttons"):
                     return self.reply(404, {"error": "مسیر پیدا نشد."})

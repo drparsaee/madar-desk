@@ -15,9 +15,10 @@ test('first private owner opens full manager display, unknown never does',()=>{
 test('custom role cannot become technical administrator via presentation flags',()=>{
   const scope=resolvedDisplayScope({mode:'client',user:{role:'editor',displayRole:'senior',displayRoleLabel:'مدیر ارشد',displayMode:'finance',displayFeatures:['reporting','projectFinance','__proto__']}});
   assert.equal(scope.label,'مدیر ارشد');
-  assert.deepEqual(scope.features,['reporting','projectFinance']);
+  assert.deepEqual(scope.features,['reporting']);
   assert.equal(isManagedFeatureVisible(scope,'reporting',{canManage:false,canEdit:true}),true);
   assert.equal(isManagedFeatureVisible(scope,'projectFinance',{canManage:false,canEdit:true}),false);
+  assert.equal(isManagedFeatureVisible(resolvedDisplayScope({mode:'solo',user:{role:'admin'}}),'accountingDashboard',{canManage:true,canEdit:true}),false);
   assert.equal(isManagedFeatureVisible(scope,'planner',{canManage:false,canEdit:true}),false);
   assert.equal(isManagedFeatureVisible(scope,'backupRestore',{canManage:false,canEdit:true}),true);
 });

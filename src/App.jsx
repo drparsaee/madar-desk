@@ -15,17 +15,12 @@ import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchT
 import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
 import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
 import {CardComments,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
-import {FinancePanel} from './financepanel.jsx';
 import {RulesPanel} from './rulespanel.jsx';
 import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
 import {CardAttachments} from './attachments.jsx';
 import {archiveBoardState,restoreBoardState,renameBoardState,moveCardToBoard,boardStageUpdate,legacyStatusForStage} from './boardops.js';
 import {boardForColumn,propagateAddedWorkspaceStages} from './board_stage_sync.js';
-import {ProfitPeek} from './financeoverview.jsx';
-import {AccountingPanel} from './accounting_panel.jsx';
-import {AccountingWorkspace} from './accounting_workspace.jsx';
-import {RialJournalPanel} from './rial_journal_panel.jsx';
 import {SearchPlus} from './searchplus.jsx';
 import {searchTaskLocations} from './task_search_results.js';
 import {SearchResultsPanel} from './task_search_results.jsx';
@@ -61,9 +56,7 @@ import {BoardTableView} from './board_table_view.jsx';
 import {boardTableColumns,readBoardViewPreferences,saveBoardViewPreferences} from './board_table_preferences.js';
 import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
-import {OrderSaleFields,StageExpenseFields} from './order_finance_fields.jsx';
 import {ChecklistTaskRow} from './checklist_task_row.jsx';
-import {prepareStandaloneFromTask} from './standalone_order_adapter.js';
 import {emptyCardHistory,isUndoableCardPatch,recordCardEdit,cardHistoryAvailability,applyCardHistory} from './card_undo.js';
 import './interface_mode.css';
 import './boardplus.css';
@@ -135,15 +128,8 @@ const mockBridge={
   cloudPeerConfigure:async()=>{throw Error('اشتراک پوشه میان کلاینت‌ها فقط در برنامه ویندوز فعال است.');},
   cloudPeerGenerate:async()=>{throw Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
   cloudPeerForget:async()=>({paired:false,enabled:false,cloudVerified:false}),
-  financeRead:async()=>[],
-  financeStatus:async()=>({pending:0,warning:''}),
-  financeCommand:async()=>{throw Error('ثبت مالی در نسخه ویندوز فعال است.');},
-  accountingRead:async()=>{throw Error('حسابداری دوبل فقط در نسخه ویندوز فعال است.');},
-  accountingCommand:async()=>{throw Error('ثبت حسابداری دوبل فقط در نسخه ویندوز فعال است.');},
-  standaloneAccountingRead:async()=>{throw Error('حسابداری مستقل فقط در میزبان ویندوز فعال است.');},
-  standaloneAccountingCommand:async()=>{throw Error('ثبت حسابداری مستقل فقط در میزبان ویندوز فعال است.');},
-  standaloneAccountingPrepare:async()=>{throw Error('آماده‌سازی سفارش صرفاً توسط میزبان معتبر امکان‌پذیر است.');},
-  standaloneAccountingQuote:async()=>{throw Error('محاسبه سفارش فقط در میزبان حسابداری فعال است.');},
+  tarazIntegrationStatus:async()=>({supported:false,postingEnabled:false,message:'صندوق تبادل تراز در نسخه نصب‌شده ویندوز در دسترس است.'}),
+  tarazIntegrationQueue:async()=>{throw Error('ارسال پیشنهاد تراز فقط در برنامه ویندوز فعال است.');},
   getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
@@ -242,7 +228,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onOpenSale,onOpenPurchase,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=true,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true}){
   const [newStep,setNewStep]=useState('');
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
@@ -297,13 +283,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     document.addEventListener('keydown',handleKey);
     return()=>{document.removeEventListener('keydown',handleKey);if(before?.isConnected)before.focus();};
   },[]);
-  const [accountView,setAccountView]=useState(null);
-  useEffect(()=>{
-    if(!canManage)return;
-    let live=true;
-    api.standaloneAccountingRead().then(r=>{if(live)setAccountView(r.view);}).catch(()=>{});
-    return()=>{live=false;};
-  },[api,canManage]);
   const [agent,setAgent]=useState('');
   const [summary,setSummary]=useState('');
   draftRef.current=Boolean(newStep.trim()||newChecklistName.trim()||summary.trim()||agent.trim());
@@ -329,7 +308,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
   };
   const addReport=()=>{if(!summary.trim())return;update({reports:[...task.reports,{id:uid(),agent:agent.trim()||'من',summary:summary.trim(),createdAt:now()}]});setSummary('');setReportComposerOpen(false);};
   const total=task.checklist.length,done=task.checklist.filter(i=>i.done).length;
-  const priceEnabled=canManage&&showCosts&&cardCostEnabled(task,projects.find(p=>p.id===task.projectId));
+  const priceEnabled=false;
   const taskBoard=boards.find(b=>b.id===task.boardId);
   const projectName=projects.find(project=>project.id===task.projectId)?.name||'پروژه';
   const listName=stages.find(stage=>stage.id===(task.listId||task.status))?.label||'فهرست';
@@ -338,7 +317,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     setQuickMenu(null);
     if(section==='assignees'){setQuickMenu('members');return;}
     if(section==='tags'){setQuickMenu('labels');return;}
-    if(['metadata','time','accounting','settings'].includes(section)){
+    if(['metadata','time','settings'].includes(section)){
       setAdvancedView(section);
       return;
     }
@@ -403,6 +382,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>toggleQuickMenu('labels')} aria-expanded={quickMenu==='labels'}><Tag size={15}/> برچسب</button>
         <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'}><ListChecks size={15}/> چک‌لیست</button>
         <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><Paperclip size={15}/> فایل</button>
+        {canEdit&&<button type="button" onClick={()=>onSendToTaraz(task.id)} title="ارسال خلاصه کارت برای بررسی در برنامه مستقل تراز"><FileText size={15}/> ارسال به تراز</button>}
         <button type="button" className="task-quick-actions__more" aria-expanded={quickMenu==='more'} onClick={()=>toggleQuickMenu('more')}><MoreHorizontal size={15}/> بیشتر</button>
         {quickMenu&&<div className="task-quick-popover" role="group" aria-label={'ویرایش سریع '+({date:'تاریخ',members:'اعضا',labels:'برچسب‌ها',checklist:'چک‌لیست',more:'گزینه‌های تکمیلی'}[quickMenu]||'کارت')} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setQuickMenu(null);quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();}}}>
           <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',more:'گزینه‌های تکمیلی'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
@@ -413,7 +393,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           {quickMenu==='more'&&<div className="task-more-menu">
             <button type="button" onClick={()=>jumpToSection('metadata')}><Flag size={15}/> مرحله و اولویت</button>
             {showOperations&&<button type="button" onClick={()=>jumpToSection('time')}><Clock3 size={15}/> برآورد زمان</button>}
-            {canManage&&<button type="button" onClick={()=>jumpToSection('accounting')}><Wallet size={15}/> حسابداری</button>}
             <button type="button" onClick={()=>jumpToSection('settings')}><Settings2 size={15}/> تنظیمات پیشرفته</button>
             {canEdit&&<button type="button" onClick={()=>{setAdvancedView('actions');setQuickMenu(null);}}><Archive size={15}/> بایگانی یا حذف</button>}
           </div>}
@@ -431,12 +410,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         </div>
         <div className="step-list">{task.checklist.map(step=><ChecklistTaskRow key={step.id} task={task} step={step}
           users={users} calendar={calendar} canEdit={canEdit} canManage={canManage}
-          priceEnabled={priceEnabled} showCosts={showCosts} accountView={accountView} onUpdate={update} onOpenPurchase={onOpenPurchase}/>)}</div>
+          priceEnabled={priceEnabled} showCosts={false} accountView={null} onUpdate={update}/>)}</div>
         {priceEnabled&&((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))>0&&<div className="step-total">جمع هزینه‌های ثبت‌شده: <strong>{money((task.cost||0)+task.checklist.reduce((sum,c)=>sum+(c.cost||0),0))} تومان</strong></div>}
         {canEdit&&<div className="inline-create"><input value={newStep} onChange={e=>setNewStep(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="مرحله بعدی را بنویس..."/><button aria-label="افزودن مرحله" onClick={addStep}><Plus size={17}/></button></div>}
       </div>
       {(task.checklists||[]).some(group=>group.id!=='checklist-legacy')&&
-        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} canManage={canManage&&showCosts} accountView={accountView} onOpenPurchase={onOpenPurchase} onChange={update}/></div>}
+        <div className="task-named-checklists"><CardChecklists task={task} hideLegacy users={users} calendar={calendar} disabled={!canEdit} canManage={false} onChange={update}/></div>}
       </section>
       <section className="task-primary-section" id="task-section-attachments" tabIndex={-1} aria-label="فایل‌های کارت">
         <h3><Paperclip size={17}/> فایل‌ها</h3>
@@ -445,7 +424,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         </div>
       </section>
       {advancedView&&<div className="task-advanced-surface" aria-label="جزئیات تکمیلی کارت">
-        <div className="task-advanced-surface__head"><strong>{({metadata:'مرحله و اولویت',time:'برآورد زمان',accounting:'حسابداری',settings:'تنظیمات پیشرفته',actions:'بایگانی یا حذف'}[advancedView])}</strong><button type="button" onClick={()=>setAdvancedView(null)} aria-label="بستن جزئیات تکمیلی"><X size={16}/></button></div>
+        <div className="task-advanced-surface__head"><strong>{({metadata:'مرحله و اولویت',time:'برآورد زمان',settings:'تنظیمات پیشرفته',actions:'بایگانی یا حذف'}[advancedView])}</strong><button type="button" onClick={()=>setAdvancedView(null)} aria-label="بستن جزئیات تکمیلی"><X size={16}/></button></div>
       {advancedView==='metadata'&&<section className="task-advanced-content" id="task-section-metadata" tabIndex={-1}>
       <div className="edit-grid">
         <label>پروژه<select disabled={!canEdit} value={task.projectId} onChange={e=>update({projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
@@ -463,10 +442,6 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       </section>}
       {showOperations&&advancedView==='time'&&<section className="task-advanced-content" id="task-section-time" tabIndex={-1}>
         <div className="edit-section"><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>
-      </section>}
-      {advancedView==='accounting'&&<section className="task-advanced-content" id="task-section-accounting" tabIndex={-1}>
-      <OrderSaleFields task={task} api={api} onUpdate={update}
-        onPrepare={onOpenSale} canEdit={canEdit} canManage={canManage}/>
       </section>}
       {advancedView==='settings'&&<section className="task-advanced-content" id="task-section-settings" tabIndex={-1}>
         <div className="edit-section task-card-settings">
@@ -833,17 +808,13 @@ export default function App(){
   const [lanInitialView,setLanInitialView]=useState('connection');
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
-  const [financeOpen,setFinanceOpen]=useState(false);
-  const [accountingOpen,setAccountingOpen]=useState(false);
-  const [rialJournalOpen,setRialJournalOpen]=useState(false);
-  const [rialCompanyId,setRialCompanyId]=useState('');
-  const [rialFiscalPeriodId,setRialFiscalPeriodId]=useState('');
-  const [rialFiscalStart,setRialFiscalStart]=useState('');
-  const [rialFiscalEnd,setRialFiscalEnd]=useState('');
-  const [rialActivationNotice,setRialActivationNotice]=useState('');
-  const [rialRefresh,setRialRefresh]=useState(0);
-  const [accountingSource,setAccountingSource]=useState(null);
-  const [profitVisible,setProfitVisible]=useState(false);
+  const [tarazStatus,setTarazStatus]=useState(null);
+  useEffect(()=>{
+    let active=true;
+    api.tarazIntegrationStatus?.().then(value=>{if(active)setTarazStatus(value);})
+      .catch(error=>{if(active)setTarazStatus({supported:false,message:String(error?.message||error)});});
+    return()=>{active=false;};
+  },[]);
   const [rulesOpen,setRulesOpen]=useState(false);
   const [automationListId,setAutomationListId]=useState(null);
   const [automationButtonsScope,setAutomationButtonsScope]=useState(null);
@@ -1162,9 +1133,6 @@ export default function App(){
   };
   const viewStages=useMemo(()=>activeBoard?activeBoardLists(activeBoard):stages,[activeBoard,stages]);
   const canManage=lanStatus?.user?.role==='admin';
-  const canViewStandalone=canManage||
-    lanStatus?.user?.financeView===true||
-    (lanStatus?.user?.role==='editor'&&lanStatus?.user?.financeEdit===true);
   const canEdit=lanStatus?.mode==='client'
     ?(['admin','editor'].includes(lanStatus?.user?.role))
     :lanStatus?.user?.role!=='viewer';
@@ -1185,11 +1153,6 @@ export default function App(){
       setCalendarInteropOpen(false);setIntegrationOpen(false);
       setPortableExportOpen(false);
     }
-    if(interfaceMode!=='finance'){
-      setFinanceOpen(false);setAccountingOpen(false);
-      setRialJournalOpen(false);
-      setProfitVisible(false);
-    }
   },[interfaceMode]);
   const manualRefresh=async()=>{
     if(dirty.current||saving.current){setToast('تغییرات در حال ذخیره هستند؛ پس از ذخیره دوباره تازه‌سازی کنید.');return;}
@@ -1205,14 +1168,6 @@ export default function App(){
     // Solo is a valid entry point into setup, not a silent dead button.
     setLanInitialView(lanStatus.mode==='solo'?'connection':'users');setLanOpen(true);
   };
-  useEffect(()=>{setProfitVisible(false);},[selected,boardId]);
-  useEffect(()=>{
-    const hide=()=>setProfitVisible(false);
-    window.addEventListener('blur',hide);
-    const onVisibility=()=>{if(document.hidden)hide();};
-    document.addEventListener('visibilitychange',onVisibility);
-    return()=>{window.removeEventListener('blur',hide);document.removeEventListener('visibilitychange',onVisibility);};
-  },[]);
   // The Bridge/LAN already scopes and redacts this state; the index additionally
   // requires the explicit list of project IDs in that authenticated view.
   const boardIndex=useMemo(()=>data?createBoardPerformanceIndex(data,{
@@ -1276,7 +1231,7 @@ export default function App(){
       try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}
     }
     return newState;
-  });setProfitVisible(false);};
+  });};
   const reverseCardEdit=direction=>{
     const allowed=cardUndoEnabled&&!saving.current&&!blocked.current&&lanStatus.mode==='solo'&&canEdit;
     if(!cardHistoryAvailability(cardUndo.current,data,direction,cardUndoScope,allowed)){
@@ -1969,74 +1924,21 @@ export default function App(){
     catch(e){blocked.current=true;setPendingRecovery(true);setSavingError(e.message);}
     finally{recoveryReload.current=false;setSyncing(false);}
   };
-  const openStandaloneDashboard=()=>{
-    if(!canViewStandalone||!show('accountingDashboard'))return;
+  const sendToTaraz=async taskId=>{
+    if(!canEdit){setToast('برای ارسال پیشنهاد تراز، دسترسی ویرایش کارت لازم است.');return;}
     if(dirty.current||saving.current||blocked.current){
-      setToast('ابتدا تغییرات ذخیره‌نشدهٔ تسک‌منیجر را ذخیره کنید.');return;
-    }
-    window.location.assign('./accounting.html');
-  };
-  const openAccounting=source=>{
-    if(!canManage)return;
-    if(dirty.current||saving.current||blocked.current){
-      setToast('قبل از انتقال به حسابداری، ذخیره کارت باید با موفقیت تمام شود.');return;
-    }
-    setAccountingSource(source||null);setEditorId(null);setAccountingOpen(true);
-  };
-  const prepareIndependentAccounting=async(task,expense=null)=>{
-    if(!canManage){setToast('صدور سند مالی فقط برای مدیر مجاز است.');return;}
-    if(dirty.current||saving.current||blocked.current){
-      setToast('ابتدا ذخیره سفارش و هزینه‌های آن باید کامل شود.');return;
+      setToast('برای ارسال به تراز، ابتدا ذخیره کارت باید کامل شود.');return;
     }
     try{
-      const result=await prepareStandaloneFromTask(api,{
-        task,expense,day:todayISO()});
-      setToast((result.existing?'این منبع قبلاً در حسابداری ثبت شده: ':
-        'پیش‌نویس/کار به حسابداری مستقل ارسال شد: ')+result.id);
-      setEditorId(null);
-      window.location.assign('./accounting.html');
-    }catch(err){setToast('ارسال به حسابداری ناموفق: '+String(err?.message||err));}
+      const result=await api.tarazIntegrationQueue(taskId);
+      if(!result?.queued||result?.postingPerformed!==false)
+        throw Error('پاسخ صندوق تبادل معتبر نیست.');
+      setToast('خلاصه کارت در صندوق تراز قرار گرفت. بازبینی و ثبت در برنامه مستقل تراز انجام می‌شود.');
+      const status=await api.tarazIntegrationStatus();
+      setTarazStatus(status);
+    }catch(err){setToast('ارسال پیشنهاد به تراز ناموفق: '+String(err?.message||err));}
   };
   if(!data)return <div className="loading"><span className="logo-symbol"><img src="./madar-icon.svg" alt="" /></span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
-  if(accountingOpen&&canManage)return <AccountingWorkspace api={api} projects={projects} tasks={tasks}
-    canManage={canManage} initialSource={accountingSource} onExit={()=>{setAccountingOpen(false);setAccountingSource(null);refresh(true).catch(e=>setSavingError(e.message));}}/>;
-  // New RIAL V2 is deliberately read-only/fail-closed until host supplies
-  // authoritative company+period identity and a committed migration boundary.
-  // Never reinterpret the existing TOMAN finance snapshot as a RIAL journal.
-  if(rialJournalOpen&&canManage)return <div className="rjv-route">
-    <form className="rjv-scope" onSubmit={async event=>{
-      event.preventDefault();
-      if(typeof api?.rialJournalActivate!=='function'){setRialActivationNotice('میزبان فعال‌سازی دفتر ریالی V2 را پشتیبانی نمی‌کند.');return;}
-      if(!window.confirm('فقط یک دفتر ریالی جدید و خالی ایجاد می‌شود. هیچ فاکتور یا سند تومانی منتقل نمی‌شود. ادامه؟'))return;
-      try{
-        const result=await api.rialJournalActivate({
-          companyId:rialCompanyId,fiscalPeriodId:rialFiscalPeriodId,
-          startDate:rialFiscalStart,endDate:rialFiscalEnd});
-        if(result?.currency!=='RIAL'||result?.migrationPerformed!==false){
-          throw Error('پاسخ فعال‌سازی قابل اعتماد نیست.');}
-        setRialActivationNotice('دفتر ریالی خالی فعال شد. داده‌های قدیمی منتقل نشده‌اند.');
-        setRialRefresh(value=>value+1);
-      }catch(error){setRialActivationNotice('فعال‌سازی متوقف شد: '+String(error?.message||error));}
-    }}>
-      <p>این دفترکل فعلاً فقط‌خواندنی است. شناسه‌های شرکت و دوره باید از دفتر ریالی V2 تأییدشده باشند؛ داده‌های تومانی قدیمی تبدیل خودکار نمی‌شوند.</p>
-      <label>شناسه شرکت<input aria-label="شناسه شرکت دفتر ریالی" dir="ltr"
-        value={rialCompanyId} maxLength={96} onChange={event=>setRialCompanyId(event.target.value)}/></label>
-      <label>دوره مالی<input aria-label="شناسه دوره مالی ریالی" dir="ltr"
-        value={rialFiscalPeriodId} maxLength={96} onChange={event=>setRialFiscalPeriodId(event.target.value)}/></label>
-      <label>شروع دوره<input type="date" aria-label="شروع دوره ریالی"
-        value={rialFiscalStart} onChange={event=>setRialFiscalStart(event.target.value)}/></label>
-      <label>پایان دوره<input type="date" aria-label="پایان دوره ریالی"
-        value={rialFiscalEnd} onChange={event=>setRialFiscalEnd(event.target.value)}/></label>
-      <button type="submit" disabled={!canManage||typeof api?.rialJournalActivate!=='function'||
-        !rialCompanyId||!rialFiscalPeriodId||!rialFiscalStart||!rialFiscalEnd}>
-        فعال‌سازی دفتر خالی V2 (فقط با پایگاه یکپارچه)
-      </button>
-      {rialActivationNotice&&<p role="status">{rialActivationNotice}</p>}
-    </form>
-    <RialJournalPanel key={rialRefresh} api={api} companyId={rialCompanyId}
-      fiscalPeriodId={rialFiscalPeriodId} canView={canManage} canPreview={false}
-      onExit={()=>setRialJournalOpen(false)}/>
-  </div>;
   return <div className="app-shell vitrea-layout">
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
@@ -2107,13 +2009,14 @@ export default function App(){
           {show('calendarInterop')&&<button onClick={()=>setCalendarInteropOpen(true)}><CalendarDays size={17}/> تبادل فایل تقویم</button>}
         </nav>
       </details>
-      {canViewStandalone&&show('accountingDashboard')&&<details className="sidebar-group" aria-label="بخش حسابداری">
-        <summary><Wallet size={17}/> حسابداری <ChevronDown size={15}/></summary>
-        <nav className="sidebar-nav" aria-label="برنامه حسابداری مستقل">
-          <button type="button" onClick={openStandaloneDashboard}><Wallet size={17}/> ورود به نرم‌افزار حسابداری</button>
-          {canManage&&<button type="button" onClick={()=>setRialJournalOpen(true)}><FileText size={17}/> دفتر ریالی V2 (آزمایشی)</button>}
-        </nav>
-      </details>}
+      <details className="sidebar-group" aria-label="اتصال اختیاری تراز">
+        <summary><FileText size={17}/> اتصال به تراز <ChevronDown size={15}/></summary>
+        <div className="sidebar-nav" role="note">
+          <p>{tarazStatus?.message||'در حال بررسی صندوق تبادل تراز…'}</p>
+          {tarazStatus?.supported&&<p>پیشنهادهای منتظر بررسی: {Number(tarazStatus.pending||0).toLocaleString('fa-IR')}</p>}
+          <p>ارسال خلاصه از دکمه «ارسال به تراز» داخل هر کارت انجام می‌شود. تراز را به‌عنوان برنامه جداگانه اجرا کنید.</p>
+        </div>
+      </details>
       <div className="side-project-header"><span className="sidebar-section">پروژه‌های من</span>{canManage&&<button className="sidebar-plus" onClick={()=>setProjectModal(true)} aria-label="پروژه جدید"><Plus size={18}/></button>}</div>
       <nav className="sidebar-nav projects-nav" aria-label="پروژه‌ها">
         {visibleProjects.map(p=><div className="project-entry" key={p.id}><button title={'پروژه '+p.name} className={selected===p.id?'active':''} onClick={()=>{setSelected(p.id);setBoardId(null);setFilter('all');}}><span className="project-dot" style={{background:p.color}}/>{p.name}<span>{tasks.filter(t=>t.projectId===p.id&&!t.archived&&t.deleted!==true&&(!boards.length||workspaceBoards.some(b=>b.id===t.boardId))).length}</span></button>{show('projectAdministration')&&<button className="project-options" aria-label={'تنظیمات پروژه '+p.name} onClick={()=>{setProjectSettings(p.id);setProjectName(p.name);}}><MoreHorizontal size={15}/></button>}</div>)}
@@ -2162,7 +2065,6 @@ export default function App(){
         <button type="button" aria-label="پروژه‌ها" aria-expanded={desktopNavOpen||mobileNavOpen} aria-controls="madar-sidebar"
           onClick={()=>window.innerWidth<=860?setMobileNavOpen(true):setDesktopNavOpen(true)}><FolderOpen size={16}/><span className="vitrea-primary-nav__label">پروژه‌ها</span></button>
         {show('planner')&&<button type="button" aria-label="برنامه‌ریزی" onClick={()=>setPlannerOpen(true)}><CalendarDays size={16}/><span className="vitrea-primary-nav__label">برنامه‌ریزی</span></button>}
-        {canViewStandalone&&show('accountingDashboard')&&<button type="button" aria-label="حسابداری" onClick={openStandaloneDashboard}><Wallet size={16}/><span className="vitrea-primary-nav__label">حسابداری</span></button>}
       </nav>
       <button type="button" className="vitrea-account-capsule" onClick={()=>setProfileOpen(true)}
         aria-label="نمایش پروفایل من" title="پروفایل من">
@@ -2193,12 +2095,11 @@ export default function App(){
         </>}
 
         <section className="page-header" data-board-header={workspaceBoards.length&&mode==='board'?'true':'false'}><div className="page-heading"><h1 title={activeBoard?'برد فعال':'نمای کارها'}>{activeBoard?.name||selectedProject?.name||'همه‌چیز، روی مدار.'}</h1></div><div className="page-controls">{lanStatus.mode==='solo'&&canEdit&&<><button type="button" className="btn secondary" disabled={!canUndo} aria-label="بازگرداندن آخرین ویرایش کارت" aria-keyshortcuts="Control+Z" title="بازگرداندن آخرین ویرایش کارت (Ctrl+Z)" onClick={()=>reverseCardEdit('undo')}><Undo2 size={15}/> بازگشت</button><button type="button" className="btn secondary" disabled={!canRedo} aria-label="انجام دوباره آخرین ویرایش کارت" aria-keyshortcuts="Control+Shift+Z Control+Y" title="انجام دوباره ویرایش کارت (Ctrl+Y)" onClick={()=>reverseCardEdit('redo')}><Redo2 size={15}/> انجام دوباره</button></>}{activeBoard&&<button type="button" className="btn secondary" onClick={()=>setCardArchiveOpen(true)} title="آرشیو کارت‌ها"><Archive size={15}/> آرشیو کارت‌ها ({archivedCards.length.toLocaleString('fa-IR')})</button>}{show('boardAdministration')&&activeBoard&&<><button className="btn secondary" onClick={()=>{setRenameBoardId(activeBoard.id);setBoardName(activeBoard.name);}} title="تغییر نام برد"><MoreHorizontal size={15}/> تغییر نام برد</button><button className="btn secondary" onClick={archiveBoard} title="بایگانی برد"><Archive size={15}/> بایگانی برد</button></>}</div></section>
-        {show('profitPeek')&&profitVisible&&<ProfitPeek api={api} projectId={selectedProject?.id||''}/>}
         {selectedProject&&<details className="project-file-panel project-file-panel--compact" key={selectedProject.id} defaultOpen={!!selectedProject.fileLinks?.length}>
           <summary><FolderOpen size={17}/> فایل‌های اشتراکی پروژه{!!selectedProject.fileLinks?.length&&<small>{selectedProject.fileLinks.length} لینک</small>}</summary>
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
-        {selectedProject&&(show('projectFinance')||show('automationRules'))&&<div className="page-controls page-controls--project-quick">{show('projectFinance')&&<button className="btn secondary" onClick={()=>setFinanceOpen(true)}><FileText size={16}/> قراردادها و فاکتورهای این پروژه</button>}{show('automationRules')&&<button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button>}</div>}
+        {selectedProject&&show('automationRules')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button></div>}
         {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
@@ -2255,7 +2156,7 @@ export default function App(){
                     ?renderLaneComposer(stage)
                     :<button type="button" className="lane-insert-before" aria-label={i===0?'افزودن کارت در ابتدای '+stage.label:'افزودن کارت پیش از '+t.title} title={i===0?'افزودن کارت در بالا':'افزودن کارت در این موقعیت'} onClick={()=>openAdd(stage.id,'before',t.id)}><Plus size={13}/> افزودن کارت</button>}
                 </div>}
-                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} labelLibrary={labelLibrary} canEdit={canEdit} canManage={canManage} showCosts={show('profitPeek')} onOpen={setEditorId} onContextRequest={requestCardMenu} onLabelContext={openSharedLabelManager} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
+                <TaskCard task={t} project={projects.find(p=>p.id===t.projectId)} users={users} calendar={calendar} priorities={priorities} labelLibrary={labelLibrary} canEdit={canEdit} canManage={canManage} showCosts={false} onOpen={setEditorId} onContextRequest={requestCardMenu} onLabelContext={openSharedLabelManager} onDrag={()=>{}} onCardDrop={activeBoard?(id,anchor,placement)=>reorderCard(id,stage.id,anchor,placement):undefined} onKeyboardReorder={activeBoard?(id,direction)=>{const neighbor=items[i+direction];if(neighbor)reorderCard(id,stage.id,neighbor.id,direction<0?'before':'after');}:undefined} onToggleComplete={toggleCardComplete} onToggleStep={toggleChecklistStep}/>
               </React.Fragment>} empty={<div className="lane-empty-message">هنوز کارتی نیست</div>} />
               {canEdit&&(adding?.boardId===activeBoard?.id&&adding?.listId===stage.id&&
                 (adding.placement==='end'||(adding.placement==='start'&&items.length===0))
@@ -2330,7 +2231,6 @@ export default function App(){
         }):<p className="shared-empty">در این فضای کاری کارت بایگانی‌شده‌ای وجود ندارد.</p>}
       </div>
     </Modal>}
-    {show('projectFinance')&&financeOpen&&selectedProject&&<FinancePanel api={api} project={selectedProject} tasks={tasks.filter(t=>t.projectId===selectedProject.id)} onClose={()=>setFinanceOpen(false)}/>}
     {show('reporting')&&reportingOpen&&<ReportingPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} boards={boards} stages={stages} calendar={calendar} onOpenTask={setEditorId} onClose={()=>setReportingOpen(false)}/>}
     {trashOpen&&<Modal title="زباله‌دان کارت‌ها" width={680} onClose={()=>setTrashOpen(false)}>
       <div className="dialog-body">
@@ -2363,7 +2263,7 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={show('taskCostControls')} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onOpenSale={task=>prepareIndependentAccounting(task)} onOpenPurchase={(task,expense)=>prepareIndependentAccounting(task,expense)} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
     {!!labelManager&&<Modal title="مدیریت برچسب‌ها" width={420} onClose={()=>setLabelManager(null)}>
       <div className="dialog-body"><LabelEditor key={labelManager.id||'global-library'} library={labelLibrary} labels={null} disabled={!canEdit}
         initialEditId={labelManager.id} canManage={canManage} onCreate={createSharedLabel}

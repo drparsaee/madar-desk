@@ -29,7 +29,7 @@ import threading
 import time
 from datetime import date, datetime, timezone
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit, parse_qs
+from urllib.parse import urlencode, urlsplit, parse_qs, unquote
 from urllib.request import Request, urlopen
 import webbrowser
 
@@ -590,7 +590,6 @@ class Bridge:
         if self.connection.get("mode") != "client":
             try:
                 with self._lock:
-                    self._drain_finance_outbox()
                     self._drain_automation_outbox()
             except (ValueError, PermissionError, RuntimeError, OSError) as error:
                 self._finance_warning = str(error)
@@ -1653,6 +1652,31 @@ class Bridge:
             return value
         return finance.empty_finance_state()
 
+    def tarazIntegrationStatus(self):
+        from taraz_exchange import integration_status
+        return integration_status()
+
+    def tarazIntegrationQueue(self, taskId, expenseId=None):
+        """Explicit proposal from a currently saved task, never a ledger write."""
+        from taraz_exchange import queue_saved_task
+        with self._lock:
+            # LAN clients must not queue a stale/offline task or another user's
+            # inaccessible project into this Windows user's exchange inbox.
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("برای ارسال به تراز ابتدا ارتباط با میزبان را برقرار کنید.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("ارسال پیشنهاد تراز برای این حساب مجاز نیست.")
+                selected = [t for t in state.get("tasks", [])
+                            if isinstance(t, dict) and t.get("id") == taskId]
+                grants = user.get("projects")
+                if (len(selected) != 1 or
+                        (grants is not None and selected[0].get("projectId") not in grants)):
+                    raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
+            return queue_saved_task(state, taskId, expenseId)
+
     def financeStatus(self):
         if self.connection.get("mode") == "client":
             return self._remote_request("/api/finance-status")
@@ -1788,33 +1812,15 @@ class Bridge:
         # completion outbox is written. A 3001-event batch must fail atomically.
         events = card_change_events(prior, state)
         before = {t["id"]: t for t in prior["tasks"]}
-        completions = [t for t in state["tasks"] if t["id"] in before
-                       and before[t["id"]].get("status") != "done"
-                       and t.get("status") == "done"
-                       and before[t["id"]].get("projectId") == t.get("projectId")]
         acting = actor or (next((u for u in self.lan.users.values() if u["role"] == "admin"),
                                 {"username": "local"})["username"] if self.lan else "local")
-        if completions:
-            pending = self._pending_finance_events()
-            for card in completions:
-                nonce = secrets.token_hex(16)
-                pending.append({"eventId": "completed-" + nonce,
-                                "completionId": "completion-" + nonce,
-                                "cardId": card["id"], "projectId": card["projectId"],
-                                "actor": acting, "at": datetime.now(timezone.utc).isoformat()})
-            if self._unified_store is None:
-                atomic_json(self.finance_outbox_path, pending)
         if events and self._unified_store is None:
             queued = self._pending_automation_events()
             queued.extend({"actor": acting, "command": event} for event in events)
             atomic_json(self.automation_outbox_path, queued)
         if self._unified_store is not None:
             current = self._unified_store.load()
-            # Save task changes and the completion queue together: a process
-            # interruption can no longer record a done card without its event.
             updated = {**current.bundle, "tasks": state}
-            if completions:
-                updated["completion_outbox"] = pending
             if events and "automation" in current.bundle:
                 # Queue + task change + authorization-dependent delivery +
                 # collaboration receipts all commit under ONE SQLite CAS.
@@ -1850,7 +1856,6 @@ class Bridge:
             atomic_save(self.path, state)
         self.state = state
         try:
-            self._drain_finance_outbox(accounts=accounts)
             self._drain_automation_outbox(accounts=accounts)
         except (ValueError, PermissionError, RuntimeError, OSError) as error:
             self._finance_warning = str(error)
@@ -2882,6 +2887,23 @@ class Bridge:
         return restored
 
 
+def _retired_financial_method(self, *args, **kwargs):
+    raise PermissionError("حسابداری از مدار جدا شده است. پیشنهادها را از اتصال اختیاری تراز ارسال کنید.")
+
+
+# pywebview exposes Bridge's public methods directly, not only window.madar.
+# Disable the retired routes at the Python boundary as well.
+for _retired_method in (
+    "financeStatus", "financeRead", "financeOverview", "financeCommand",
+    "accountingRead", "accountingCommand",
+    "standaloneAccountingRead", "standaloneAccountingCommand",
+    "standaloneAccountingCsvChooseFile", "standaloneAccountingCsvPreview",
+    "standaloneAccountingPrepare", "standaloneAccountingQuote",
+    "rialJournalRead", "rialJournalActivate",
+):
+    setattr(Bridge, _retired_method, _retired_financial_method)
+
+
 JS_BRIDGE = """
 <script>
 window.madar = Object.fromEntries(
@@ -2896,12 +2918,7 @@ window.madar = Object.fromEntries(
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',
            'driveFolderList','driveFolderRestore',
            'cloudPeerStatus','cloudPeerConfigure','cloudPeerGenerate','cloudPeerForget',
-           'financeRead','financeOverview','financeStatus','financeCommand',
-           'accountingRead','accountingCommand',
-           'standaloneAccountingRead','standaloneAccountingCommand',
-           'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview',
-           'standaloneAccountingPrepare',
-           'standaloneAccountingQuote',
+           'tarazIntegrationStatus','tarazIntegrationQueue',
            'runDueScheduler','attachmentList','attachmentPreview','attachmentRead',
            'attachmentUpload','attachmentDelete','attachmentBackup',
            'createUnifiedSqliteBackup','storageStatus','enableUnifiedStorage',
@@ -2928,60 +2945,19 @@ window.madar = Object.fromEntries(
 </script>
 """
 
-# Keep the accounting page's JavaScript wrapper independent from task routes.
-# This is UI-surface reduction, not an OS/process security sandbox: pywebview
-# still holds the original Bridge and native authorization remains mandatory.
-ACCOUNTING_JS_BRIDGE = """
-<script>
-window.madar = Object.fromEntries(
- ['standaloneAccountingRead','standaloneAccountingCommand',
-  'standaloneAccountingCsvChooseFile','standaloneAccountingCsvPreview',
-  'releaseCheck','releaseDownload','releaseInstall'].map(key =>
- [key, (...args) => new Promise((resolve, reject) => {
-   // The standalone page frequently follows an in-window navigation from the
-   // task desk. Its JavaScript API must not race WebView2 method injection.
-   const invoke = (attempt = 0) => {
-     const exported = window.pywebview && window.pywebview.api;
-     if (exported && typeof exported[key] === 'function') {
-       try { Promise.resolve(exported[key](...args)).then(resolve, reject); }
-       catch (error) { reject(error); }
-     } else if (attempt < 75) {
-       setTimeout(() => invoke(attempt + 1), 80);
-     } else {
-       reject(new Error('Native bridge method unavailable: ' + key));
-     }
-   };
-   invoke();
- })])
-);
-</script>
-"""
-
-
 def integrated_native_closing_scripts():
-    """Explicit URL allow-list for the main window's native close decision.
-
-    A partially loaded or unknown page cannot bypass unsaved accounting edits.
-    Unlike the standalone accounting window, the task board has no React
-    accounting hook and is safe to close after the mandatory host backup.
-    """
+    """Only task routes may confirm a native close; others fail closed."""
     confirm = (
         "(()=>{const path=location.pathname.toLowerCase();"
         "if(path==='/'||path==='/index.html')return "
         "typeof window.__madarTasksConfirmNativeClose==='function' "
         "&&window.__madarTasksConfirmNativeClose();"
-        "if(path==='/accounting.html')return "
-        "typeof window.__madarAccountingConfirmNativeClose==='function' "
-        "&&window.__madarAccountingConfirmNativeClose();"
         "return false})()")
     abort = (
         "(()=>{const path=location.pathname.toLowerCase();"
         "if(path==='/'||path==='/index.html')return "
         "typeof window.__madarTasksAbortNativeClose==='function' "
         "&&window.__madarTasksAbortNativeClose();"
-        "if(path==='/accounting.html')return "
-        "typeof window.__madarAccountingAbortNativeClose==='function' "
-        "&&window.__madarAccountingAbortNativeClose();"
         "return false})()")
     return confirm, abort
 
@@ -3014,31 +2990,26 @@ def main():
     periodic_backup = None
     exit_financial_backup_done = False
     if api.connection.get("mode") != "client":
-        from standalone_accounting_auto_backup import AutomaticStandaloneBackups
         from host_backup_scheduler import HostBackupScheduler
-        api._standalone_accounting_store()
-        financial_backup = AutomaticStandaloneBackups(
-            api.path.parent, plaintext_acknowledged=True)
-        financial_backup.backup_now()  # Fail startup if a valid backup cannot be made.
-        financial_backup.start()
         try:
             periodic_backup = HostBackupScheduler(api)
             periodic_backup.start()  # Initial validated task snapshot before GUI.
             api._host_periodic_backup = periodic_backup
         except Exception:
-            financial_backup.stop()
             raise
     api.startScheduledJobs()
     class StaticHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(site), **kwargs)
         def do_GET(self):
-            page = urlsplit(self.path).path
-            if page in ("/", "/index.html", "/accounting.html"):
-                filename = "accounting.html" if page == "/accounting.html" else "index.html"
+            page = unquote(urlsplit(self.path).path).lower()
+            if page == "/accounting.html" or page.endswith("/accounting.html"):
+                self.send_error(404)
+                return
+            if page in ("/", "/index.html"):
+                filename = "index.html"
                 content = (site / filename).read_text(encoding="utf8")
-                bridge_js = ACCOUNTING_JS_BRIDGE if filename == "accounting.html" else JS_BRIDGE
-                content = content.replace("</head>", bridge_js + "</head>")
+                content = content.replace("</head>", JS_BRIDGE + "</head>")
                 encoded = content.encode("utf8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3060,10 +3031,7 @@ def main():
         )
         from standalone_accounting_desktop import (
             NativeAccountingCloseGate, recover_native_editor_after_close_abort)
-        # The integrated executable also navigates to accounting.html. Its
-        # titlebar X must not bypass React's unsaved-financial-editor veto.
-        # The ordinary task-manager page has no accounting React callback;
-        # permit it only for these two exact, already-loaded document paths.
+        # Keep the guarded task close callback; no accounting document is served.
         integrated_confirm, integrated_abort = integrated_native_closing_scripts()
         failed_exit_backup_notice = False
 
