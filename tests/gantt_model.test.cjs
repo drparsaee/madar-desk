@@ -10,7 +10,8 @@ const mod=new Module(path.join(root,'gantt-model-test.cjs'),module);
 mod.filename=path.join(root,'gantt-model-test.cjs');
 mod.paths=Module._nodeModulePaths(root);
 mod._compile(output,mod.filename);
-const {dayNumber,dayString,ganttAxis,validPlan,validPlanningPatch,shiftPlan,barPosition,buildGanttRows}=mod.exports;
+const {dayNumber,dayString,ganttAxis,validPlan,validPlanningPatch,shiftPlan,barPosition,buildGanttRows,
+  inspectGanttDependencies}=mod.exports;
 
 test('partial card planning-date edits fail before autosave without breaking unrelated changes',()=>{
   const task={plannedStart:'2026-11-08',plannedEnd:'2026-11-12'};
@@ -60,4 +61,52 @@ test('large task list caps rendered rows and filters deleted/archived tasks',()=
   assert.equal(outcome.total,998);
   assert.equal(outcome.rows.length,350);
   assert.equal(outcome.truncated,true);
+});
+
+test('P2 Gantt identifies finish-to-start overlaps and suggests one-card safe date shift',()=>{
+  const tasks=[
+    {id:'a',title:'پیش‌نیاز',projectId:'p',plannedStart:'2026-11-07',plannedEnd:'2026-11-10'},
+    {id:'b',title:'مرحله دو',projectId:'p',plannedStart:'2026-11-10',plannedEnd:'2026-11-12',dependencies:['a']},
+    {id:'c',title:'مرحله سه',projectId:'p',plannedStart:'2026-11-13',plannedEnd:'2026-11-15',dependencies:['a']}
+  ];
+  const before=structuredClone(tasks);
+  const result=inspectGanttDependencies(tasks);
+  assert.equal(result.overlaps,1);
+  assert.equal(result.conflictingCards,1);
+  assert.equal(result.outsideView,0);
+  assert.deepEqual(result.byTask.get('b').suggestion,
+    {plannedStart:'2026-11-11',plannedEnd:'2026-11-13'});
+  assert.equal(result.byTask.get('c').suggestion,null);
+  assert.equal(result.byTask.get('b').conflicts[0].title,'پیش‌نیاز');
+  assert.deepEqual(tasks,before);
+});
+
+test('P2 Gantt does not offer a misleading repair when predecessors are hidden or undated',()=>{
+  const known={id:'a',title:'Safe',projectId:'p',plannedStart:'2026-11-05',plannedEnd:'2026-11-11'};
+  const target={id:'b',title:'Target',projectId:'p',plannedStart:'2026-11-10',
+    plannedEnd:'2026-11-12',dependencies:['a','hidden-id']};
+  const partly=inspectGanttDependencies([known,target]);
+  assert.equal(partly.overlaps,1);
+  assert.equal(partly.outsideView,1);
+  assert.equal(partly.byTask.get('b').hidden,1);
+  assert.equal(partly.byTask.get('b').suggestion,null);
+  const unknown=inspectGanttDependencies([{...known,plannedEnd:''},{...target,dependencies:['a']}]);
+  assert.equal(unknown.unknownDates,1);
+  assert.equal(unknown.overlaps,0);
+  assert.equal(unknown.byTask.get('b').suggestion,null);
+  const otherProject=inspectGanttDependencies([{...known,projectId:'else'},{...target,dependencies:['a']}]);
+  assert.equal(otherProject.outsideView,1);
+  assert.equal(otherProject.byTask.get('b').suggestion,null);
+});
+
+test('P2 Gantt disregards archived cards and duplicate legacy edges without mutating source',()=>{
+  const prior={id:'a',projectId:'p',title:'Older',plannedStart:'0001-01-01',plannedEnd:'0001-01-02'};
+  const target={id:'b',projectId:'p',title:'Next',plannedStart:'0001-01-02',
+    plannedEnd:'0001-01-03',dependencies:['a','a']};
+  const result=inspectGanttDependencies([prior,target,{...prior,id:'archived',archived:true}]);
+  assert.equal(result.overlaps,1);
+  assert.deepEqual(result.byTask.get('b').suggestion,
+    {plannedStart:'0001-01-03',plannedEnd:'0001-01-04'});
+  assert.equal(result.byTask.has('archived'),false);
+  assert.deepEqual(target.dependencies,['a','a']);
 });

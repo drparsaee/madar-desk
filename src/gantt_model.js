@@ -36,6 +36,51 @@ export function shiftPlan(task,days) {
   return dayNumber(plannedStart)===null||dayNumber(plannedEnd)===null
     ?null:{plannedStart,plannedEnd};
 }
+
+/** P2 schedule diagnostics for only the cards the current reader can see.
+ * A predecessor hidden by ACL/filtering is UNKNOWN, never assumed completed.
+ * Suggested shifts preserve duration and affect one card only; no cascade.
+ */
+export function inspectGanttDependencies(tasks=[]) {
+  if(!Array.isArray(tasks))throw Error('Invalid Gantt card collection');
+  const active=tasks.filter(t=>t&&!t.deleted&&!t.archived);
+  const byId=new Map(active.map(t=>[t.id,t]));
+  const byTask=new Map();
+  let overlaps=0,unknownDates=0,outsideView=0;
+  for(const task of active){
+    const start=dayNumber(task.plannedStart),end=dayNumber(task.plannedEnd);
+    const conflicts=[];
+    let incomplete=0,hidden=0,latestPredecessorEnd=null;
+    const dependencies=Array.isArray(task.dependencies)?new Set(task.dependencies):new Set();
+    for(const dependencyId of dependencies){
+      const predecessor=byId.get(dependencyId);
+      // The full task set is already ACL-filtered by its caller. Never look up
+      // missing predecessors in unfiltered host data or display their IDs.
+      if(!predecessor||predecessor.projectId!==task.projectId||dependencyId===task.id){
+        outsideView++;hidden++;continue;
+      }
+      const priorEnd=dayNumber(predecessor.plannedEnd);
+      if(start===null||end===null||start>end||priorEnd===null||
+          !validPlan(predecessor.plannedStart||'',predecessor.plannedEnd||'')){
+        unknownDates++;incomplete++;continue;
+      }
+      latestPredecessorEnd=Math.max(latestPredecessorEnd??priorEnd,priorEnd);
+      if(start<=priorEnd){
+        overlaps++;
+        conflicts.push({predecessorId:dependencyId,title:String(predecessor.title||'بدون عنوان'),
+          predecessorEnd:predecessor.plannedEnd});
+      }
+    }
+    // When any predecessor is hidden or undated, offering a one-card repair
+    // would incorrectly imply that all dependencies have been checked.
+    const days=latestPredecessorEnd===null||start===null?0:latestPredecessorEnd+1-start;
+    const suggestion=conflicts.length&&hidden===0&&incomplete===0&&days>0
+      ?shiftPlan(task,days):null;
+    byTask.set(task.id,{conflicts,hidden,incomplete,suggestion});
+  }
+  return {overlaps,conflictingCards:[...byTask.values()].filter(x=>x.conflicts.length).length,
+    unknownDates,outsideView,byTask};
+}
 export function ganttAxis(anchor,scale='day') {
   const day=dayNumber(anchor)??dayNumber(new Date().toISOString().slice(0,10));
   if(scale==='month'){
