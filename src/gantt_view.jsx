@@ -1,10 +1,10 @@
 import React,{useMemo,useRef,useState} from 'react';
 import {CalendarRange,ChevronLeft,ChevronRight,GitBranch} from 'lucide-react';
-import {analyzeCriticalPaths,barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,inspectGanttDependencies,shiftPlan,validPlan} from './gantt_model.js';
+import {analyzeCriticalPaths,barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,inspectGanttDependencies,previewGanttShiftImpact,shiftPlan,validPlan} from './gantt_model.js';
 import './gantt_view.css';
 
 const CELL_WIDTH=44;
-const ROW_HEIGHT=94;
+const ROW_HEIGHT=118;
 const LABEL_WIDTH=276;
 const humanDate=(date,calendar)=>new Date(date+'T12:00:00Z').toLocaleDateString(
   calendar==='gregorian'?'fa-IR-u-ca-gregory':'fa-IR-u-ca-persian',
@@ -17,6 +17,7 @@ const axisLabel=(entry,scale,calendar)=>scale==='day'?
 export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=>{},onOpen=()=>{}}){
   const [scale,setScale]=useState('day'),[member,setMember]=useState(''),[query,setQuery]=useState('');
   const [error,setError]=useState(''),[priority,setPriority]=useState('');
+  const [pendingShift,setPendingShift]=useState(null);
   const first=tasks.find(t=>dayNumber(t.plannedStart)!==null)?.plannedStart||
     new Date().toISOString().slice(0,10);
   const [anchor,setAnchor]=useState(first);
@@ -39,6 +40,24 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
     return indexed;
   },[critical]);
   const shownById=useMemo(()=>new Map(shown.map(task=>[task.id,task])),[shown]);
+  const impact=useMemo(()=>pendingShift?
+    previewGanttShiftImpact(shown,pendingShift.cardId,pendingShift.days):null,[shown,pendingShift]);
+  const staleImpact=Boolean(pendingShift&&impact?.status==='ready'&&
+    (impact.source.from.plannedStart!==pendingShift.start||
+     impact.source.from.plannedEnd!==pendingShift.end));
+  const impactReason={
+    unavailable_target:'این کارت دیگر در نمای فعلی قابل بررسی نیست.',
+    outside_authorized_view:'همه پیش‌نیازها در نمای فعلی قابل مشاهده نیستند؛ پیش‌نمایش کامل ممکن نیست.',
+    invalid_or_missing_plan:'تاریخ‌های برنامه یا شناسه فعالیت‌های این پروژه ناقص یا نامعتبر هستند.',
+    invalid_dependencies:'وابستگی تکراری یا نامعتبر وجود دارد؛ ابتدا آن را اصلاح کنید.',
+    existing_conflict:'تداخل زمانی از قبل وجود دارد؛ ابتدا تداخل‌های فعلی را اصلاح کنید.',
+    dependency_cycle:'چرخه وابستگی وجود دارد؛ برنامه‌ریزی متوقف شد.',
+    earlier_than_predecessor:'این جابه‌جایی فعالیت را پیش از پایان یکی از پیش‌نیازها قرار می‌دهد.',
+    date_out_of_range:'تاریخ جدید خارج از بازه معتبر تقویم است.',
+    too_many:'تعداد فعالیت‌های این پروژه از حد پیش‌نمایش فراتر رفته است.',
+    invalid_request:'مقدار جابه‌جایی معتبر نیست.',
+    invalid_project:'پروژه کارت مشخص نیست.'
+  };
   const axis=useMemo(()=>ganttAxis(anchor,scale),[anchor,scale]);
   const bars=useMemo(()=>new Map(rows.map(t=>[t.id,barPosition(t,axis)])),[rows,axis]);
   const width=axis.length*CELL_WIDTH;
@@ -86,7 +105,18 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
     if(!steps)return;
     const next=shiftPlan(task,steps);
     if(!next||!validPlan(next.plannedStart,next.plannedEnd)){setError('تاریخ جدید معتبر نیست.');return;}
-    setError('');onUpdate(task.id,next);
+    setError('');
+    setPendingShift({cardId:task.id,days:steps,start:task.plannedStart,end:task.plannedEnd});
+  };
+  const requestPreview=(task,days=1)=>{
+    if(!canEdit)return;
+    setError('');
+    setPendingShift({cardId:task.id,days,start:task.plannedStart,end:task.plannedEnd});
+  };
+  const applyPreview=()=>{
+    if(!canEdit||impact?.status!=='ready'||staleImpact||impact.affectedCount!==0)return;
+    onUpdate(impact.source.id,impact.source.to);
+    setPendingShift(null);
   };
   return <section className="gantt-root" aria-label="گانت و برنامه زمانی پروژه">
     <div className="gantt-toolbar">
@@ -106,7 +136,7 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
       <input aria-label="جستجو در گانت" value={query} onChange={e=>setQuery(e.target.value)} placeholder="جستجوی فعالیت..." />
     </div>
     <p className="gantt-hint"><CalendarRange size={14}/> تاریخ شروع و پایان از موعد تحویل و نفرساعت جدا هستند.
-      {canEdit?' در مقیاس روز می‌توان نوار فعالیت را جابه‌جا کرد.':''}</p>
+      {canEdit?' در مقیاس روز، کشیدن نوار ابتدا پیش‌نمایش تغییرات را نشان می‌دهد.':''}</p>
     <div className="gantt-schedule-health" role="status" aria-label="کنترل ارتباط و زمان‌بندی گانت">
       <strong>{diagnostics.overlaps?`${diagnostics.conflictingCards.toLocaleString('fa-IR')} کارت دارای تداخل زمانی با پیش‌نیاز`:'برای کارت‌های نمایش‌داده‌شده تداخل زمانی شناسایی نشد'}</strong>
       <span>{diagnostics.overlaps.toLocaleString('fa-IR')} ارتباط با شروع زودهنگام</span>
@@ -139,6 +169,40 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
       </div>)}
       {!critical.projects.length&&<p>فعالیت فعالی در نمای فعلی وجود ندارد.</p>}
     </section>
+    {pendingShift&&<section className="gantt-impact-preview" aria-label="پیش‌نمایش اثر جابه‌جایی">
+      <div className="gantt-impact-head">
+        <strong>پیش‌نمایش جابه‌جایی: {shownById.get(pendingShift.cardId)?.title||'کارت انتخاب‌شده'}</strong>
+        <button type="button" onClick={()=>setPendingShift(null)} aria-label="بستن پیش‌نمایش">بستن</button>
+      </div>
+      <p>محاسبه فقط بر اساس کارت‌های قابل مشاهده این نما است؛ هنوز هیچ تغییری ذخیره نشده است.</p>
+      <div className="gantt-impact-controls">
+        <button type="button" disabled={!canEdit||pendingShift.days<=-3660}
+          onClick={()=>setPendingShift(current=>({...current,days:current.days<0?current.days-1:-1}))}>یک روز زودتر</button>
+        <strong aria-live="polite">{Math.abs(pendingShift.days).toLocaleString('fa-IR')} روز {pendingShift.days<0?'زودتر':'دیرتر'}</strong>
+        <button type="button" disabled={!canEdit||pendingShift.days>=3660}
+          onClick={()=>setPendingShift(current=>({...current,days:current.days>0?current.days+1:1}))}>یک روز دیرتر</button>
+      </div>
+      {impact?.status==='ready'&&!staleImpact?<>
+        <p role="status">
+          تغییر کارت اصلی: {impact.source.from.plannedStart} تا {impact.source.from.plannedEnd}
+          {' ← '}{impact.source.to.plannedStart} تا {impact.source.to.plannedEnd}
+        </p>
+        <p><strong>{impact.affectedCount.toLocaleString('fa-IR')} فعالیت وابسته</strong> برای حفظ ترتیب شروع و پایان نیاز به جابه‌جایی رو به جلو دارند.</p>
+        {impact.successors.length>0&&<ol className="gantt-impact-list">
+          {impact.successors.slice(0,8).map(item=><li key={item.id}>
+            <strong>{item.title}</strong>
+            <span>{item.from.plannedStart} تا {item.from.plannedEnd} {' ← '}
+              {item.to.plannedStart} تا {item.to.plannedEnd}</span>
+          </li>)}
+          {impact.successors.length>8&&<li>{(impact.successors.length-8).toLocaleString('fa-IR')} فعالیت دیگر در این پیش‌نمایش</li>}
+        </ol>}
+        {impact.affectedCount>0?<p role="status">
+          اعمال گروهی فعلاً غیرفعال است؛ برای جلوگیری از تغییر ناقص، ابتدا جابه‌جایی وابسته‌ها باید با ذخیره اتمیک و بررسی مجوزها پشتیبانی شود.
+        </p>:<button type="button" className="gantt-impact-confirm" disabled={!canEdit}
+          onClick={applyPreview}>تأیید جابه‌جایی فقط همین کارت</button>}
+      </>:<p role="alert">{staleImpact?'برنامه کارت بعد از باز شدن پیش‌نمایش تغییر کرده است. پیش‌نمایش را دوباره باز کنید.':
+        impactReason[impact?.reason]||'برای این تغییر، پیش‌نمایش قابل‌اعتماد در دسترس نیست.'}</p>}
+    </section>}
     {error&&<p role="alert" className="gantt-error">{error}</p>}
     {truncated&&<p role="status" className="gantt-error">برای حفظ عملکرد، {rows.length.toLocaleString('fa-IR')} فعالیت نخست نشان داده می‌شود. از فیلتر استفاده کنید.</p>}
     <div className="gantt-scroll" tabIndex={0} aria-label="جدول زمانی قابل پیمایش">
@@ -176,6 +240,9 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
                 {criticalInfo&&<span className="gantt-critical-chip">
                   {criticalInfo.critical?'بحرانی، شناوری صفر':`شناوری ${criticalInfo.slackDays.toLocaleString('fa-IR')} روز`}
                 </span>}
+                {canEdit&&!missing&&<button type="button" className="gantt-impact-trigger"
+                  aria-label={'پیش‌نمایش جابه‌جایی کارت '+task.title}
+                  onClick={()=>requestPreview(task)}>بررسی جابه‌جایی</button>}
               </div>
               <div className="gantt-track" style={{width,backgroundSize:CELL_WIDTH+'px 100%'}}>
                 {bar&&<button type="button" className={'gantt-bar'+(task.completed||task.status==='done'?' is-done':'')+(hasConflict?' has-conflict':'')+(criticalInfo?.critical?' is-critical':'')}

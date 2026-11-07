@@ -9,8 +9,8 @@ const h=React.createElement;
 const root=createRoot(document.getElementById('fixture'));
 window.testActions={opened:[],updated:[],commands:[]};
 const tasks=[
-  {id:'one',title:'فعالیت اول',plannedStart:'2026-11-07',plannedEnd:'2026-11-09',assignees:['ali'],priority:'high'},
-  {id:'two',title:'فعالیت دوم',plannedStart:'2026-11-10',plannedEnd:'2026-11-12',dependencies:['one'],assignees:['sara'],priority:'low'}
+  {id:'one',projectId:'p',title:'فعالیت اول',plannedStart:'2026-11-07',plannedEnd:'2026-11-09',assignees:['ali'],priority:'high'},
+  {id:'two',projectId:'p',title:'فعالیت دوم',plannedStart:'2026-11-10',plannedEnd:'2026-11-12',dependencies:['one'],assignees:['sara'],priority:'low'}
 ];
 window.mountGantt=(canEdit=true)=>root.render(h(GanttView,{tasks,calendar:'gregorian',canEdit,
   onUpdate:(id,patch)=>window.testActions.updated.push({id,patch}),

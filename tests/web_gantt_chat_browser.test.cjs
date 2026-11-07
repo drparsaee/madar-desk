@@ -55,10 +55,18 @@ test('real Chromium: RTL Gantt drag does not open a card; calendar scale, viewer
       await page.mouse.move(bounds.x+bounds.width/2+44,bounds.y+bounds.height/2,{steps:5});
       await page.mouse.up();
       const afterDrag=await page.evaluate(()=>window.testActions);
-      assert.equal(afterDrag.updated.length,1);
-      assert.deepEqual(afterDrag.updated[0],{id:'one',patch:{
-        plannedStart:'2026-11-08',plannedEnd:'2026-11-10'}});
+      assert.equal(afterDrag.updated.length,0,'drag must stage preview rather than write immediately');
+      const impact=page.getByRole('region',{name:'پیش‌نمایش اثر جابه‌جایی'});
+      await impact.waitFor();
+      assert.match(await impact.innerText(),/۱ فعالیت وابسته/);
+      assert.equal(await impact.getByRole('button',{name:'تأیید جابه‌جایی فقط همین کارت'}).count(),0);
       assert.deepEqual(afterDrag.opened,[],'pointer drag must not open editor');
+      await impact.getByRole('button',{name:'یک روز زودتر'}).click();
+      assert.match(await impact.innerText(),/۰ فعالیت وابسته/);
+      await impact.getByRole('button',{name:'تأیید جابه‌جایی فقط همین کارت'}).click();
+      const afterApproval=await page.evaluate(()=>window.testActions);
+      assert.deepEqual(afterApproval.updated,[{id:'one',patch:{
+        plannedStart:'2026-11-06',plannedEnd:'2026-11-08'}}]);
       await bar.click();
       assert.deepEqual((await page.evaluate(()=>window.testActions.opened)),['one']);
       await page.getByLabel('مقیاس گانت').selectOption('week');
