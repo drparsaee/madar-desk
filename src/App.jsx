@@ -30,6 +30,7 @@ import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
 import {GanttView} from './gantt_view.jsx';
 import {validPlanningPatch} from './gantt_model.js';
+import {checkAndCacheAvailableUpdate} from './startup_update.mjs';
 import {TrelloImportPanel} from './trello_import.jsx';
 import {CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
 import {PlannerPanel} from './planner.jsx';
@@ -930,9 +931,37 @@ export default function App(){
   useEffect(()=>{
     if(!isDesktop)return;
     let mounted=true;
-    const check=()=>api.releaseCheck().then(info=>{if(mounted){setUpdateInfo(info?.available?info:null);setUpdateDownloaded(false);}}).catch(()=>{});
-    check();
-    const timer=setInterval(check,6*60*60*1000);
+    // Download a host-verified update on startup, never install it silently.
+    // Older public versions still require an explicit click for their first update.
+    const check=async(autoDownload=false)=>{
+      if(autoDownload&&mounted)setUpdateBusy(true);
+      try{
+        if(autoDownload){
+          const result=await checkAndCacheAvailableUpdate(api,{
+            onFound:info=>{if(mounted)setUpdateInfo(info);}
+          });
+          if(mounted){
+            setUpdateDownloaded(result.downloaded);
+            if(result.downloaded)setToast('نسخهٔ '+result.info.latest+' به‌صورت خودکار با تأیید SHA-256 دانلود شد. نصب فقط با تأیید شما انجام می‌شود.');
+          }
+        }else{
+          const info=await api.releaseCheck();
+          if(mounted){
+            setUpdateInfo(info?.available?info:null);
+            if(!info?.available)setUpdateDownloaded(false);
+          }
+        }
+      }catch(error){
+        if(autoDownload&&mounted){
+          setUpdateDownloaded(false);
+          setToast('دانلود خودکار به‌روزرسانی ناموفق بود؛ دریافت دستی همچنان در دسترس است: '+(error?.message||String(error)));
+        }
+      }finally{
+        if(autoDownload&&mounted)setUpdateBusy(false);
+      }
+    };
+    check(true);
+    const timer=setInterval(()=>check(false),6*60*60*1000);
     return()=>{mounted=false;clearInterval(timer);};
   },[]);
   const actOnUpdate=async()=>{

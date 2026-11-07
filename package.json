@@ -1,7 +1,7 @@
 {
   "name": "madar-desk",
   "private": true,
-  "version": "1.0.25",
+  "version": "1.0.26",
   "description": "Personal offline task management for Windows",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -15,7 +15,7 @@
     "test:p1:matrix": "npm run web:build && node --test --test-concurrency=1 tests/p1_browser_variants.test.cjs tests/p1_two_context_stress.test.cjs tests/web_mobile_p1.test.cjs",
     "test:web:server": "node --test --test-concurrency=1 tests/web_server_api.test.cjs tests/web_server_cli.test.cjs tests/web_real_api_browser_integration.test.cjs tests/web_production_browser_smoke.test.cjs",
     "dist": "npm run dist:rc",
-    "dist:rc": "python -B scripts/build_p1_v125_qa.py --webview2 release/.madar-inno-prereq/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+    "dist:rc": "python -B scripts/build_p1p2_v126_qa.py --webview2 release/.madar-inno-prereq/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
     "test": "python -B tools/safe_test_runner.py"
   },
   "dependencies": {
