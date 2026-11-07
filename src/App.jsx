@@ -497,7 +497,8 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
       <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
       {activityOpen&&<div className="task-activity-panel__content">
-        {showOperations&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
+        {showOperations&&<CardComments cardId={task.id} projectId={task.projectId} users={users}
+          api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
         <div className="task-activity-panel__reports">
           <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
             {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
@@ -2381,7 +2382,7 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
       onOpenTarget={openNotificationTarget}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
-      projectId={selectedProject.id} projectName={selectedProject.name} api={api}
+      projectId={selectedProject.id} projectName={selectedProject.name} api={api} users={users}
       canEdit={canEdit} canManage={canManage} username={lanStatus.user?.username||'local'}
       onClose={()=>setProjectChatOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}

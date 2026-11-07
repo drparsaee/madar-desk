@@ -6,6 +6,14 @@
 .team-reply-label{display:flex;align-items:center;gap:4px;opacity:.7;font-size:10px}
 .team-reply-hint{font-size:11px;display:flex;align-items:center;gap:6px;color:#3597a6}
 .team-reply-hint button{border:0;background:transparent;color:inherit;cursor:pointer}
+.team-mention-field{position:relative;min-width:0;flex:1 1 100%}
+.team-mention-field textarea{width:100%;box-sizing:border-box}
+.team-mention-options{position:absolute;z-index:160;inset-inline:0;top:calc(100% + 4px);max-height:min(240px,36dvh);overflow-y:auto;background:var(--surface,#fff);border:1px solid var(--border,#cbd7e5);border-radius:10px;box-shadow:0 8px 26px #1018292a;padding:4px;color:var(--text,#24334c);direction:rtl}
+.team-mention-option{display:flex;align-items:center;gap:9px;min-height:38px;padding:6px 10px;border-radius:7px;cursor:pointer;overflow-wrap:anywhere}
+.team-mention-option b{font-size:12px;unicode-bidi:isolate;max-width:100%}
+.team-mention-option small{font-size:11px;color:var(--text-muted,#536781)}
+.team-mention-option.selected{background:var(--surface-soft,#e4edf8);outline:1px solid var(--accent,#5672ca);outline-offset:-1px}
+.team-mention-field textarea:focus-visible{outline:2px solid var(--accent,#5672ca);outline-offset:2px}
 .project-conversation-dialog{max-width:min(780px,96vw);width:760px;max-height:90vh;display:flex;flex-direction:column}
 .project-conversation-dialog .dialog-body{overflow-y:auto;flex:1;min-height:0}
 .project-conversation-dialog .comment-thread{max-height:48vh;overflow-y:auto}

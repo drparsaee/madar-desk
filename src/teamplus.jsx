@@ -1,11 +1,98 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useId,useRef,useState} from 'react';
 import {Bell,Check,MessageCircle,Plus,RefreshCw,Trash2,X,CornerDownLeft,Pencil,Reply} from 'lucide-react';
 import './teamplus.css';
 
 const eventId=()=> 'ui_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
 const date=v=>v?new Date(v).toLocaleString('fa-IR',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
 
-function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,username='',title='گفت‌وگو'}){
+// Only trusted, explicitly supplied account profiles are considered. This is
+// presentation filtering; the collab backend remains the authority for ACL.
+export function eligibleMentionUsers(users,projectId,actor=''){
+ if(!Array.isArray(users)||typeof projectId!=='string'||!projectId)return [];
+ const seen=new Set();
+ return users.filter(user=>{
+   const name=user?.username;
+   if(typeof name!=='string'||!(/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/).test(name)||
+      name===actor||seen.has(name)||!['admin','editor','viewer'].includes(user.role)||
+      !(user.role==='admin'||user.projects===null||
+        (Array.isArray(user.projects)&&user.projects.includes(projectId))))return false;
+   seen.add(name);return true;
+ });
+}
+
+export function activeMentionToken(value,position){
+ if(typeof value!=='string'||!Number.isInteger(position)||position<0||position>value.length)return null;
+ const before=value.slice(0,position);
+ const match=/(^|[^\w@.-])@([A-Za-z0-9][A-Za-z0-9._-]{0,39})?$/.exec(before);
+ if(!match)return null;
+ const start=position-(match[2]||'').length-1;
+ // Replace the whole username when editing in the middle of a mention.
+ const suffix=/^[A-Za-z0-9._-]*/.exec(value.slice(position))?.[0]||'';
+ return {start,end:position+suffix.length,query:match[2]||''};
+}
+
+export function MentionTextarea({value,onChange,users=[],projectId='',username='',onSubmit,
+  disabled=false,rows=3,placeholder='',label='متن پیام'}){
+ const input=useRef(null),composing=useRef(false);
+ const [cursor,setCursor]=useState(0),[active,setActive]=useState(0),[dismissed,setDismissed]=useState(false);
+ const [composition,setComposition]=useState(false);
+ const listId=useId();
+ const token=activeMentionToken(value,cursor);
+ const candidates=eligibleMentionUsers(users,projectId,username)
+   .filter(user=>token&&user.username.toLowerCase().startsWith(token.query.toLowerCase())).slice(0,8);
+ const expanded=!disabled&&!composition&&!dismissed&&!!token&&candidates.length>0;
+ const selected=Math.min(active,Math.max(0,candidates.length-1));
+ const syncCursor=event=>{setCursor(event.currentTarget.selectionStart);setActive(0);setDismissed(false);};
+ const choose=user=>{
+   const field=input.current;
+   if(!field||!eligibleMentionUsers(users,projectId,username).some(item=>item.username===user.username))return;
+   const current=activeMentionToken(value,field.selectionStart);
+   if(!current)return;
+   const insertion='@'+user.username+' ';
+   const next=value.slice(0,current.start)+insertion+value.slice(current.end);
+   if(next.length>4000)return;
+   onChange(next);setDismissed(true);setActive(0);
+   const after=current.start+insertion.length;setCursor(after);
+   requestAnimationFrame(()=>{field.focus();field.setSelectionRange(after,after);});
+ };
+ const onKey=event=>{
+   if(composing.current||event.isComposing||event.keyCode===229)return;
+   if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
+     event.preventDefault();setDismissed(true);onSubmit?.();return;
+   }
+   if(!expanded)return;
+   if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+     event.preventDefault();setActive(index=>(index+(event.key==='ArrowDown'?1:candidates.length-1))%candidates.length);
+   }else if(event.key==='Enter'){
+     event.preventDefault();choose(candidates[selected]);
+   }else if(event.key==='Escape'){
+     event.preventDefault();event.stopPropagation();setDismissed(true);
+   }
+ };
+ return <div className="team-mention-field">
+   <textarea ref={input} rows={rows} dir="auto" value={value} disabled={disabled} maxLength={4000}
+     placeholder={placeholder} aria-label={label} role="combobox" aria-autocomplete="list"
+     aria-haspopup="listbox" aria-expanded={expanded} aria-controls={expanded?listId:undefined}
+     aria-activedescendant={expanded?listId+'-'+selected:undefined}
+     onChange={event=>{onChange(event.target.value);syncCursor(event);}}
+     onSelect={event=>{if(event.currentTarget.selectionStart!==cursor)syncCursor(event);}}
+     onClick={syncCursor} onKeyUp={event=>{
+       if(event.key.startsWith('Arrow')&&!expanded)syncCursor(event);
+     }} onKeyDown={onKey}
+     onCompositionStart={()=>{composing.current=true;setComposition(true);setDismissed(true);}}
+     onCompositionEnd={event=>{composing.current=false;setComposition(false);syncCursor(event);}}/>
+   {expanded&&<div className="team-mention-options" id={listId} role="listbox" aria-label="کاربران مجاز برای اشاره">
+     {candidates.map((user,index)=><div id={listId+'-'+index} role="option"
+       className={'team-mention-option'+(index===selected?' selected':'')} aria-selected={index===selected}
+       key={user.username} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(user)}>
+       <b dir="ltr">@{user.username}</b>
+       {user.displayName&&user.displayName!==user.username&&<small>{user.displayName}</small>}
+     </div>)}
+   </div>}
+ </div>;
+}
+
+function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,username='',title='گفت‌وگو',users=[],projectId=''}){
  const [items,setItems]=useState([]),[value,setValue]=useState(''),[busy,setBusy]=useState(false);
  const [error,setError]=useState(''),[replyTo,setReplyTo]=useState(null);
  const [editId,setEditId]=useState(''),[editValue,setEditValue]=useState('');
@@ -68,8 +155,9 @@ function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,use
          {!item.deletedAt&&canDelete(item)&&<button title="حذف نظر" disabled={busy} onClick={()=>remove(item)}><Trash2 size={13}/></button>}
        </div>
        {item.replyToId&&<small className="team-reply-label"><CornerDownLeft size={12}/> پاسخ به پیام قبلی</small>}
-       {editId===item.id?<div className="comment-compose"><textarea dir="auto" rows={2} value={editValue} maxLength={4000}
-         onChange={e=>setEditValue(e.target.value)}/><button className="btn primary" disabled={busy||!editValue.trim()} onClick={()=>edit(item)}>ذخیره</button>
+       {editId===item.id?<div className="comment-compose"><MentionTextarea label="ویرایش پیام" rows={2} value={editValue}
+         onChange={setEditValue} users={users} projectId={projectId} username={username}
+         disabled={busy} onSubmit={()=>edit(item)}/><button className="btn primary" disabled={busy||!editValue.trim()} onClick={()=>edit(item)}>ذخیره</button>
          <button className="btn secondary" onClick={()=>setEditId('')}>انصراف</button></div>:
          <p dir="auto">{item.deletedAt?'پیام حذف شده است.':item.text}</p>}
      </article>)}
@@ -78,19 +166,19 @@ function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,use
    {canEdit&&<div className="comment-compose">
      {replyTo&&<div className="team-reply-hint">پاسخ به @{replyTo.author}
        <button type="button" aria-label="لغو پاسخ" onClick={()=>{setReplyTo(null);pending.current=null;}}><X size={13}/></button></div>}
-     <textarea rows={3} dir="auto" placeholder="پیام بنویس؛ با @username به کاربر اشاره کن." value={value}
-       maxLength={4000} onChange={e=>{setValue(e.target.value);pending.current=null;}}
-       onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();add();}}}/>
+     <MentionTextarea value={value} users={users} projectId={projectId} username={username}
+       disabled={busy} label="پیام جدید" placeholder="پیام بنویس؛ با @username به کاربر اشاره کن."
+       onChange={next=>{setValue(next);pending.current=null;}} onSubmit={add}/>
      <button className="btn primary" onClick={add} disabled={busy||!value.trim()}><Plus size={15}/> ارسال پیام</button>
    </div>}
    {error&&<p role="alert" className="field-error">{error}</p>}
  </div>;
 }
-export function CardComments({cardId,api,canEdit,canManage=false,username}){
+export function CardComments({cardId,projectId='',users=[],api,canEdit,canManage=false,username}){
  return <ConversationThread kind="comments" targetId={cardId} api={api} canEdit={canEdit} canManage={canManage}
-   username={username} title="نظرات و گفت‌وگوی کارت"/>;
+   username={username} users={users} projectId={projectId} title="نظرات و گفت‌وگوی کارت"/>;
 }
-export function ProjectConversation({projectId,projectName='',api,canEdit,canManage=false,username,onClose}){
+export function ProjectConversation({projectId,projectName='',api,canEdit,canManage=false,username,onClose,users=[]}){
  return <div className="overlay project-conversation-overlay" onMouseDown={onClose}>
    <section className="dialog project-conversation-dialog" role="dialog" aria-modal="true"
      aria-label={'گفت‌وگوی پروژه '+projectName} onMouseDown={e=>e.stopPropagation()}>
@@ -98,6 +186,7 @@ export function ProjectConversation({projectId,projectName='',api,canEdit,canMan
        <button className="icon-btn" title="بستن گفت‌وگو" onClick={onClose}><X size={19}/></button></div>
      <div className="dialog-body"><ConversationThread key={projectId} kind="project-comments"
        targetId={projectId} api={api} canEdit={canEdit} canManage={canManage} username={username}
+       users={users} projectId={projectId}
        title="پیام‌های پروژه"/></div>
    </section>
  </div>;
