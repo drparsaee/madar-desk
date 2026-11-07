@@ -117,8 +117,8 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
       </small>}
     </div>
     <section className="gantt-critical-summary" aria-label="تحلیل مسیر بحرانی">
-      <strong>مسیر بحرانی (CPM)</strong>
-      <small>بر پایه مدت تقویمی فعالیت‌ها و پیش‌نیازهای ثبت‌شده؛ بدون محاسبه تعطیلات، ظرفیت منابع یا فاصله‌های عمدی برنامه.</small>
+      <strong>مسیر بحرانی نمای فعلی (CPM)</strong>
+      <small>محاسبه فقط با کارت‌های قابل مشاهده در همین نما انجام می‌شود، نه لزوماً کل پروژه؛ بر پایه مدت تقویمی و پیش‌نیازها، بدون محاسبه تعطیلات، ظرفیت منابع یا فاصله‌های عمدی برنامه.</small>
       {critical.projects.map((project,index)=><div key={project.projectId||index} className="gantt-critical-project">
         {critical.projects.length>1&&<b>پروژه {Number(index+1).toLocaleString('fa-IR')}</b>}
         {project.status==='ready'?<>
