@@ -1175,8 +1175,17 @@ export default function App(){
   useEffect(()=>{
     if(!data||!activeWorkspaceId)return;
     const saved=readBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,boardViewColumns);
-    setMode(previous=>previous==='time'||previous==='gantt'?previous:saved.mode);
-  },[activeBoard?.id,activeWorkspaceId,boardViewIdentity,!!data]);
+    const role=lanStatus?.user?.role;
+    const allowedGantt=isManagedFeatureVisible(displayScope,'timelineView',{
+      canManage:role==='admin',
+      canEdit:lanStatus?.mode==='client'?['admin','editor'].includes(role):role!=='viewer'
+    });
+    // Rehydrate the new board's own saved view instead of carrying the
+    // previous board's Gantt across contexts. Time dashboard stays global.
+    const next=saved.mode==='gantt'&&!allowedGantt?'board':saved.mode;
+    setMode(previous=>previous==='time'?previous:next);
+  },[activeBoard?.id,activeWorkspaceId,boardViewIdentity,!!data,displayScope.mode,
+    JSON.stringify(displayScope.features),lanStatus.mode,lanStatus.user?.role]);
   const switchBoardDisplay=next=>{
     setMode(next);
     saveBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,{mode:next},boardViewColumns);
@@ -2160,7 +2169,7 @@ export default function App(){
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
           <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} aria-label="برد کارها" onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} aria-label="فهرست" onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} aria-label="جدول" onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} aria-label="زمان‌بندی" onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}{show('timelineView')&&<button className={mode==='gantt'?'selected':''} aria-label="گانت" onClick={()=>switchBoardDisplay('gantt')} title="گانت"><BarChart3 size={17}/> گانت</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
-          {show('timelineView')&&mode==='gantt'?<GanttView tasks={filtered} calendar={calendar} canEdit={canEdit} onOpen={setEditorId} onUpdate={taskUpdate}/>:show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
+          {show('timelineView')&&mode==='gantt'?<GanttView key={boardViewScope} tasks={filtered} calendar={calendar} canEdit={canEdit} onOpen={setEditorId} onUpdate={taskUpdate}/>:show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;
             const isCollapsed=collapsedLists[listKey]===true;
