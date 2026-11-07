@@ -24,6 +24,7 @@ TASK_ONLY_MODULES = (
     "test_card_dependency_validation.py",
     "test_project_integrity.py",
     "test_p1_project_grants.py",
+    "test_p1_active_surfaces.py",
     "test_lan_user_persistence.py",
     "test_safe_test_runner.py",
 )
