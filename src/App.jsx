@@ -560,7 +560,8 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
       <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
       {activityOpen&&<div className="task-activity-panel__content">
-        {showOperations&&chatAvailable&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
+        {showOperations&&chatAvailable&&<CardComments cardId={task.id} projectId={task.projectId} users={users}
+          api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
         {showOperations&&!chatAvailable&&<p role="status" className="field-help">برای مشاهده یا ارسال گفت‌وگوی مشترک، ابتدا وارد حساب وب شوید. گزارش‌های کارت به‌صورت محلی در دسترس‌اند.</p>}
         <div className="task-activity-panel__reports">
           <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
@@ -2503,8 +2504,8 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
       onOpenTarget={openNotificationTarget}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
-      projectId={selectedProject.id} projectName={selectedProject.name} api={api}
-       canEdit={canEdit} canManage={canManage} username={isWebApp?(lanStatus.user?.username||''):(lanStatus.user?.username||'local')}
+      projectId={selectedProject.id} projectName={selectedProject.name} api={api} users={users}
+      canEdit={canEdit} canManage={canManage} username={isWebApp?(lanStatus.user?.username||''):(lanStatus.user?.username||'local')}
       onClose={()=>setProjectChatOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
