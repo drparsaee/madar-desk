@@ -2,7 +2,8 @@
  * Presentation-only preferences, isolated per authenticated user and board.
  * These never enter the shared task state or accounting ledger.
  */
-const MODES = new Set(['board', 'list', 'table']);
+// Gantt is a per-board presentation mode, not the global time dashboard.
+const MODES = new Set(['board', 'list', 'table', 'gantt']);
 const DEFAULTS = [
   {id:'title',label:'عنوان کارت',width:260},
   {id:'stage',label:'لیست',width:150},
