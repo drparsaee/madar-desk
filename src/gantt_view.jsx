@@ -1,6 +1,6 @@
 import React,{useMemo,useRef,useState} from 'react';
 import {CalendarRange,ChevronLeft,ChevronRight,GitBranch} from 'lucide-react';
-import {barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,inspectGanttDependencies,shiftPlan,validPlan} from './gantt_model.js';
+import {analyzeCriticalPaths,barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,inspectGanttDependencies,shiftPlan,validPlan} from './gantt_model.js';
 import './gantt_view.css';
 
 const CELL_WIDTH=44;
@@ -27,6 +27,18 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
     [tasks,member,priority,query]);
   const {rows,total,truncated}=useMemo(()=>buildGanttRows(shown),[shown]);
   const diagnostics=useMemo(()=>inspectGanttDependencies(rows),[rows]);
+  const critical=useMemo(()=>analyzeCriticalPaths(shown),[shown]);
+  const criticalById=useMemo(()=>{
+    const indexed=new Map();
+    for(const project of critical.projects) {
+      if(project.status!=='ready')continue;
+      const zero=new Set(project.criticalIds);
+      for(const [id,slackDays] of project.slackDays)
+        indexed.set(id,{critical:zero.has(id),slackDays});
+    }
+    return indexed;
+  },[critical]);
+  const shownById=useMemo(()=>new Map(shown.map(task=>[task.id,task])),[shown]);
   const axis=useMemo(()=>ganttAxis(anchor,scale),[anchor,scale]);
   const bars=useMemo(()=>new Map(rows.map(t=>[t.id,barPosition(t,axis)])),[rows,axis]);
   const width=axis.length*CELL_WIDTH;
@@ -104,6 +116,29 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
         نبود تداخل در این نما به معنی تأیید کل پروژه نیست.
       </small>}
     </div>
+    <section className="gantt-critical-summary" aria-label="تحلیل مسیر بحرانی">
+      <strong>مسیر بحرانی (CPM)</strong>
+      <small>بر پایه مدت تقویمی فعالیت‌ها و پیش‌نیازهای ثبت‌شده؛ بدون محاسبه تعطیلات، ظرفیت منابع یا فاصله‌های عمدی برنامه.</small>
+      {critical.projects.map((project,index)=><div key={project.projectId||index} className="gantt-critical-project">
+        {critical.projects.length>1&&<b>پروژه {Number(index+1).toLocaleString('fa-IR')}</b>}
+        {project.status==='ready'?<>
+          <span>طولانی‌ترین زنجیره: <b>{project.durationDays.toLocaleString('fa-IR')} روز</b></span>
+          <span>فعالیت‌های با شناوری صفر: <b>{project.criticalIds.length.toLocaleString('fa-IR')}</b></span>
+          <p className="gantt-critical-chain" aria-label="یک نمونه از مسیر بحرانی">
+            {project.pathIds.slice(0,8).map((id,i)=><React.Fragment key={id}>
+              {i>0&&<span aria-hidden="true"> ← </span>}
+              <span>{shownById.get(id)?.title||'فعالیت بدون عنوان'}</span>
+            </React.Fragment>)}
+            {project.pathIds.length>8&&<span> و {Number(project.pathIds.length-8).toLocaleString('fa-IR')} فعالیت دیگر</span>}
+          </p>
+        </>:<p role="status">
+          {project.status==='cycle'
+            ?'چرخه پیش‌نیازی وجود دارد؛ محاسبه مسیر بحرانی این پروژه متوقف شد.'
+            :'تحلیل کامل نیست: همه فعالیت‌ها و پیش‌نیازهای قابل مشاهده باید تاریخ معتبر داشته باشند.'}
+        </p>}
+      </div>)}
+      {!critical.projects.length&&<p>فعالیت فعالی در نمای فعلی وجود ندارد.</p>}
+    </section>
     {error&&<p role="alert" className="gantt-error">{error}</p>}
     {truncated&&<p role="status" className="gantt-error">برای حفظ عملکرد، {rows.length.toLocaleString('fa-IR')} فعالیت نخست نشان داده می‌شود. از فیلتر استفاده کنید.</p>}
     <div className="gantt-scroll" tabIndex={0} aria-label="جدول زمانی قابل پیمایش">
@@ -119,6 +154,7 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
             const bar=bars.get(task.id),missing=dayNumber(task.plannedStart)===null||dayNumber(task.plannedEnd)===null;
             const schedule=diagnostics.byTask.get(task.id);
             const hasConflict=Boolean(schedule?.conflicts.length);
+            const criticalInfo=criticalById.get(task.id);
             return <div key={task.id} className="gantt-row" style={{height:ROW_HEIGHT}}>
               <div className="gantt-task" style={{width:LABEL_WIDTH}}>
                 <button className="gantt-task-title" type="button" title={task.title} onClick={()=>onOpen(task.id)}>{task.title||'بدون عنوان'}</button>
@@ -137,15 +173,18 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
                     aria-label={'اصلاح تاریخ کارت '+task.title+' بر اساس پیش‌نیازها'}
                     onClick={()=>onUpdate(task.id,schedule.suggestion)}>اصلاح تاریخ</button>}
                 </div>}
+                {criticalInfo&&<span className="gantt-critical-chip">
+                  {criticalInfo.critical?'بحرانی، شناوری صفر':`شناوری ${criticalInfo.slackDays.toLocaleString('fa-IR')} روز`}
+                </span>}
               </div>
               <div className="gantt-track" style={{width,backgroundSize:CELL_WIDTH+'px 100%'}}>
-                {bar&&<button type="button" className={'gantt-bar'+(task.completed||task.status==='done'?' is-done':'')+(hasConflict?' has-conflict':'')}
+                {bar&&<button type="button" className={'gantt-bar'+(task.completed||task.status==='done'?' is-done':'')+(hasConflict?' has-conflict':'')+(criticalInfo?.critical?' is-critical':'')}
                   style={{left:(bar.left*CELL_WIDTH)+'px',width:Math.max(5,bar.width*CELL_WIDTH)+'px'}}
-                  title={task.title+' | '+task.plannedStart+' تا '+task.plannedEnd+(hasConflict?' | تداخل با پیش‌نیاز':'')}
+                  title={task.title+' | '+task.plannedStart+' تا '+task.plannedEnd+(hasConflict?' | تداخل با پیش‌نیاز':'')+(criticalInfo?.critical?' | مسیر بحرانی':'')}
                   onPointerDown={e=>onDragStart(e,task)} onPointerUp={e=>onDragEnd(e,task)}
                   onPointerCancel={()=>{drag.current=null;}}
                   onKeyDown={()=>{suppressBarClick.current=false;}}
-                  onClick={()=>{if(suppressBarClick.current){suppressBarClick.current=false;return;}onOpen(task.id);}} aria-label={'نوار '+task.title+(hasConflict?'، دارای تداخل با پیش‌نیاز':'')} />}
+                  onClick={()=>{if(suppressBarClick.current){suppressBarClick.current=false;return;}onOpen(task.id);}} aria-label={'نوار '+task.title+(hasConflict?'، دارای تداخل با پیش‌نیاز':'')+(criticalInfo?.critical?'، در مسیر بحرانی':'')} />}
                 {missing&&<span className="gantt-empty">تاریخ شروع/پایان تعیین نشده</span>}
                 {!missing&&!bar&&<span className="gantt-empty">خارج از بازهٔ نمایش</span>}
               </div>
