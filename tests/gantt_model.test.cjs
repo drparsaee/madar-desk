@@ -10,7 +10,20 @@ const mod=new Module(path.join(root,'gantt-model-test.cjs'),module);
 mod.filename=path.join(root,'gantt-model-test.cjs');
 mod.paths=Module._nodeModulePaths(root);
 mod._compile(output,mod.filename);
-const {dayNumber,dayString,ganttAxis,validPlan,shiftPlan,barPosition,buildGanttRows}=mod.exports;
+const {dayNumber,dayString,ganttAxis,validPlan,validPlanningPatch,shiftPlan,barPosition,buildGanttRows}=mod.exports;
+
+test('partial card planning-date edits fail before autosave without breaking unrelated changes',()=>{
+  const task={plannedStart:'2026-11-08',plannedEnd:'2026-11-12'};
+  assert.equal(validPlanningPatch(task,{plannedStart:'2026-11-13'}),false);
+  assert.equal(validPlanningPatch(task,{plannedEnd:'2026-11-07'}),false);
+  assert.equal(validPlanningPatch(task,{plannedEnd:'2026-02-30'}),false);
+  assert.equal(validPlanningPatch(task,{plannedStart:'2026-11-13',plannedEnd:'2026-11-15'}),true);
+  assert.equal(validPlanningPatch(task,{plannedStart:''}),true);
+  assert.equal(validPlanningPatch(task,{plannedEnd:''}),true);
+  assert.equal(validPlanningPatch(task,{title:'Allowed title update'}),true);
+  assert.equal(validPlanningPatch(task,{plannedStart:null}),false);
+  assert.equal(validPlanningPatch(task,{plannedEnd:undefined}),false);
+});
 
 test('ISO planning dates validate leap years and preserve chronological ranges',()=>{
   assert.equal(dayNumber('2024-02-29')!==null,true);

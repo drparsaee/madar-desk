@@ -19,6 +19,16 @@ export function validPlan(start='',end='') {
   return (a!==null||start==='')&&(b!==null||end==='')&&
     (a===null||b===null||a<=b);
 }
+/** Reject invalid partial date edits before they reach autosave or offline sync.
+ * Unrelated card edits do not retroactively rewrite legacy planning fields.
+ */
+export function validPlanningPatch(task,patch) {
+  if(!patch||typeof patch!=='object')return false;
+  if(!Object.hasOwn(patch,'plannedStart')&&!Object.hasOwn(patch,'plannedEnd'))return true;
+  const start=Object.hasOwn(patch,'plannedStart')?patch.plannedStart:(task?.plannedStart||'');
+  const end=Object.hasOwn(patch,'plannedEnd')?patch.plannedEnd:(task?.plannedEnd||'');
+  return typeof start==='string'&&typeof end==='string'&&validPlan(start,end);
+}
 export function shiftPlan(task,days) {
   const a=dayNumber(task.plannedStart),b=dayNumber(task.plannedEnd);
   if(a===null||b===null||!Number.isSafeInteger(days))return null;
