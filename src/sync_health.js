@@ -4,6 +4,10 @@
  */
 export function syncHealth(status={}, {conflict=false, saving=false}={}) {
   const client=status?.mode==='client';
+  if (status?.localOnly===true && status?.pending!==true)
+    return {kind:'local',label:'ذخیرهٔ محلی فعال',pending:false};
+  if (status?.localOnly===true && status?.pending===true)
+    return {kind:'pending',label:'تغییرات محلی آمادهٔ اتصال',pending:true};
   if (conflict === true) {
     return {kind:'conflict', label:'تداخل ذخیره · نیازمند بررسی', pending:true};
   }

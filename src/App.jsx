@@ -28,6 +28,8 @@ import {LabelEditor} from './labels.jsx';
 import {sharedLabelLibrary,sharedLabelColor,editSharedLabelState} from './label_library.js';
 import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
+import {GanttView} from './gantt_view.jsx';
+import {validPlanningPatch} from './gantt_model.js';
 import {TrelloImportPanel} from './trello_import.jsx';
 import {CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
 import {PlannerPanel} from './planner.jsx';
@@ -50,8 +52,6 @@ import {syncHealth} from './sync_health.js';
 import {createBoardPerformanceIndex} from './board_performance.js';
 import {PortableExportPanel} from './portable_export_panel.jsx';
 import {ProgressiveLane} from './progressive_lane.jsx';
-import {GanttView} from './gantt_view.jsx';
-import {validPlanningPatch} from './gantt_model.js';
 import {resolvedDisplayScope,isManagedFeatureVisible} from './managed_display.js';
 import {ClockWidget} from './clock_widget.jsx';
 import {LaneActionsMenu} from './board_lane_actions.jsx';
@@ -61,6 +61,13 @@ import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {ChecklistTaskRow} from './checklist_task_row.jsx';
 import {emptyCardHistory,isUndoableCardPatch,recordCardEdit,cardHistoryAvailability,applyCardHistory} from './card_undo.js';
+import {createWebStorage,downloadWebBackup} from './web_storage.js';
+import {WebBackupDialog} from './web_backup_dialog.jsx';
+import {WebPwaBanner} from './web_pwa.jsx';
+import {MadarWebApiClient} from './web_api_client.mjs';
+import {syncWebState} from './web_sync_engine.mjs';
+import {WebSyncDialog} from './web_sync_dialog.jsx';
+import './web_sync_dialog.css';
 import './interface_mode.css';
 import './boardplus.css';
 import './task_editor_compact.css';
@@ -73,6 +80,7 @@ import './trello_quick_add.css';
 import './sidebar_compact.css';
 import './backup_easy.css';
 import './general_ui_preferences.css';
+import './web_pwa.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -158,8 +166,63 @@ const mockBridge={
   ,attachmentBackup:async()=>{throw Error('بکاپ فایل فقط روی میزبان ویندوز فعال است.');}
   ,createUnifiedSqliteBackup:async()=>{throw Error('خروجی SQLite فقط روی میزبان ویندوز فعال است.');}
 };
-const api=window.madar||mockBridge;
+// Browser builds get independent IndexedDB storage. Never silently reuse the
+// legacy localStorage preview or the installed Windows application's profile.
 const isDesktop=!!window.madar;
+const isWebApp=import.meta.env.MODE==='web'&&!isDesktop;
+const webStorage=isWebApp?createWebStorage():null;
+const webApi=isWebApp?new MadarWebApiClient():null;
+let webSessionChecked=false;
+const webBridge=isWebApp?{
+  ...mockBridge,
+  getState:()=>webStorage.read(seed),
+  saveState:async state=>{
+    const result=await webStorage.save(state);
+    const sync=await webStorage.readSyncState();
+    if(webApi.currentUser&&sync.remoteRevision&&!sync.conflict)
+      syncWebState({storage:webStorage,api:webApi,freshState:seed}).catch(()=>{});
+    return result;
+  },
+  webBackup:()=>webStorage.backup(),
+  webReplaceState:(state,revision)=>webStorage.replace(state,revision),
+  exportBackup:async()=>downloadWebBackup(await webStorage.backup()),
+  getPreferences:()=>webStorage.getPreferences(),
+  setPreferences:async patch=>{
+    const old=await webStorage.getPreferences();
+    const widgetSettings=normalizeWidgetSettings(
+      patch.widgetSettings||old.widgetSettings||patch.clockWidget||old.clockWidget);
+    return webStorage.setPreferences({...old,...patch,widgetSettings,clockWidget:widgetSettings.mode});
+  },
+  syncStatus:async()=>{
+    const status=await webStorage.getSyncStatus();
+    return {...status,mode:webApi.currentUser?'client':'solo',
+      connected:!!webApi.currentUser,localOnly:!webApi.currentUser,
+      drive:false,folder:{configured:false}};
+  },
+  lanStatus:async()=>{
+    if(!webSessionChecked){
+      try{await webApi.getSession();}catch{/* Offline/local mode remains usable. */}
+      webSessionChecked=true;
+    }
+    return webApi.currentUser
+      ?{mode:'client',transport:webApi.location.protocol==='https:'?'https':'http',
+        user:{...webApi.currentUser,projects:webApi.currentUser.projectIds??null}}
+      :{mode:'solo',user:{username:'web-local',displayName:'این مرورگر',role:'admin',projects:null}};
+  },
+  lanProfiles:async()=>webApi.currentUser
+    ?[{...webApi.currentUser,displayName:webApi.currentUser.displayName||webApi.currentUser.username,
+      projects:webApi.currentUser.projectIds??null}]
+    :[{username:'web-local',displayName:'این مرورگر',role:'admin',projects:null}],
+  webHealth:()=>webApi.health({force:true}),
+  webSession:async()=>{const user=await webApi.getSession({force:true});webSessionChecked=true;return user;},
+  webLogin:async(username,password)=>{const user=await webApi.login(username,password);webSessionChecked=true;return user;},
+  webLogout:async()=>{await webApi.logout();webSessionChecked=true;return true;},
+  webSyncNow:bootstrap=>syncWebState({storage:webStorage,api:webApi,freshState:seed,bootstrap}),
+  webSyncState:()=>webStorage.readSyncState(),
+  collabRead:(kind,targetId)=>webApi.collabRead(kind,targetId),
+  collabCommand:command=>webApi.collabCommand(command),
+}:null;
+const api=window.madar||webBridge||mockBridge;
 const shortDate=v=>{if(!v)return '';try{return new Date(v).toLocaleDateString('fa-IR',{month:'short',day:'numeric'});}catch{return v;}};
 
 function Empty({title,description,onAdd}){
@@ -232,7 +295,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,tarazQueueAvailable=false,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,tarazQueueAvailable=false,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true,chatAvailable=true}){
   const [newStep,setNewStep]=useState('');
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
@@ -497,7 +560,8 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
       <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
       {activityOpen&&<div className="task-activity-panel__content">
-        {showOperations&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
+        {showOperations&&chatAvailable&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
+        {showOperations&&!chatAvailable&&<p role="status" className="field-help">برای مشاهده یا ارسال گفت‌وگوی مشترک، ابتدا وارد حساب وب شوید. گزارش‌های کارت به‌صورت محلی در دسترس‌اند.</p>}
         <div className="task-activity-panel__reports">
           <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
             {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
@@ -812,6 +876,7 @@ export default function App(){
   const [projectSettings,setProjectSettings]=useState(null);
   const [projectName,setProjectName]=useState('');
   const [cloudOpen,setCloudOpen]=useState(false);
+  const [webSyncOpen,setWebSyncOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [labelManager,setLabelManager]=useState(null);
   const [lanOpen,setLanOpen]=useState(false);
@@ -973,7 +1038,7 @@ export default function App(){
       return fresh;
     });
     lastSaved.current=JSON.stringify(fresh);
-    setLastSync(new Date());
+    if(!isWebApp)setLastSync(new Date());
     setSavingError('');
   };
   const refreshLan=async()=>{
@@ -984,10 +1049,16 @@ export default function App(){
       return status;
     });
   };
-  const refreshSyncStatus=async()=>setSyncInfo(await api.syncStatus());
+  const refreshSyncStatus=async()=>{
+    const status=await api.syncStatus();
+    setSyncInfo(status);
+    if(status?.lastSync)setLastSync(new Date(status.lastSync));
+    else if(!isWebApp)setLastSync(new Date());
+    return status;
+  };
   const refreshUsers=async()=>setUsers(await api.lanProfiles());
   useEffect(()=>{Promise.all([api.getStateForUi?api.getStateForUi():api.getState(),api.lanStatus(),api.getPreferences(),api.lanProfiles(),api.syncStatus()]).then(([s,lan,prefs,members,sync])=>{
-    const normalized=normalize(s);setData(normalized);lastSaved.current=JSON.stringify(normalized);setLanStatus(lan);setUsers(members);setCalendar(prefs.calendar||'jalali');setWidgetSettings(normalizeWidgetSettings(prefs.widgetSettings||prefs.clockWidget));setLastSync(new Date());ready.current=true;
+    const normalized=normalize(s);setData(normalized);lastSaved.current=JSON.stringify(normalized);setLanStatus(lan);setUsers(members);setCalendar(prefs.calendar||'jalali');setWidgetSettings(normalizeWidgetSettings(prefs.widgetSettings||prefs.clockWidget));setLastSync(sync?.lastSync?new Date(sync.lastSync):(isWebApp?null:new Date()));ready.current=true;
     setSyncInfo(sync);
   }).catch(e=>setSavingError('خطا در خواندن اطلاعات: '+e.message));},[]);
   useEffect(()=>{
@@ -1019,7 +1090,7 @@ export default function App(){
           // Edits made during the previous request still need their own save.
           setData(current=>({...current}));
         }
-        setLastSync(new Date());
+        if(!isWebApp)setLastSync(new Date());
         refreshSyncStatus().catch(()=>{});
         setSavingError('');
       }
@@ -1044,11 +1115,15 @@ export default function App(){
         const recent=latestData.current?.tasks?latestData.current:snapshot;
         const recovery=quick?.card&&!recent.tasks.some(t=>t.id===quick.card.id)
           ?{...recent,tasks:[quick.card,...recent.tasks]}:recent;
-        // Keep a current exportable snapshot even when localStorage is full
-        // or unavailable. A stale key from another failed save is not safe.
+        // Keep a current exportable snapshot. Browser builds use IndexedDB;
+        // Windows/legacy preview retains its existing recovery key.
         latestUnsavedRecovery.current=recovery;
         let recoveryStored=false;
-        try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(recovery));recoveryStored=true;}
+        try{
+          if(isWebApp)await webStorage.saveRecovery(recovery);
+          else localStorage.setItem('madar-unsaved-recovery',JSON.stringify(recovery));
+          recoveryStored=true;
+        }
         catch{}
         if(quick)setAdding(current=>current?{...current,error:recoveryStored
           ?'ذخیره کارت رد شد؛ عنوان برای کپی حفظ شده و نسخهٔ بازیابی ثبت شده است. ابتدا از پنل بازیابی مشکل ذخیره را رفع کنید.'
@@ -1064,6 +1139,20 @@ export default function App(){
     }},15000);
     return()=>clearInterval(timer);
   },[]);
+  useEffect(()=>{
+    if(!isWebApp||lanStatus.mode!=='client')return;
+    const syncPending=()=>{
+      if(!navigator.onLine||dirty.current||saving.current||blocked.current)return;
+      api.webSyncNow(false).then(result=>{
+        refreshSyncStatus().catch(()=>{});
+        if(result.kind==='conflict')setToast('تعارض نسخه پیدا شد؛ هر دو نسخه محفوظ مانده‌اند.');
+      }).catch(()=>{/* Local commits remain safe; the durable outbox retries later. */});
+    };
+    window.addEventListener('online',syncPending);
+    const timer=setInterval(syncPending,30000);
+    syncPending();
+    return()=>{window.removeEventListener('online',syncPending);clearInterval(timer);};
+  },[lanStatus.mode]);
   const appearanceScope=themeScope(lanStatus);
   const tarazEnabled=tarazConsentChoice?.scope===appearanceScope?tarazConsentChoice.enabled:
     readTarazQueueConsent(localStorage,appearanceScope);
@@ -1204,7 +1293,14 @@ export default function App(){
   const cardUndoEnabled=canEdit&&lanStatus?.mode==='solo'&&!blocked.current&&!saving.current;
   const canUndo=cardHistoryAvailability(cardUndo.current,data,'undo',cardUndoScope,cardUndoEnabled);
   const canRedo=cardHistoryAvailability(cardUndo.current,data,'redo',cardUndoScope,cardUndoEnabled);
-  const show=feature=>isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
+  const webUnavailable=new Set([
+    'networkStatus','lanUserManagement','secureApiKeys','cardAttachments',
+    'projectFiles','projectFinance','financeHub','profitPeek','taskCostControls',
+    'checklistCostControls','projectPricing','accountingDashboard','aiAgent',
+    'automationRules','calendarInterop','activity',
+  ]);
+  const show=feature=>(!isWebApp||!webUnavailable.has(feature))&&
+    isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
   useEffect(()=>{
     if(interfaceMode==='basic'){
       setMode(previous=>previous==='time'||previous==='gantt'?'board':previous);
@@ -1218,7 +1314,20 @@ export default function App(){
     if(dirty.current||saving.current){setToast('تغییرات در حال ذخیره هستند؛ پس از ذخیره دوباره تازه‌سازی کنید.');return;}
     if(blocked.current){setToast('ابتدا خطای ذخیره و تداخل را بررسی کنید.');return;}
     setSyncing(true);
-    try{await Promise.all([refresh(),refreshLan(),refreshUsers(),refreshSyncStatus()]);setToast('آخرین اطلاعات موجود بارگیری شد.');}
+    try{
+      let syncResult=null;
+      if(isWebApp&&lanStatus.mode==='client')syncResult=await api.webSyncNow(false);
+      await Promise.all([refresh(),refreshLan(),refreshUsers(),refreshSyncStatus()]);
+      if(syncResult?.kind==='bootstrap_required')
+        setToast('سرور هنوز فضای کاری ندارد؛ اتصال اولیه را از پنل همگام‌سازی تأیید کنید.');
+      else if(syncResult?.kind==='conflict')
+        setToast('تعارض نسخه پیدا شد؛ هر دو نسخه حفظ شده‌اند.');
+      else if(syncResult?.kind==='pending')
+        setToast('تغییرات محلی محفوظ‌اند و ارسال در صف باقی مانده است.');
+      else setToast(isWebApp&&lanStatus.mode!=='client'
+        ?'اطلاعات محلی مرورگر تازه‌سازی شد؛ برای اتصال آنلاین وارد حساب شوید.'
+        :'آخرین اطلاعات موجود بارگیری شد.');
+    }
     catch(e){setSavingError('خطای تازه‌سازی: '+e.message);}
     finally{setSyncing(false);}
   };
@@ -1288,7 +1397,8 @@ export default function App(){
     const newState=typeof next==='function'?next(current):next;
     if(blocked.current){
       latestUnsavedRecovery.current=newState;
-      try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}
+      if(isWebApp)webStorage.saveRecovery(newState).catch(()=>{});
+      else try{localStorage.setItem('madar-unsaved-recovery',JSON.stringify(newState));}catch{}
     }
     return newState;
   });};
@@ -1895,7 +2005,8 @@ export default function App(){
   };
   const clearRecoveredFailure=()=>{
     latestUnsavedRecovery.current=null;
-    try{localStorage.removeItem('madar-unsaved-recovery');}catch{}
+    if(isWebApp)webStorage.clearRecovery().catch(()=>{});
+    else try{localStorage.removeItem('madar-unsaved-recovery');}catch{}
   };
   const restoreState=s=>{
     if(!recoveryReload.current)
@@ -1931,6 +2042,16 @@ export default function App(){
     backupRestorePreviouslyBlocked.current=false;
     recoveryReload.current=false;setSyncing(false);
   };
+  const applyRemoteState=async replaceRemote=>{
+    startBackupRestore();
+    let outcome='failed';
+    try{
+      const remoteState=await replaceRemote();
+      restoreState(remoteState);
+      outcome='applied';
+    }
+    finally{finishBackupRestore(outcome);}
+  };
   const syncFromServer=async()=>{
     if(recoveryReload.current||saving.current){
       setToast('یک عملیات ذخیره یا بازخوانی هنوز در جریان است.');
@@ -1952,17 +2073,15 @@ export default function App(){
       recoveryReload.current=false;setSyncing(false);
     }
   };
-  const saveRecovery=()=>{
+  const saveRecovery=async()=>{
     let recovery=latestUnsavedRecovery.current;
     if(!recovery){
       // Recovery from a previous session is useful only when no newer failed
       // snapshot is held in memory. A denied read must not disable download.
-      try{
+      if(isWebApp)try{recovery=await webStorage.getRecovery();}catch{}
+      else try{
         const stored=localStorage.getItem('madar-unsaved-recovery');
-        if(stored){
-          const parsed=JSON.parse(stored);
-          if(parsed&&Array.isArray(parsed.tasks)&&Array.isArray(parsed.projects))recovery=parsed;
-        }
+        if(stored){const parsed=JSON.parse(stored);if(parsed&&Array.isArray(parsed.tasks)&&Array.isArray(parsed.projects))recovery=parsed;}
       }catch{}
     }
     if(!recovery)recovery=latestData.current||data;
@@ -2014,15 +2133,15 @@ export default function App(){
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
       <SyncIndicator compact status={syncInfo} conflict={pendingRecovery||blocked.current}
-        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={openNetwork}/>
+        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={isWebApp?()=>setWebSyncOpen(true):openNetwork}/>
       <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
         disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
         <RefreshCw size={19} className={syncing?'spin':''}/><span className="vitrea-quickdock__label" aria-hidden="true">تازه‌سازی</span></button>
-      <button type="button" className={'vitrea-quickdock__update'+(updateInfo?' vitrea-quickdock__update--available':'')}
+      {!isWebApp&&<button type="button" className={'vitrea-quickdock__update'+(updateInfo?' vitrea-quickdock__update--available':'')}
         onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}
         aria-label={updateBusy?'در حال بررسی به‌روزرسانی':updateInfo?(updateDownloaded?'نصب نسخهٔ جدید بعد از خروج':'دریافت نسخهٔ جدید '+updateInfo.latest):'بررسی به‌روزرسانی نرم‌افزار'}
         title={updateInfo?'نسخهٔ جدید '+updateInfo.latest+' آماده است':'بررسی نسخهٔ جدید مدار'}>
-        <Download size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">به‌روزرسانی</span></button>
+        <Download size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">به‌روزرسانی</span></button>}
       <span className="vitrea-quickdock__divider" aria-hidden="true"/>
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
@@ -2033,11 +2152,11 @@ export default function App(){
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">گزارش‌ها</span></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">اعلان‌ها</span></button>
-      {canManage&&<button type="button" onClick={openUserManagement}
+      {!isWebApp&&canManage&&<button type="button" onClick={openUserManagement}
         title={lanStatus.mode==='solo'?'تعریف کاربر: ابتدا میزبان شبکه را فعال کنید':'تعریف کاربران'}
         aria-label="تعریف کاربران"><Users size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">کاربران</span></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
-        title="Google Drive" aria-label="Google Drive"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
+        title={isWebApp?'پشتیبان محلی نسخهٔ وب':'Google Drive'} aria-label="پشتیبان‌گیری"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
       <button type="button" title={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         aria-label={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         disabled={sharedThemeEnabled&&!canManage}
@@ -2104,16 +2223,17 @@ export default function App(){
           <summary><ShieldCheck size={17}/> مدیریت <ChevronDown size={15}/></summary>
           <nav className="sidebar-nav" aria-label="مدیریت و دسترسی‌ها">
             {show('workspaceManagement')&&<button onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> فضاهای کاری</button>}
-            <button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>
+            {!isWebApp&&<button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>}
             {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> کلید API امن</button>}
           </nav>
         </details>}
         <button type="button" className="sidebar-settings" onClick={()=>openSharedLabelManager()}><Tag size={18}/> مدیریت برچسب‌ها</button>
-        <button type="button" className="sidebar-settings sidebar-update" onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}>
-          <Download size={18}/> {updateBusy?'در حال بررسی…':updateInfo?(updateDownloaded?'نصب پس از خروج':'دریافت نسخهٔ '+updateInfo.latest):'بررسی به‌روزرسانی'}</button>
+        {!isWebApp&&<button type="button" className="sidebar-settings sidebar-update" onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}>
+          <Download size={18}/> {updateBusy?'در حال بررسی…':updateInfo?(updateDownloaded?'نصب پس از خروج':'دریافت نسخهٔ '+updateInfo.latest):'بررسی به‌روزرسانی'}</button>}
+        {isWebApp&&<button className="sidebar-settings" onClick={()=>setWebSyncOpen(true)}><Cloud size={18}/> اتصال آنلاین و حساب</button>}
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری</button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات</button>
-        <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
+        <button className="sidebar-profile profile-click" title={isWebApp?'حساب و اتصال آنلاین':'ویرایش پروفایل من'} onClick={()=>isWebApp?setWebSyncOpen(true):setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{isWebApp?(lanStatus.mode==='client'?'حساب متصل':'ذخیره در این مرورگر'):lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
       </div>
     </aside>
 
@@ -2156,6 +2276,8 @@ export default function App(){
       <div className="vitrea-header-clock"><ClockWidget calendar={calendar}/></div>
       </div>
       <div className="workspace-scroll">
+        {isWebApp&&<WebPwaBanner status={syncInfo}
+          onBackup={()=>setCloudOpen(true)} onSync={()=>setWebSyncOpen(true)}/>}
         {search.trim()&&<>{globalSearch.error&&<p role="alert" className="warning">{globalSearch.error}</p>}
           <SearchResultsPanel query={search} results={globalSearch.results} canEdit={canEdit}
             formatDate={date=>displayDate(date,calendar,true)}
@@ -2171,7 +2293,7 @@ export default function App(){
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
         {selectedProject&&show('automationRules')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button></div>}
-        {selectedProject&&show('cardComments')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" onClick={()=>setProjectChatOpen(true)}><MessageCircle size={16}/> گفت‌وگوی پروژه</button></div>}
+        {selectedProject&&show('cardComments')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" disabled={isWebApp&&!webApi?.currentUser} title={isWebApp&&!webApi?.currentUser?'برای گفت‌وگوی مشترک ابتدا وارد حساب وب شوید.':'گفت‌وگوی پروژه'} onClick={()=>setProjectChatOpen(true)}><MessageCircle size={16}/> گفت‌وگوی پروژه</button></div>}
         {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
@@ -2281,7 +2403,7 @@ export default function App(){
         </footer>
       </div>
     </main>
-    {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>بازخوانی نسخه سرور</button></div>}</div>}
+    {savingError&&<div className="error-toast recovery-alert"><span>{savingError}</span>{pendingRecovery&&<div className="recovery-actions"><button onClick={saveRecovery}>دریافت تغییرات ذخیره‌نشده</button><button onClick={discardRecovery}>{isWebApp?'بازخوانی نسخهٔ محلی ذخیره‌شده':'بازخوانی نسخه سرور'}</button></div>}</div>}
     <CardContextMenu request={cardContext} task={tasks.find(item=>item.id===cardContext?.cardId&&item.deleted!==true)} onClose={()=>setCardContext(null)}
       onOpen={id=>{setEditorInitialSection(null);setEditorId(id);}}
       onOpenSection={(id,section)=>{setEditorInitialSection(section);setEditorId(id);}}
@@ -2335,7 +2457,7 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} tarazQueueAvailable={tarazEnabled&&tarazStatus?.supported===true&&tarazStatus?.postingEnabled===false} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} chatAvailable={!isWebApp||!!webApi?.currentUser} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} tarazQueueAvailable={tarazEnabled&&tarazStatus?.supported===true&&tarazStatus?.postingEnabled===false} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
     {!!labelManager&&<Modal title="مدیریت برچسب‌ها" width={420} onClose={()=>setLabelManager(null)}>
       <div className="dialog-body"><LabelEditor key={labelManager.id||'global-library'} library={labelLibrary} labels={null} disabled={!canEdit}
         initialEditId={labelManager.id} canManage={canManage} onCreate={createSharedLabel}
@@ -2353,11 +2475,18 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
       projectId={selectedProject.id} projectName={selectedProject.name} api={api}
-      canEdit={canEdit} canManage={canManage} username={lanStatus.user?.username||'local'}
+       canEdit={canEdit} canManage={canManage} username={isWebApp?(lanStatus.user?.username||''):(lanStatus.user?.username||'local')}
       onClose={()=>setProjectChatOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
-    {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}
+    {isWebApp&&cloudOpen&&<WebBackupDialog api={api} state={data}
+      onClose={()=>setCloudOpen(false)} onRestore={restoreState}
+      onRestoreStart={startBackupRestore} onRestoreFinished={finishBackupRestore}/>}
+    {isWebApp&&webSyncOpen&&<WebSyncDialog api={api} storage={webStorage}
+      onClose={()=>setWebSyncOpen(false)}
+      onSessionChange={async()=>{await refreshLan();await refreshUsers();await refreshSyncStatus();}}
+      onRemoteState={applyRemoteState}/>}
+    {!isWebApp&&cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}
       onClose={()=>setCloudOpen(false)} onRestore={restoreState}
       onRestoreStart={startBackupRestore} onRestoreFinished={finishBackupRestore}/>}
   </div>;

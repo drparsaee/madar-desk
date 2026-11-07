@@ -7,6 +7,13 @@
     "dev": "vite --host 127.0.0.1",
     "desktop:dev": "python native_app.py",
     "build": "python scripts/sync_font.py && vite build",
+    "web:dev": "vite --mode web --host 127.0.0.1",
+    "web:build": "vite build --mode web --outDir dist-web",
+    "web:preview": "vite preview --outDir dist-web --host 127.0.0.1",
+    "web:release:package": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy/package-release.ps1",
+    "test:web": "npm run web:build && node --test --test-concurrency=1 tests/web_api_client.test.cjs tests/web_sync_engine.test.cjs tests/web_pwa_mvp.test.cjs tests/web_api_browser_integration.test.cjs tests/web_server_api.test.cjs tests/web_server_cli.test.cjs tests/web_conversation_migration.test.cjs tests/gantt_model.test.cjs tests/web_gantt_policy.test.cjs tests/web_gantt_chat_browser.test.cjs tests/web_real_api_browser_integration.test.cjs tests/web_production_browser_smoke.test.cjs",
+    "test:p1:matrix": "npm run web:build && node --test tests/p1_browser_variants.test.cjs tests/web_mobile_p1.test.cjs",
+    "test:web:server": "node --test --test-concurrency=1 tests/web_server_api.test.cjs tests/web_server_cli.test.cjs tests/web_real_api_browser_integration.test.cjs tests/web_production_browser_smoke.test.cjs",
     "dist": "npm run dist:rc",
     "dist:rc": "python -B scripts/build_integrated_v123.py --webview2 release/.madar-inno-prereq/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
     "test": "python -B tools/safe_test_runner.py"
