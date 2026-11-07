@@ -29,6 +29,8 @@ preview-desktop.png
 preview.png
 *.sqlite3
 *.db3
+*.sqlite.age*
+*.age
 *.p12
 *.pfx
 *.crt
@@ -52,3 +54,7 @@ preview.png
 /qa-evidence/
 /preview-final.png
 /preview-v02-dark.png
+
+# Production deployment credentials and private backup configuration
+/deploy/api.env
+/deploy/rclone.conf

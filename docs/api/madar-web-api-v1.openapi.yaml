@@ -1,0 +1,512 @@
+openapi: 3.1.0
+info:
+  title: Madar Web API
+  version: 1.0.0
+  description: >
+    Same-origin HTTPS API for the local-first Madar browser application.
+    A local SQLite implementation is available under server/; production
+    deployment and authoritative native finance integration are not included.
+    Web task-state schema version remains 1; the isolated server SQLite schema
+    currently uses user_version 3 with separate conversation revision history.
+servers:
+  - url: /api/web/v1
+    description: Same-origin reverse-proxy path. Cross-origin API URLs are unsupported.
+tags:
+  - name: bootstrap
+  - name: session
+  - name: workspace
+  - name: conversations
+security:
+  - webSession: []
+paths:
+  /health:
+    get:
+      tags: [bootstrap]
+      security: []
+      summary: Verify that the compatible web API is installed
+      responses:
+        '200':
+          description: Compatible API contract
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service, contract, apiVersion, stateSchemaVersion, status]
+                properties:
+                  service: {const: madar-web-api}
+                  contract: {const: madar-web-api-v1}
+                  apiVersion: {const: 1}
+                  stateSchemaVersion: {const: 1}
+                  status: {const: ready}
+                  features:
+                    type: object
+                    additionalProperties: {type: boolean}
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /csrf:
+    get:
+      tags: [bootstrap]
+      security: []
+      summary: Issue a pre-authentication CSRF token
+      description: >
+        Returns a random synchronizer token and sets a host-only, Secure,
+        HttpOnly, SameSite=Strict CSRF cookie. The token is held in JS memory
+        only and must be echoed in X-CSRF-Token on state-changing requests.
+      responses:
+        '200':
+          description: CSRF token issued
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrfToken]
+                properties:
+                  csrfToken: {type: string, minLength: 24, maxLength: 512}
+  /session:
+    get:
+      tags: [session]
+      summary: Read the current authenticated browser session
+      responses:
+        '200':
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated, user, csrfToken]
+                properties:
+                  authenticated: {const: true}
+                  user: {$ref: '#/components/schemas/PublicUser'}
+                  csrfToken: {type: string, minLength: 24, maxLength: 512}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [session]
+      security: []
+      summary: Authenticate and set an HttpOnly session cookie
+      description: >
+        Requires the pre-authentication CSRF cookie and matching header,
+        same-origin Origin and Fetch Metadata checks, strict login throttling,
+        and server-side credential verification. Passwords are never returned
+        or persisted by the browser client.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, password]
+              properties:
+                username: {type: string, minLength: 1, maxLength: 128}
+                password: {type: string, minLength: 1, maxLength: 1024, writeOnly: true}
+      responses:
+        '200':
+          description: Authenticated; server sets a new session cookie
+          headers:
+            Set-Cookie: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, csrfToken]
+                properties:
+                  user: {$ref: '#/components/schemas/PublicUser'}
+                  csrfToken: {type: string, minLength: 24, maxLength: 512}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [session]
+      summary: End the current session
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Session ended and cookie cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /state:
+    get:
+      tags: [workspace]
+      summary: Read the authorized web-safe workspace snapshot
+      description: >
+        Returns only records and fields the current user may access. The
+        response must not contain accounting amounts, ledger records, passwords,
+        tokens, attachment bodies, local file paths or host secrets.
+      responses:
+        '200':
+          description: Workspace snapshot
+          headers:
+            ETag:
+              required: true
+              schema: {type: string, minLength: 1}
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schemaVersion, exists, revision, state, updatedAt]
+                properties:
+                  schemaVersion: {const: 1}
+                  exists: {const: true}
+                  revision: {type: string, minLength: 1, maxLength: 256}
+                  state: {$ref: '#/components/schemas/WebSnapshot'}
+                  updatedAt: {type: string, format: date-time}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Workspace has not been initialized for this account
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    put:
+      tags: [workspace]
+      summary: Conditionally save a web-safe workspace snapshot
+      description: >
+        Requires Idempotency-Key and exactly one precondition: If-Match for an
+        existing workspace, or If-None-Match: * for first creation. A duplicate
+        key with the same canonical request replays the original response.
+        Reusing a key with a different request returns 409. A stale revision
+        returns 409 and never overwrites newer server data. The server must
+        enforce current account/project ACL and protected-field policy; it must
+        not trust client role or scope fields. This API stores only task-board
+        data, not accounting or finance data.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'
+        - name: If-Match
+          in: header
+          required: false
+          description: Required when a remote snapshot already exists.
+          schema: {type: string, minLength: 1}
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Must be '*' when creating the first snapshot.
+          schema: {type: string, const: '*'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schemaVersion, state]
+              properties:
+                schemaVersion: {const: 1}
+                state: {$ref: '#/components/schemas/WebSnapshot'}
+      responses:
+        '200':
+          description: Existing snapshot updated or exact idempotent replay
+          headers:
+            ETag: {required: true, schema: {type: string}}
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StateWriteReceipt'}
+        '201':
+          description: First snapshot created
+          headers:
+            ETag: {required: true, schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StateWriteReceipt'}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Revision or idempotency conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: Snapshot schema or protected-field policy rejected
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '428':
+          description: Conditional write header is missing
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /conversations/card/{targetId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationTarget'
+    get:
+      tags: [conversations]
+      summary: Read the latest 300 authorized card messages
+      responses:
+        '200': {$ref: '#/components/responses/ConversationList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /conversations/project/{targetId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationTarget'
+    get:
+      tags: [conversations]
+      summary: Read the latest 300 authorized project messages
+      responses:
+        '200': {$ref: '#/components/responses/ConversationList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /conversations/card/{targetId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationTarget'
+      - $ref: '#/components/parameters/CsrfToken'
+      - $ref: '#/components/parameters/MessageIdempotency'
+    post:
+      tags: [conversations]
+      summary: Create or reply to a card message
+      requestBody: {$ref: '#/components/requestBodies/MessageCreate'}
+      responses:
+        '201': {$ref: '#/components/responses/MessageReceipt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/BadRequest'}
+  /conversations/project/{targetId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationTarget'
+      - $ref: '#/components/parameters/CsrfToken'
+      - $ref: '#/components/parameters/MessageIdempotency'
+    post:
+      tags: [conversations]
+      summary: Create or reply to a project message
+      requestBody: {$ref: '#/components/requestBodies/MessageCreate'}
+      responses:
+        '201': {$ref: '#/components/responses/MessageReceipt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/BadRequest'}
+  /messages/{messageId}:
+    parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_.:-]+$'}
+      - $ref: '#/components/parameters/CsrfToken'
+      - $ref: '#/components/parameters/MessageIdempotency'
+    put:
+      tags: [conversations]
+      summary: Edit a message as its author; keeps revision history metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 4000}
+      responses:
+        '200': {$ref: '#/components/responses/MessageReceipt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/BadRequest'}
+    delete:
+      tags: [conversations]
+      summary: Soft-delete a message as author or admin; reply links survive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200': {$ref: '#/components/responses/MessageReceipt'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    webSession:
+      type: apiKey
+      in: cookie
+      name: madar_web_session
+      description: >
+        Host-only HttpOnly Secure SameSite=Lax cookie. Never expose its value
+        to JavaScript or persist it outside the browser cookie jar.
+  parameters:
+    ConversationTarget:
+      name: targetId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_.:-]+$'}
+    MessageIdempotency:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 100, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 24, maxLength: 512}
+  schemas:
+    ConversationMessage:
+      type: object
+      required: [id, projectId, cardId, author, text, replyToId, createdAt, updatedAt, deletedAt, revision]
+      properties:
+        id: {type: string}
+        projectId: {type: string}
+        cardId: {type: [string, 'null']}
+        author: {type: string}
+        text: {type: string}
+        replyToId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        deletedAt: {type: [string, 'null'], format: date-time}
+        revision: {type: integer, minimum: 1}
+    MessageActionReceipt:
+      type: object
+      required: [messageId, scope, targetId, revision, updatedAt]
+      properties:
+        messageId: {type: string}
+        scope: {type: string, enum: [project, card]}
+        targetId: {type: string}
+        revision: {type: integer, minimum: 1}
+        updatedAt: {type: string, format: date-time}
+    PublicUser:
+      type: object
+      additionalProperties: false
+      required: [username, role, workspaceId]
+      properties:
+        username: {type: string, maxLength: 128}
+        displayName: {type: string, maxLength: 160}
+        role: {type: string, enum: [admin, editor, viewer]}
+        workspaceId: {type: string, minLength: 1, maxLength: 128, description: Server-owned workspace identity}
+        projectIds:
+          type: array
+          maxItems: 1000
+          items: {type: string, maxLength: 128}
+    WebSnapshot:
+      type: object
+      description: >
+        Web-safe task workspace projection. No accounting values, financial
+        source IDs, attachment bodies, local paths, credentials or server
+        authorization claims are accepted.
+      required: [version, workspaces, boards, projects, tasks, stages, settings]
+      properties:
+        version: {type: integer, const: 1}
+        workspaces: {type: array, maxItems: 200, items: {type: object}}
+        boards: {type: array, maxItems: 1000, items: {type: object}}
+        projects: {type: array, maxItems: 1000, items: {type: object}}
+        tasks: {type: array, maxItems: 20000, items: {type: object}}
+        stages: {type: array, maxItems: 200, items: {type: object}}
+        settings: {type: object}
+    StateWriteReceipt:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, revision, savedAt]
+      properties:
+        schemaVersion: {const: 1}
+        revision: {type: string, minLength: 1, maxLength: 256}
+        savedAt: {type: string, format: date-time}
+    ApiError:
+      type: object
+      additionalProperties: true
+      required: [error]
+      properties:
+        error: {type: string, maxLength: 80}
+        message: {type: string, maxLength: 300}
+        currentRevision: {type: string, maxLength: 256}
+    EmptyResponse:
+      type: object
+      additionalProperties: false
+    ErrorResponse:
+      type: object
+      properties:
+        error: {type: string}
+        message: {type: string}
+  responses:
+    ConversationList:
+      description: Only messages in an authorized project/card scope; latest 300, oldest first
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items]
+            properties:
+              items:
+                type: array
+                maxItems: 300
+                items: {$ref: '#/components/schemas/ConversationMessage'}
+    MessageReceipt:
+      description: Mutation accepted or exact idempotent replay
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/MessageActionReceipt'}
+    Conflict:
+      description: Idempotency key reused, message deleted or changed target scope
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Unauthorized:
+      description: Missing, expired or invalid session
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Forbidden:
+      description: Current account lacks permission
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    NotFound:
+      description: Endpoint or resource not found
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    RateLimited:
+      description: Login throttled
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    PayloadTooLarge:
+      description: Request body exceeds server limit
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    UnsupportedMediaType:
+      description: JSON required
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}

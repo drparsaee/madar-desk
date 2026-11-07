@@ -1,0 +1,41 @@
+[Unit]
+Description=Madar Web PWA API (SQLite)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=madar-web
+Group=madar-web
+WorkingDirectory=/opt/madar-web
+EnvironmentFile=/etc/madar-web/api.env
+ExecStart=/usr/bin/node /opt/madar-web/server/index.cjs
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/opt/madar-web
+ReadWritePaths=/var/lib/madar-web
+
+[Install]
+WantedBy=multi-user.target

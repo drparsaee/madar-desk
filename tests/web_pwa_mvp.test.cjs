@@ -53,9 +53,23 @@ test('web app isolates state from preview, persists IndexedDB, exports and rejec
       await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
       const banner=page.getByRole('status',{name:'وضعیت ذخیره‌سازی نسخهٔ وب'});
       await banner.waitFor();
-      assert.match(await banner.innerText(),/همگام‌سازی آنلاین هنوز فعال نیست/);
+      assert.match(await banner.innerText(),/برای استفادهٔ چنددستگاهی حساب را متصل کنید/);
       assert.equal(await page.locator('a[rel="manifest"]').count(),0);
       assert.equal(await page.locator('link[rel="manifest"]').count(),1);
+      await banner.getByRole('button',{name:'اتصال آنلاین'}).click();
+      const syncDialog=page.getByRole('dialog',{name:'اتصال آنلاین مدار'});
+      try{await syncDialog.waitFor({timeout:5000});}
+      catch(error){throw Error('Web sync dialog did not open: '+JSON.stringify({
+        body:(await page.locator('body').innerText()).slice(0,3000),pageErrors:errors})+' | '+error.message);}
+      await syncDialog.getByText('زیرساخت سرور هنوز در دسترس نیست').waitFor();
+      assert.match(await syncDialog.innerText(),/\/api\/web\/v1/);
+      await syncDialog.getByRole('button',{name:'بستن اتصال آنلاین'}).click();
+      await page.getByRole('button',{name:'تنظیمات مدار'}).first().click();
+      const settingsDialog=page.getByRole('dialog',{name:'تنظیمات مدار'});
+      await settingsDialog.waitFor();
+      assert.equal(await settingsDialog.getByText('مدیریت هزینه‌ها').count(),0,
+        'Financial settings must remain unavailable in the browser edition');
+      await settingsDialog.getByRole('button',{name:'بستن'}).click();
       const first=await page.evaluate(async fixture=>{
         const {createWebStorage,decodeWebBackup,WEB_BACKUP_FORMAT}=await import('/src/web_storage.js');
         const store=createWebStorage();
@@ -131,12 +145,20 @@ test('web app isolates state from preview, persists IndexedDB, exports and rejec
         const store=createWebStorage();
         const old=await store.read(()=>null);
         await store.save({...old,tasks:old.tasks.map(card=>({...card,title:'نسخه جدید'}))});
+        const before=await store.readSyncState();
         try {
           await store.save({...old,tasks:old.tasks.map(card=>({...card,title:'تغییر قدیمی'}))});
           return 'overwrite';
-        }catch(error){return String(error.message);}
+        }catch(error){
+          const after=await store.readSyncState();
+          return {message:String(error.message),
+            pendingTitle:after.pending?.snapshot?.tasks?.[0]?.title,
+            pendingIdPreserved:after.pending?.id===before.pending?.id};
+        }
       });
-      assert.match(concurrent,/تب دیگر تغییر کرده/);
+      assert.match(concurrent.message,/تب دیگر تغییر کرده/);
+      assert.equal(concurrent.pendingTitle,'نسخه جدید');
+      assert.equal(concurrent.pendingIdPreserved,true);
       const latest=await page.evaluate(async()=>{
         const {createWebStorage,decodeWebBackup}=await import('/src/web_storage.js');
         const store=createWebStorage();
@@ -165,6 +187,109 @@ test('web distribution contains install manifest and shell-only service worker',
   assert.doesNotMatch(sw,/localStorage|indexedDB/);
 });
 
+test('IndexedDB v1 upgrades without data loss and v2 atomically journals pending and uncertain sync writes',
+  {skip:!runnable,timeout:60000},async()=>{
+    const {createServer}=await import('vite');
+    const {chromium}=require(playwrightHome);
+    const server=await createServer({root,mode:'web',logLevel:'error',
+      server:{host:'127.0.0.1',port:await reservePort(),strictPort:true,hmr:false}});
+    let browser;
+    try{
+      await server.listen();
+      browser=await chromium.launch({headless:true,executablePath:chrome});
+      const page=await browser.newPage();
+      await page.goto(server.resolvedUrls.local[0],{waitUntil:'domcontentloaded'});
+      const result=await page.evaluate(async fixture=>{
+        const dbName='madar-web-sync-qa-'+Date.now();
+        const legacy=await new Promise((resolve,reject)=>{
+          const request=indexedDB.open(dbName,1);
+          request.onupgradeneeded=()=>request.result.createObjectStore('documents');
+          request.onsuccess=()=>resolve(request.result);
+          request.onerror=()=>reject(request.error);
+        });
+        await new Promise((resolve,reject)=>{
+          const tx=legacy.transaction('documents','readwrite');
+          tx.objectStore('documents').put(fixture,'board-state');
+          tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+        });
+        legacy.close();
+        const {createWebStorage,WEB_DB_VERSION}=await import('/src/web_storage.js');
+        const storage=createWebStorage(indexedDB,{dbName});
+        const secondTabStorage=createWebStorage(indexedDB,{dbName});
+        const loaded=await storage.read(()=>fixture);
+        const preferencesBefore=await storage.getPreferences();
+        const firstSave=await storage.save({...loaded,__localRevision:0});
+        const firstJob=await storage.claimPending();
+        const secondSnapshot={...loaded,tasks:loaded.tasks.map(card=>({...card,title:'ویرایش دوم'}))};
+        const secondSave=await storage.save({...secondSnapshot,__localRevision:firstSave.localRevision});
+        const whileInFlight=await storage.readSyncState();
+        const blockedOtherTab=await secondTabStorage.claimPending();
+        await storage.acknowledge(firstJob.id,{revision:'remote-1',etag:'"remote-1"'});
+        const secondJob=await storage.claimPending();
+        await storage.markUncertain(secondJob.id,{code:'network_unavailable',message:'قطع ارتباط آزمایشی'});
+        const retry=await secondTabStorage.claimPending();
+        const retryStable=retry.id===secondJob.id&&
+          JSON.stringify(retry.snapshot)===JSON.stringify(secondJob.snapshot);
+        const remoteSnapshot={...loaded,tasks:loaded.tasks.map(card=>({...card,title:'نسخه سرور'}))};
+        const localNow=await storage.read(()=>fixture);
+        await storage.recordConflict({localSnapshot:localNow,remoteSnapshot,
+          remoteRevision:'remote-2',remoteEtag:'"remote-2"',reason:'revision_conflict'});
+        const localResolution=await storage.resolveConflict('local');
+        const localJournal=await storage.readSyncState();
+        await storage.recordConflict({localSnapshot:await storage.read(()=>fixture),
+          remoteSnapshot,remoteRevision:'remote-3',remoteEtag:'"remote-3"'});
+        const remoteResolution=await storage.resolveConflict('remote');
+        await storage.setPreferences({calendar:'gregorian',widgetSettings:{mode:'compact'}});
+        const preferencesAfter=await storage.getPreferences();
+        await storage.saveRecovery(remoteSnapshot);
+        const recovery=(await storage.getRecovery()).tasks[0].title;
+        await storage.clearRecovery();
+        const clearedRecovery=await storage.getRecovery();
+        const finalState=await storage.read(()=>fixture);
+        const localStorageKeys=Object.keys(localStorage);
+        await new Promise(resolve=>{
+          const request=indexedDB.deleteDatabase(dbName);
+          request.onsuccess=request.onerror=request.onblocked=resolve;
+        });
+        return {
+          version:WEB_DB_VERSION,legacyTitle:loaded.tasks[0].title,
+          firstRevision:firstSave.localRevision,secondRevision:secondSave.localRevision,
+          inFlightPreserved:whileInFlight.inFlight.id===firstJob.id,
+          secondTabBlocked:blockedOtherTab===null,
+          pendingCoalesced:whileInFlight.pending.snapshot.tasks[0].title==='ویرایش دوم',
+          ackRevision:(await Promise.resolve(localJournal.remoteRevision)),
+          retryStable,localResolutionTitle:localResolution.tasks[0].title,
+          localResolutionQueued:!!localJournal.pending,
+          remoteResolutionTitle:remoteResolution.tasks[0].title,
+          preferencesBefore,preferencesAfter,recovery,clearedRecovery,
+          finalRevision:finalState.__localRevision,
+          localStorageHasPreferences:localStorageKeys.includes('madar-preferences'),
+        };
+      },synthetic);
+      assert.equal(result.version,2);
+      assert.equal(result.legacyTitle,'کارت تست وب');
+      assert.equal(result.firstRevision,1);
+      assert.equal(result.secondRevision,2);
+      assert.equal(result.inFlightPreserved,true);
+      assert.equal(result.secondTabBlocked,true);
+      assert.equal(result.pendingCoalesced,true);
+      assert.equal(result.ackRevision,'remote-2');
+      assert.equal(result.retryStable,true);
+      assert.equal(result.localResolutionTitle,'ویرایش دوم');
+      assert.equal(result.localResolutionQueued,true);
+      assert.equal(result.remoteResolutionTitle,'نسخه سرور');
+      assert.equal(result.preferencesBefore.calendar,'jalali');
+      assert.equal(result.preferencesAfter.calendar,'gregorian');
+      assert.equal(result.recovery,'نسخه سرور');
+      assert.equal(result.clearedRecovery,null);
+      assert.equal(result.finalRevision,3);
+      assert.equal(result.localStorageHasPreferences,false);
+    }finally{
+      if(browser)await browser.close();
+      await server.close();
+    }
+  });
+
 test('production PWA installs offline shell and reopens without network',
   {skip:!runnable||!fs.existsSync(path.join(root,'dist-web','index.html')),timeout:70000},
   async()=>{
@@ -185,7 +310,10 @@ test('production PWA installs offline shell and reopens without network',
         url:request.url(),error:request.failure()?.errorText}));
       await page.goto('http://127.0.0.1:'+port+'/',{waitUntil:'load'});
       await page.getByRole('status',{name:'وضعیت ذخیره‌سازی نسخهٔ وب'}).waitFor();
-      const service=await page.evaluate(async()=>{
+      const workerSource=fs.readFileSync(path.join(root,'public','service-worker.js'),'utf8');
+      const cacheName=workerSource.match(/const NAME='([^']+)'/)?.[1];
+      assert.ok(cacheName?.startsWith('madar-pwa-shell-'),'PWA must declare a versioned cache');
+      const service=await page.evaluate(async cacheName=>{
         const ready=await navigator.serviceWorker.ready;
         await new Promise((resolve,reject)=>{
           if(navigator.serviceWorker.controller)return resolve();
@@ -194,11 +322,11 @@ test('production PWA installs offline shell and reopens without network',
             clearTimeout(timeout);resolve();
           },{once:true});
         });
-        const cache=await caches.open('madar-pwa-shell-1.0.22-1');
+        const cache=await caches.open(cacheName);
         const keys=(await cache.keys()).map(entry=>new URL(entry.url).pathname);
         return {scope:ready.scope,css:keys.some(key=>/\.css$/.test(key)),
           js:keys.some(key=>/\.js$/.test(key)),html:keys.some(key=>/index\.html$/.test(key))};
-      });
+      },cacheName);
       assert.equal(service.css,true,'Stylesheets must be cached from first install');
       assert.equal(service.js,true,'Entrypoint JS must be cached from first install');
       assert.equal(service.html,true,'Offline page must be cached');
@@ -212,9 +340,9 @@ test('production PWA installs offline shell and reopens without network',
       try {
         await page.getByRole('status',{name:'وضعیت ذخیره‌سازی نسخهٔ وب'}).waitFor({timeout:7000});
       } catch(error) {
-        const diagnosis=await page.evaluate(async()=>{
+        const diagnosis=await page.evaluate(async cacheName=>{
           const names=await caches.keys();
-          const keys=await caches.open('madar-pwa-shell-1.0.22-1').then(c=>c.keys());
+          const keys=await caches.open(cacheName).then(c=>c.keys());
           const script=keys.find(item=>item.url.endsWith('.js'));
           const jsResponse=script?await caches.match(script):null;
           let fetched=null;
@@ -230,7 +358,7 @@ test('production PWA installs offline shell and reopens without network',
             cacheJs:jsResponse?{ok:jsResponse.ok,status:jsResponse.status,
               length:Number(jsResponse.headers.get('content-length')||0)}:null,
             fetchJs:fetched};
-        });
+        },cacheName);
         throw Error('Offline PWA failed: '+JSON.stringify({
           diagnosis,networkFailures,pageerrors:failures})+' | '+error.message);
       }
