@@ -116,7 +116,8 @@ function projectPriority(raw,path,strict){
 function projectTask(raw,path,strict){
   const x=object(raw,path,strict,['id','projectId','boardId','listId','status','title','description',
     'priority','dueDate','labels','labelIds','checklist','checklists','archived','deleted',
-    'cardOrder','estimatedMinutes','actualMinutes','createdAt','updatedAt']);
+    'cardOrder','estimatedMinutes','actualMinutes','createdAt','updatedAt',
+    'dependencies','plannedStart','plannedEnd']);
   const list=records(x.checklist??[],path+'.checklist',LIMITS.checklist,projectCheckItem,strict);
   const groups=records(x.checklists??[],path+'.checklists',LIMITS.checklists,projectChecklist,strict);
   const labels=array(x.labels??[],path+'.labels',LIMITS.labels).map((v,i)=>string(v,path+'.labels['+i+']',100));
@@ -136,7 +137,22 @@ function projectTask(raw,path,strict){
     estimatedMinutes:optional(x,'estimatedMinutes',path,v=>integer(v,path+'.estimatedMinutes',0,5256000),0),
     actualMinutes:optional(x,'actualMinutes',path,v=>integer(v,path+'.actualMinutes',0,5256000),0),
     createdAt:optional(x,'createdAt',path,v=>string(v,path+'.createdAt',100,true),''),
-    updatedAt:optional(x,'updatedAt',path,v=>string(v,path+'.updatedAt',100,true),'')};
+    updatedAt:optional(x,'updatedAt',path,v=>string(v,path+'.updatedAt',100,true),''),
+    ...(own(x,'dependencies')?{dependencies:array(x.dependencies,path+'.dependencies',128)
+      .map((value,i)=>string(value,path+'.dependencies['+i+']',100))}:{}),
+    ...(own(x,'plannedStart')?{plannedStart:planDate(x.plannedStart,path+'.plannedStart')}:{}),
+    ...(own(x,'plannedEnd')?{plannedEnd:planDate(x.plannedEnd,path+'.plannedEnd')}:{}),
+  };
+}
+function planDate(value,path){
+  if(value==='')return '';
+  const text=string(value,path,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(text))fail(path,'expected ISO date');
+  const [year,month,day]=text.split('-').map(Number);
+  const stamp=new Date(Date.UTC(year,month-1,day));
+  if(stamp.getUTCFullYear()!==year||stamp.getUTCMonth()!==month-1||
+    stamp.getUTCDate()!==day)fail(path,'invalid calendar date');
+  return text;
 }
 function projectAttachment(raw,path,strict){
   const x=object(raw,path,strict,['id','cardId','projectId','filename','mime','size','sha256']);
@@ -175,6 +191,7 @@ function checkReferences(data){
   const stageIds=new Set(data.stages.map(s=>s.id)),priorityIds=new Set(data.priorityDefinitions.map(p=>p.id));
   const workspaces=new Set(data.workspaces.map(w=>w.id)),projects=new Set(data.projects.map(p=>p.id));
   const boards=new Map(data.boards.map(b=>[b.id,b]));
+  const taskById=new Map(data.tasks.map(t=>[t.id,t]));
   if(!['low','medium','high'].every(id=>priorityIds.has(id)))fail('data.priorityDefinitions','required default priorities missing');
   for(const board of data.boards){
     if(!workspaces.has(board.workspaceId)||board.projectId!==null&&!projects.has(board.projectId))
@@ -186,6 +203,27 @@ function checkReferences(data){
        !board.stages.some(s=>s.id===task.listId)||!stageIds.has(task.status)||
        !priorityIds.has(task.priority)||task.labelIds.some(id=>!board.labelDefinitions.some(l=>l.id===id)))
       fail('data.tasks','orphan project, board, list, global stage, priority or label');
+    if(task.plannedStart&&task.plannedEnd&&task.plannedStart>task.plannedEnd)
+      fail('data.tasks','start date is after end date');
+    for(const dep of task.dependencies||[]){
+      const predecessor=taskById.get(dep);
+      if(dep===task.id||!predecessor||predecessor.projectId!==task.projectId||
+        predecessor.deleted||task.deleted)
+        fail('data.tasks.dependencies','invalid dependency reference');
+    }
+  }
+  const visiting=new Set(),visited=new Set();
+  for(const task of data.tasks){
+    if(visited.has(task.id))continue;
+    const stack=[[task.id,false]];
+    while(stack.length){
+      const [id,exit]=stack.pop();
+      if(exit){visiting.delete(id);visited.add(id);continue;}
+      if(visited.has(id))continue;
+      if(visiting.has(id))fail('data.tasks.dependencies','dependency cycle');
+      visiting.add(id);stack.push([id,true]);
+      for(const dep of taskById.get(id).dependencies||[])stack.push([dep,false]);
+    }
   }
 }
 function byteLength(value){

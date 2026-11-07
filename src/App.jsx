@@ -14,7 +14,7 @@ import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} 
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
 import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
 import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
-import {CardComments,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
+import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
 import {RulesPanel} from './rulespanel.jsx';
 import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
@@ -50,6 +50,7 @@ import {syncHealth} from './sync_health.js';
 import {createBoardPerformanceIndex} from './board_performance.js';
 import {PortableExportPanel} from './portable_export_panel.jsx';
 import {ProgressiveLane} from './progressive_lane.jsx';
+import {GanttView} from './gantt_view.jsx';
 import {resolvedDisplayScope,isManagedFeatureVisible} from './managed_display.js';
 import {ClockWidget} from './clock_widget.jsx';
 import {LaneActionsMenu} from './board_lane_actions.jsx';
@@ -444,6 +445,12 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
       </section>}
       {showOperations&&advancedView==='time'&&<section className="task-advanced-content" id="task-section-time" tabIndex={-1}>
         <div className="edit-section"><div className="time-inputs"><label>زمان برآوردی (دقیقه)<input type="number" min="0" max="5256000" value={task.estimatedMinutes||0} disabled={!canEdit} onChange={e=>update({estimatedMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label><label>زمان واقعی ثبت‌شده (دقیقه)<input type="number" min="0" max="5256000" value={task.actualMinutes||0} disabled={!canEdit} onChange={e=>update({actualMinutes:Math.min(5256000,Math.max(0,Number(e.target.value)||0))})}/></label></div><small>زمان‌ها جدا از هزینه ثبت می‌شوند و در داشبورد پروژه محاسبه خواهند شد.</small></div>
+        <div className="edit-section"><div className="time-inputs">
+          <CalendarField label="شروع برنامه" calendar={calendar} value={task.plannedStart||''} disabled={!canEdit}
+            onChange={plannedStart=>update({plannedStart})}/>
+          <CalendarField label="پایان برنامه" calendar={calendar} value={task.plannedEnd||''} disabled={!canEdit}
+            onChange={plannedEnd=>update({plannedEnd})}/>
+        </div><small>تاریخ برنامه مستقل از موعد تحویل و زمان ثبت‌شده است. پایان نباید قبل از شروع باشد.</small></div>
       </section>}
       {advancedView==='settings'&&<section className="task-advanced-content" id="task-section-settings" tabIndex={-1}>
         <div className="edit-section task-card-settings">
@@ -489,7 +496,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
       <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
       {activityOpen&&<div className="task-activity-panel__content">
-        {showOperations&&<CardComments cardId={task.id} api={api} canEdit={canEdit} username={username}/>}
+        {showOperations&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
         <div className="task-activity-panel__reports">
           <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
             {canEdit&&<button className="task-inline-action" type="button" aria-expanded={reportComposerOpen} onClick={()=>setReportComposerOpen(previous=>!previous)}><Plus size={15}/>{reportComposerOpen?'بستن فرم':'افزودن گزارش'}</button>}
@@ -810,6 +817,7 @@ export default function App(){
   const [lanInitialView,setLanInitialView]=useState('connection');
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
+  const [projectChatOpen,setProjectChatOpen]=useState(false);
   const [tarazStatus,setTarazStatus]=useState(null);
   const [tarazConsentChoice,setTarazConsentChoice]=useState(null);
   useEffect(()=>{
@@ -1167,7 +1175,7 @@ export default function App(){
   useEffect(()=>{
     if(!data||!activeWorkspaceId)return;
     const saved=readBoardViewPreferences(localStorage,boardViewIdentity,boardViewScope,boardViewColumns);
-    setMode(previous=>previous==='time'?previous:saved.mode);
+    setMode(previous=>previous==='time'||previous==='gantt'?previous:saved.mode);
   },[activeBoard?.id,activeWorkspaceId,boardViewIdentity,!!data]);
   const switchBoardDisplay=next=>{
     setMode(next);
@@ -1189,7 +1197,7 @@ export default function App(){
   const show=feature=>isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
   useEffect(()=>{
     if(interfaceMode==='basic'){
-      setMode(previous=>previous==='time'?'board':previous);
+      setMode(previous=>previous==='time'||previous==='gantt'?'board':previous);
       setReportingOpen(false);setPlannerOpen(false);setActivityOpen(false);
       setWorkspaceOpen(false);setRulesOpen(false);setTrelloImportOpen(false);
       setCalendarInteropOpen(false);setIntegrationOpen(false);
@@ -2146,12 +2154,13 @@ export default function App(){
           <SharedLinks links={selectedProject.fileLinks||[]} api={api} canEdit={canManage} onChange={fileLinks=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===selectedProject.id?{...p,fileLinks}:p)}))}/>
         </details>}
         {selectedProject&&show('automationRules')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" onClick={()=>setRulesOpen(true)}><Zap size={16}/> قوانین خودکار پروژه</button></div>}
+        {selectedProject&&show('cardComments')&&<div className="page-controls page-controls--project-quick"><button className="btn secondary" onClick={()=>setProjectChatOpen(true)}><MessageCircle size={16}/> گفت‌وگوی پروژه</button></div>}
         {selected==='all'&&mode==='board'&&<VitreaOverview tasks={filtered}
           projects={visibleProjects} stages={viewStages} onOpenTask={setEditorId}
           onSelectProject={id=>{setSelected(id);setBoardId(null);setFilter('all');}}/>}
         {workspaceBoards.length ? <section className="board-section">
-          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} aria-label="برد کارها" onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} aria-label="فهرست" onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} aria-label="جدول" onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} aria-label="زمان‌بندی" onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
-          {show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
+          <div className="board-toolbar"><div className="board-tabs"><button className={mode==='board'?'selected':''} aria-label="برد کارها" onClick={openBoardView} title="نمای برد"><LayoutGrid size={17}/> برد کارها</button><button className={mode==='list'?'selected':''} aria-label="فهرست" onClick={()=>switchBoardDisplay('list')} title="نمای فهرست"><ListChecks size={17}/> فهرست</button><button className={mode==='table'?'selected':''} aria-label="جدول" onClick={()=>switchBoardDisplay('table')} title="نمای جدول قابل تنظیم"><Table2 size={17}/> جدول</button>{show('timelineView')&&<button className={mode==='time'?'selected':''} aria-label="زمان‌بندی" onClick={()=>setMode('time')} title="زمان‌بندی"><BarChart3 size={17}/> زمان‌بندی</button>}{show('timelineView')&&<button className={mode==='gantt'?'selected':''} aria-label="گانت" onClick={()=>switchBoardDisplay('gantt')} title="گانت"><BarChart3 size={17}/> گانت</button>}</div><div className="board-filters">{show('advancedFilters')&&<AdvancedFilters key={'filters:'+advancedScope} identity={plannerIdentity(lanStatus)} scopeId={boardViewScope} tasks={tasks} users={users} stages={viewStages} priorities={priorities} value={advanced} onChange={setAdvanced}/>}<select aria-label="فیلتر سریع" title="فیلتر اولویت" className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">همه اولویت‌ها</option><option value="high">اولویت بالا</option><option value="with-reports">دارای گزارش</option></select></div></div>
+          {show('timelineView')&&mode==='gantt'?<GanttView tasks={filtered} calendar={calendar} canEdit={canEdit} onOpen={setEditorId} onUpdate={taskUpdate}/>:show('timeDashboard')&&mode==='time'?<TimeDashboard tasks={filtered} projects={projects} onOpen={setEditorId} calendar={calendar}/>:mode==='table'?<BoardTableView key={boardViewIdentity+'|'+boardViewScope} board={activeBoard} scopeId={boardViewScope} identity={boardViewIdentity} storage={localStorage} tasks={filtered} stages={viewStages} projects={visibleProjects} users={users} priorities={priorities} calendar={calendar} onOpen={setEditorId} onContextRequest={requestCardMenu}/>:mode==='board'?<div className="kanban" aria-label="برد کارها">{viewStages.map(stage=>{
             const items=boardGroups.get(stage.id)||[];
             const listKey=(activeBoard?.id||'legacy')+'|'+stage.id;
             const isCollapsed=collapsedLists[listKey]===true;
@@ -2325,6 +2334,10 @@ export default function App(){
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
+    {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
+      projectId={selectedProject.id} projectName={selectedProject.name} api={api}
+      canEdit={canEdit} canManage={canManage} username={lanStatus.user?.username||'local'}
+      onClose={()=>setProjectChatOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
     {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}

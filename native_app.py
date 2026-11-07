@@ -258,6 +258,18 @@ def is_valid(state):
         for field in ("estimatedMinutes", "actualMinutes"):
             if type(task.get(field, 0)) is not int or not 0 <= task.get(field, 0) <= 5_256_000:
                 raise ValueError("مدت زمان کار معتبر نیست.")
+        for field in ("plannedStart", "plannedEnd"):
+            value = task.get(field, "")
+            if not isinstance(value, str) or (value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)):
+                raise ValueError("تاریخ برنامه‌ریزی باید YYYY-MM-DD باشد.")
+            if value:
+                from datetime import date as _calendar_date
+                try:
+                    _calendar_date.fromisoformat(value)
+                except ValueError as exc:
+                    raise ValueError("تاریخ برنامه‌ریزی نامعتبر است.") from exc
+        if task.get("plannedStart") and task.get("plannedEnd") and task["plannedStart"] > task["plannedEnd"]:
+            raise ValueError("تاریخ پایان نمی‌تواند قبل از شروع باشد.")
         for item in task["checklist"]:
             if (not isinstance(item, dict) or not isinstance(item.get("text"), str)
                     or not isinstance(item.get("done"), bool)
@@ -2235,12 +2247,12 @@ class Bridge:
         return {"local": {"username": "local", "role": "admin", "projects": None}}, None, False
 
     def collabRead(self, kind, card_id=""):
-        if kind not in ("comments", "notifications", "activity", "rules"):
+        if kind not in ("comments", "project-comments", "notifications", "activity", "rules"):
             raise ValueError("نوع اطلاعات همکاری معتبر نیست.")
         if self.connection.get("mode") == "client":
             from urllib.parse import quote
             suffix = "?cardId=" + quote(card_id) if kind == "comments" else (
-                     "?projectId=" + quote(card_id) if kind == "rules" else "")
+                     "?projectId=" + quote(card_id) if kind in ("rules", "project-comments") else "")
             return self._remote_request("/api/" + kind + suffix)["items"]
         if self.lan:
             return self.lan.collab_read(self.lan.authenticate_owner_token(), kind, card_id)
@@ -2251,6 +2263,8 @@ class Bridge:
             saved = self._load_collab()
             if kind == "comments":
                 return collab.list_comments(saved, card_id, **kwargs)
+            if kind == "project-comments":
+                return collab.list_project_comments(saved, card_id, **kwargs)
             if kind == "notifications":
                 return collab.list_notifications(saved, **kwargs)
             if kind == "rules":
