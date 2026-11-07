@@ -7,6 +7,12 @@
 .gantt-hint{display:flex;align-items:center;gap:6px;font-size:11px;opacity:.75;margin:6px 0 12px}
 .gantt-schedule-health{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin:8px 0 12px;background:var(--surface-2,var(--surface,#fff));border:1px solid var(--border,#d7dfe6);border-radius:8px;font-size:11px;line-height:1.7}
 .gantt-schedule-health strong{font-size:12px}.gantt-schedule-health small{flex-basis:100%;color:var(--muted,#63748a)}
+.gantt-critical-summary{border:1px solid var(--border,#d7dfe6);padding:10px 12px;margin:8px 0 12px;border-radius:9px;display:flex;flex-direction:column;gap:6px;font-size:12px;min-width:0;background:var(--surface-2,var(--surface,#fff));line-height:1.7}
+.gantt-critical-summary>small{color:var(--muted,#63748a);font-size:11px}
+.gantt-critical-project{padding:6px 8px;border-inline-start:3px solid var(--border,#d7dfe6);display:flex;flex-wrap:wrap;gap:5px 14px;min-width:0;align-items:center}
+.gantt-critical-project p{margin:0;flex-basis:100%;min-width:0;overflow-wrap:anywhere}
+.gantt-critical-chain{font-size:11px;line-height:1.8}
+.gantt-critical-chip{font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#27344a)}
 .gantt-schedule-warning{display:flex;align-items:center;gap:5px;font-size:10px;min-width:0;line-height:1.5;color:var(--text,#27344a)}
 .gantt-schedule-warning span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gantt-schedule-warning button{flex-shrink:0;border:1px solid var(--border,#d7dfe6);border-radius:5px;background:var(--surface,#fff);color:inherit;cursor:pointer;padding:2px 5px;font:inherit;font-size:10px}
@@ -31,6 +37,7 @@
 .gantt-bar{position:absolute;top:32px;height:26px;min-width:5px;border:1px solid #258496;border-radius:6px;background:#268a9d;cursor:grab;touch-action:none;z-index:2}
 .gantt-bar:active{cursor:grabbing}.gantt-bar.is-done{background:#649b82;border-color:#50846c}
 .gantt-bar.has-conflict{outline:3px solid #cb7e25;outline-offset:1px}
+.gantt-bar.is-critical{border-style:dashed;border-width:2px;box-shadow:inset 0 -4px 0 rgba(255,255,255,.32)}
 .gantt-empty{display:block;color:var(--muted,#87919d);opacity:.7;font-size:11px;margin:26px 10px}
 .gantt-arrows{pointer-events:none;position:absolute;top:0;left:0;color:#b78b3b;z-index:2}
 .gantt-empty-panel{text-align:center;opacity:.75;padding:26px}

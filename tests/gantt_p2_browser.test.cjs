@@ -32,6 +32,7 @@ const output=esbuild.buildSync({
       const [tasks,setTasks]=React.useState(seed);
       const [canEdit,setCanEdit]=React.useState(true);
       window.__setCanEdit=setCanEdit;
+      window.__setTasks=setTasks;
       return React.createElement(GanttView,{tasks,calendar:'gregorian',canEdit,
         onOpen:id=>window.__updates.push(['open',id]),
         onUpdate:(id,patch)=>{window.__updates.push(['update',id,patch]);
@@ -61,6 +62,9 @@ test('P2 Chromium Gantt reports dependency conflicts, fixes one card and respect
     assert.match(await status.innerText(),/۱ کارت دارای تداخل زمانی/);
     assert.match(await status.innerText(),/پیش‌نیاز در نمای فعلی قابل بررسی نیست/);
     assert.equal((await page.locator('body').innerText()).includes('secret-private-card'),false);
+    const critical=page.getByRole('region',{name:'تحلیل مسیر بحرانی'});
+    assert.match(await critical.innerText(),/تحلیل کامل نیست/);
+    assert.equal((await critical.innerText()).includes('secret-private-card'),false);
     const repair=page.getByRole('button',{name:'اصلاح تاریخ کارت مرحله دوم بر اساس پیش‌نیازها'});
     assert.equal(await repair.count(),1);
     await repair.click();
@@ -68,6 +72,12 @@ test('P2 Chromium Gantt reports dependency conflicts, fixes one card and respect
       [['update','b',{plannedStart:'2026-11-11',plannedEnd:'2026-11-14'}]]);
     assert.match(await status.innerText(),/تداخل زمانی شناسایی نشد/);
     assert.equal(await repair.count(),0);
+    await page.evaluate(()=>window.__setTasks(current=>current.filter(task=>task.id!=='c')));
+    await page.getByRole('button',{name:/نوار مرحله دوم، در مسیر بحرانی/}).waitFor();
+    assert.match(await critical.innerText(),/طولانی‌ترین زنجیره: ۸ روز/);
+    assert.match(await critical.innerText(),/پیش‌نیاز عمومی/);
+    assert.match(await critical.innerText(),/مرحله دوم/);
+    assert.match(await page.locator('.gantt-critical-chip').first().innerText(),/بحرانی/);
     await page.evaluate(()=>window.__setCanEdit(false));
     assert.equal(await page.getByRole('button',{name:/اصلاح تاریخ کارت/}).count(),0);
     assert.equal(await page.getByLabel('شروع مرحله دوم').isDisabled(),true);
