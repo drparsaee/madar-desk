@@ -64,6 +64,7 @@ test('P2 Chromium Gantt reports dependency conflicts, fixes one card and respect
     assert.equal((await page.locator('body').innerText()).includes('secret-private-card'),false);
     const critical=page.getByRole('region',{name:'تحلیل مسیر بحرانی'});
     assert.match(await critical.innerText(),/تحلیل کامل نیست/);
+    assert.match(await critical.innerText(),/فقط با کارت‌های قابل مشاهده/);
     assert.equal((await critical.innerText()).includes('secret-private-card'),false);
     const repair=page.getByRole('button',{name:'اصلاح تاریخ کارت مرحله دوم بر اساس پیش‌نیازها'});
     assert.equal(await repair.count(),1);
