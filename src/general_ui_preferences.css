@@ -1,0 +1,16 @@
+/* Independent, account-scoped display settings for the Madar task client. */
+:root[data-madar-ui-font="vazirmatn"]{--madar-ui-font:Vazirmatn,"Estedad Variable",Tahoma,"Segoe UI",sans-serif}
+:root[data-madar-ui-font="system"]{--madar-ui-font:Tahoma,"Segoe UI",Arial,sans-serif}
+:root[data-madar-ui-font="estedad"]{--madar-ui-font:"Estedad Variable",Vazirmatn,Tahoma,"Segoe UI",sans-serif}
+:root[data-madar-ui-density="compact"] .app-shell.vitrea-layout{--vtr-spacing:10px}
+:root[data-madar-ui-density="compact"] .app-shell.vitrea-layout .workspace-scroll .stats{gap:8px}
+:root[data-madar-ui-density="compact"] .app-shell.vitrea-layout .workspace-scroll .vitrea-overview-panel{padding:12px}
+:root[data-madar-ui-density="compact"] .app-shell.vitrea-layout .workspace-scroll .list-row{padding-block:7px}
+:root[data-madar-ui-density="compact"] .task-editor-main .edit-section{padding-block:9px}
+/* Standard reading width applies to summaries, never truncates horizontal board lanes. */
+:root[data-madar-text-width="standard"] .app-shell.vitrea-layout .workspace-scroll > :is(.page-header,.stats,.vitrea-overview){max-width:1260px;margin-inline:auto;width:100%}
+:root[data-madar-text-width="standard"] .task-editor-main :is(.rich-preview,.rich-description,textarea){max-width:80ch}
+:root[data-madar-text-width="wide"] .app-shell.vitrea-layout .workspace-scroll > :is(.page-header,.stats,.vitrea-overview){max-width:none}
+:root[data-madar-motion="reduce"] .app-shell *,
+:root[data-madar-motion="reduce"] .app-shell *::before,
+:root[data-madar-motion="reduce"] .app-shell *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}

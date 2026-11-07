@@ -43,6 +43,7 @@ import {softDeleteCardState,restoreDeletedCardState} from './cardtrash.js';
 import {archiveCardState,restoreArchivedCardState} from './cardarchive.js';
 import {CardContextMenu} from './card_context_menu.jsx';
 import {themeScope,readTheme,writeTheme} from './theme_preference.js';
+import {readGeneralUi,writeGeneralUi,readThemeMode,writeThemeMode,resolveTheme,readTarazQueueConsent,writeTarazQueueConsent} from './general_ui_preferences.js';
 import {hostBackupHealth} from './host_backup_health.js';
 import {readCardSectionPreferences,saveCardSectionPreferences,CARD_SECTIONS} from './card_section_preferences.js';
 import {syncHealth} from './sync_health.js';
@@ -69,6 +70,7 @@ import './workspace_empty.css';
 import './trello_quick_add.css';
 import './sidebar_compact.css';
 import './backup_easy.css';
+import './general_ui_preferences.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -228,7 +230,7 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
   return <button type="button" aria-live="polite" aria-label={'وضعیت اتصال: '+label} className={'sync-indicator '+(['pending','saving','conflict'].includes(health.kind)?'sync-pending':['offline'].includes(health.kind)?'sync-offline':'sync-online')+(compact?' sync-indicator--dock':'')} onClick={showDetails} title={label+(lastSync?' | آخرین دریافت: '+new Date(lastSync).toLocaleString('fa-IR'):'')}><span className="sync-led"/><span className="sync-indicator__label">{shortLabel}</span></button>;
 }
 
-function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true}){
+function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,tarazQueueAvailable=false,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true}){
   const [newStep,setNewStep]=useState('');
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
@@ -382,7 +384,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>toggleQuickMenu('labels')} aria-expanded={quickMenu==='labels'}><Tag size={15}/> برچسب</button>
         <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'}><ListChecks size={15}/> چک‌لیست</button>
         <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><Paperclip size={15}/> فایل</button>
-        {canEdit&&<button type="button" onClick={()=>onSendToTaraz(task.id)} title="ارسال خلاصه کارت برای بررسی در برنامه مستقل تراز"><FileText size={15}/> ارسال به تراز</button>}
+        {canEdit&&<button type="button" onClick={()=>onSendToTaraz(task.id)} disabled={!tarazQueueAvailable} title={tarazQueueAvailable?'ارسال دستی خلاصهٔ کارت برای بررسی در برنامه مستقل تراز':'ابتدا در تنظیمات، اتصال تراز و اجازهٔ ارسال دستی را فعال کنید'}><FileText size={15}/> ارسال به تراز</button>}
         <button type="button" className="task-quick-actions__more" aria-expanded={quickMenu==='more'} onClick={()=>toggleQuickMenu('more')}><MoreHorizontal size={15}/> بیشتر</button>
         {quickMenu&&<div className="task-quick-popover" role="group" aria-label={'ویرایش سریع '+({date:'تاریخ',members:'اعضا',labels:'برچسب‌ها',checklist:'چک‌لیست',more:'گزینه‌های تکمیلی'}[quickMenu]||'کارت')} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setQuickMenu(null);quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();}}}>
           <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',more:'گزینه‌های تکمیلی'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
@@ -809,6 +811,7 @@ export default function App(){
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
   const [tarazStatus,setTarazStatus]=useState(null);
+  const [tarazConsentChoice,setTarazConsentChoice]=useState(null);
   useEffect(()=>{
     let active=true;
     api.tarazIntegrationStatus?.().then(value=>{if(active)setTarazStatus(value);})
@@ -826,6 +829,16 @@ export default function App(){
   const [calendarInteropOpen,setCalendarInteropOpen]=useState(false);
   const [lanStatus,setLanStatus]=useState({mode:'solo',user:{role:'admin'}});
   const [themeChoice,setThemeChoice]=useState(null);
+  const [themeModeChoice,setThemeModeChoice]=useState(null);
+  const [generalUiChoice,setGeneralUiChoice]=useState(null);
+  const [systemDark,setSystemDark]=useState(()=>window.matchMedia?.('(prefers-color-scheme: dark)')?.matches??true);
+  useEffect(()=>{
+    const media=window.matchMedia?.('(prefers-color-scheme: dark)');
+    if(!media)return;
+    const change=()=>setSystemDark(media.matches);
+    change();media.addEventListener?.('change',change);
+    return()=>media.removeEventListener?.('change',change);
+  },[]);
   const displayScope=resolvedDisplayScope(lanStatus);
   const interfaceMode=displayScope.mode;
   const [users,setUsers]=useState([]);
@@ -1043,11 +1056,33 @@ export default function App(){
     return()=>clearInterval(timer);
   },[]);
   const appearanceScope=themeScope(lanStatus);
+  const tarazEnabled=tarazConsentChoice?.scope===appearanceScope?tarazConsentChoice.enabled:
+    readTarazQueueConsent(localStorage,appearanceScope);
+  const updateTarazConsent=enabled=>{
+    writeTarazQueueConsent(localStorage,appearanceScope,enabled);
+    setTarazConsentChoice({scope:appearanceScope,enabled});
+  };
+  const refreshTarazStatus=async()=>{
+    try{setTarazStatus(await api.tarazIntegrationStatus());}
+    catch(error){setTarazStatus({supported:false,postingEnabled:false,message:String(error?.message||error)});}
+  };
   const sharedThemeEnabled=data?.settings?.themeForAllUsers===true;
+  const generalUi=generalUiChoice?.scope===appearanceScope?generalUiChoice.value:
+    readGeneralUi(localStorage,appearanceScope);
+  const currentThemeMode=themeModeChoice?.scope===appearanceScope?themeModeChoice.mode:
+    readThemeMode(localStorage,appearanceScope,
+      themeChoice?.scope===appearanceScope?themeChoice.theme:
+      readTheme(localStorage,appearanceScope,data?.settings?.theme));
   const uiTheme=sharedThemeEnabled?(data?.settings?.theme==='light'?'light':'dark'):
-    themeChoice?.scope===appearanceScope?themeChoice.theme:
-    readTheme(localStorage,appearanceScope,data?.settings?.theme);
+    resolveTheme(currentThemeMode,systemDark);
   useEffect(()=>{document.documentElement.dataset.theme=uiTheme;},[uiTheme]);
+  useEffect(()=>{
+    const root=document.documentElement;
+    root.dataset.madarUiFont=generalUi.font;
+    root.dataset.madarUiDensity=generalUi.density;
+    root.dataset.madarTextWidth=generalUi.textWidth;
+    root.dataset.madarMotion=generalUi.motion;
+  },[generalUi.font,generalUi.density,generalUi.textWidth,generalUi.motion]);
   useEffect(()=>{
     if(!data)return;
     // The standalone finance route uses the same display preference, without
@@ -1056,14 +1091,21 @@ export default function App(){
     catch(_error){/* Private storage may be disabled in a hardened WebView. */}
   },[uiTheme,!!data]);
   const chooseTheme=next=>{
-    if(next!=='light'&&next!=='dark')return;
+    if(!['light','dark','system'].includes(next))return;
     if(sharedThemeEnabled){
-      if(lanStatus?.user?.role!=='admin')return;
+      if(lanStatus?.user?.role!=='admin'||next==='system')return;
       changeAdmin(s=>({...s,settings:{...s.settings,theme:next}}));
     }else{
-      writeTheme(localStorage,appearanceScope,next);
-      setThemeChoice({scope:appearanceScope,theme:next});
+      const effective=resolveTheme(next,systemDark);
+      writeThemeMode(localStorage,appearanceScope,next);
+      writeTheme(localStorage,appearanceScope,effective);
+      setThemeModeChoice({scope:appearanceScope,mode:next});
+      setThemeChoice({scope:appearanceScope,theme:effective});
     }
+  };
+  const updateGeneralUi=next=>{
+    const value=writeGeneralUi(localStorage,appearanceScope,next);
+    setGeneralUiChoice({scope:appearanceScope,value});
   };
   const toggleTheme=()=>chooseTheme(uiTheme==='dark'?'light':'dark');
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
@@ -1925,6 +1967,10 @@ export default function App(){
     finally{recoveryReload.current=false;setSyncing(false);}
   };
   const sendToTaraz=async taskId=>{
+    if(!tarazEnabled){setToast('ارسال دستی به تراز خاموش است؛ ابتدا از تنظیمات، اتصال تراز آن را فعال کنید.');return;}
+    if(!tarazStatus?.supported||tarazStatus?.postingEnabled!==false){
+      setToast('صندوق پیشنهادهای تراز در این محیط آماده یا امن نیست.');return;
+    }
     if(!canEdit){setToast('برای ارسال پیشنهاد تراز، دسترسی ویرایش کارت لازم است.');return;}
     if(dirty.current||saving.current||blocked.current){
       setToast('برای ارسال به تراز، ابتدا ذخیره کارت باید کامل شود.');return;
@@ -1934,8 +1980,7 @@ export default function App(){
       if(!result?.queued||result?.postingPerformed!==false)
         throw Error('پاسخ صندوق تبادل معتبر نیست.');
       setToast('خلاصه کارت در صندوق تراز قرار گرفت. بازبینی و ثبت در برنامه مستقل تراز انجام می‌شود.');
-      const status=await api.tarazIntegrationStatus();
-      setTarazStatus(status);
+      await refreshTarazStatus();
     }catch(err){setToast('ارسال پیشنهاد به تراز ناموفق: '+String(err?.message||err));}
   };
   if(!data)return <div className="loading"><span className="logo-symbol"><img src="./madar-icon.svg" alt="" /></span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
@@ -2014,6 +2059,7 @@ export default function App(){
         <div className="sidebar-nav" role="note">
           <p>{tarazStatus?.message||'در حال بررسی صندوق تبادل تراز…'}</p>
           {tarazStatus?.supported&&<p>پیشنهادهای منتظر بررسی: {Number(tarazStatus.pending||0).toLocaleString('fa-IR')}</p>}
+          <p>{tarazEnabled?'ارسال دستی در همین رایانه مجاز شده است.':'ارسال دستی خاموش است؛ برای فعال‌سازی به تنظیمات ← اتصال تراز بروید.'}</p>
           <p>ارسال خلاصه از دکمه «ارسال به تراز» داخل هر کارت انجام می‌شود. تراز را به‌عنوان برنامه جداگانه اجرا کنید.</p>
         </div>
       </details>
@@ -2263,7 +2309,7 @@ export default function App(){
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
     {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
-    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
+    {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} tarazQueueAvailable={tarazEnabled&&tarazStatus?.supported===true&&tarazStatus?.postingEnabled===false} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
     {!!labelManager&&<Modal title="مدیریت برچسب‌ها" width={420} onClose={()=>setLabelManager(null)}>
       <div className="dialog-body"><LabelEditor key={labelManager.id||'global-library'} library={labelLibrary} labels={null} disabled={!canEdit}
         initialEditId={labelManager.id} canManage={canManage} onCreate={createSharedLabel}
@@ -2274,7 +2320,7 @@ export default function App(){
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
     {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه خالی حذف شود؟ کارتها و اسناد مالی منتقل نخواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
-    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} onClose={()=>setSettingsOpen(false)}/>}
+    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} themeMode={sharedThemeEnabled?uiTheme:currentThemeMode} generalUi={generalUi} onGeneralUiChange={updateGeneralUi} tarazStatus={tarazStatus} tarazEnabled={tarazEnabled} onTarazEnabledChange={updateTarazConsent} onRefreshTaraz={refreshTarazStatus} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} accountStatus={lanStatus} onOpenLanSignup={()=>{setSettingsOpen(false);setLanInitialView('connection');setLanOpen(true);}} onOpenUserManagement={()=>{setSettingsOpen(false);openUserManagement();}} onOpenProfile={()=>{setSettingsOpen(false);setProfileOpen(true);}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}

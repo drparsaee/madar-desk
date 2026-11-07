@@ -45,7 +45,7 @@ test('settings show compact quick choices without retired clock personalization'
   assert.match(html,/class="settings-density__quick-grid"/);
   assert.match(html,/ظاهر برنامه/);
   assert.match(html,/تقویم و نمایش تاریخ/);
-  assert.match(html,/مدیریت هزینه‌ها/);
+  assert.doesNotMatch(html,/مدیریت هزینه‌ها/,'accounting settings belong to the separate Taraz application');
   assert.doesNotMatch(html,/شخصی‌سازی ساعت و تاریخ|محل قرارگیری ساعت/);
   assert.match(html,/<details class="settings-density__disclosure"><summary>/);
   assert.match(html,/تنظیم اولویت‌های کارت/);

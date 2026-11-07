@@ -1,5 +1,5 @@
 .label-editor{display:grid;gap:12px;min-width:0;max-width:100%;color:var(--text,#263347);font-size:12px}
-.label-editor-header{display:flex;align-items:center;gap:8px;min-height:32px}
+.label-editor-header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 0;background:var(--surface,#fff)}
 .label-editor-header h3{flex:1;margin:0;text-align:center;font-size:13px;font-weight:700;color:var(--text,#263347)}
 .label-editor-back,.label-editor-close{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--text-muted,#536781);cursor:pointer}
 .label-editor-back:hover,.label-editor-back:focus-visible,.label-editor-close:hover,.label-editor-close:focus-visible{background:var(--surface-soft,#f0f4fa)}
@@ -33,7 +33,10 @@
 .label-editor-actions button,.label-editor-confirm-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;border:1px solid var(--border,#cbd7e5);border-radius:6px;padding:6px 12px;background:var(--surface,#fff);color:var(--text,#24334c);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
 .label-editor-actions .label-editor-save{background:var(--accent,#5672ca);color:#fff;border-color:transparent}
 .label-editor-actions .label-editor-delete,.label-editor-confirm-actions .label-editor-delete{color:#c84245;border-color:transparent;background:transparent}
+.label-editor-header .label-editor-delete--header{display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:none;min-height:32px;padding:4px 9px;border:1px solid #c8424559;border-radius:8px;background:var(--surface,#fff);color:#c84245;font:inherit;font-size:11px;font-weight:750;cursor:pointer}
+.label-editor-header .label-editor-delete--header:hover,.label-editor-header .label-editor-delete--header:focus-visible{background:var(--surface-soft,#f0f4fa)}
 .label-editor-confirm{display:grid;gap:8px;padding:10px;border:1px solid #cf6666;border-radius:6px;background:var(--surface-soft,#f0f4fa)}
+.label-editor > .label-editor-confirm{position:sticky;top:40px;z-index:2;box-shadow:0 5px 14px #10182723}
 .label-editor-confirm p{margin:0;font-size:12px;line-height:1.7}
 .label-editor-confirm-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .label-editor-error{display:block;font-size:12px;color:#bb3e53}
@@ -41,3 +44,4 @@
 .label-editor button:focus-visible,.label-editor input:focus-visible{outline:2px solid var(--accent,#5672ca);outline-offset:2px}
 .label-editor button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:420px){.label-editor{gap:10px}.label-editor-palette-color{height:28px}.label-editor-actions{flex-wrap:wrap}}
+@media(max-width:350px){.label-editor-header .label-editor-delete--header{padding:4px 6px;font-size:10px}}

@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react';
-import {Check, Cloud, Download, Layers3, LockKeyhole, Moon, Plus, Settings2, ShieldCheck, Sun, Trash2, Users, Wallet, X, ArrowUp, ArrowDown, RefreshCw, RotateCcw} from 'lucide-react';
+import {Check, Cloud, Download, Layers3, LockKeyhole, Moon, Plus, Settings2, ShieldCheck, Sun, Trash2, Users, Wallet, X, ArrowUp, ArrowDown, RefreshCw, RotateCcw, Monitor, Type, Link2, CreditCard, UserPlus, MoveHorizontal, SlidersHorizontal} from 'lucide-react';
 import {Avatar, AvatarIconPicker, RoleBadge, DEFAULT_AVATAR_COLOR} from './members.jsx';
 import {PrioritySettings} from './priorities.jsx';
 import {CommonColorOptions} from './common_color_palette.jsx';
@@ -59,7 +59,12 @@ export function FinanceSummary({project,tasks,onChange,canManage=true,compact=fa
  </div>;
 }
 
-export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,theme='dark',onThemeChange=()=>{},updateApi=null,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,onOpenBoardButtons}){
+export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,
+ theme='dark',themeMode=theme,onThemeChange=()=>{},generalUi={},onGeneralUiChange=()=>{},
+ tarazStatus=null,tarazEnabled=false,onTarazEnabledChange=()=>{},onRefreshTaraz=()=>{},
+ accountStatus=null,onOpenLanSignup=()=>{},onOpenUserManagement=()=>{},onOpenProfile=()=>{},
+ updateApi=null,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,onOpenBoardButtons}){
+ const [page,setPage]=useState('general');
  const [name,setName]=useState('');
  const [editing,setEditing]=useState('');
  const [label,setLabel]=useState('');
@@ -80,31 +85,57 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
  const sharedThemeEnabled=settings.themeForAllUsers===true;
  const updateSharedTheme=enabled=>onChange(s=>({...s,settings:{...s.settings,
    themeForAllUsers:enabled,...(enabled?{theme}: {})}}));
+ const effectiveMode=sharedThemeEnabled?theme:themeMode;
+ const font=generalUi.font||'estedad',density=generalUi.density||'comfortable';
+ const textWidth=generalUi.textWidth||'standard',motion=generalUi.motion||'system';
+ const updateUi=(field,value)=>onGeneralUiChange({...generalUi,[field]:value});
+ const accountMode=accountStatus?.mode||'solo';
+ const accountUser=accountStatus?.user;
  return <div className="overlay" onMouseDown={onClose}><section className="dialog settings-modal settings-density" dir="rtl" onMouseDown={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="تنظیمات مدار"><div className="dialog-head"><h2><Settings2 size={18}/> تنظیمات مدار</h2><button className="icon-btn" onClick={onClose} aria-label="بستن"><X size={19}/></button></div>
+   <nav className="settings-page-nav" aria-label="بخش‌های تنظیمات">
+     {[['general','عمومی',Settings2],['taraz','اتصال تراز',Link2],['account','حساب و ثبت‌نام',UserPlus],['subscription','خرید اشتراک',CreditCard],['advanced','پیشرفته',SlidersHorizontal]].map(([id,title,Icon])=><button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>setPage(id)}><Icon size={15}/>{title}</button>)}
+   </nav>
    <div className="dialog-body settings-content">
-     <div className="settings-density__quick-grid" aria-label="تنظیمات پرکاربرد">
-     <div className="setting-block"><h3><Moon size={17}/> ظاهر برنامه</h3>
-       <p>{sharedThemeEnabled?'تم مشترک همهٔ کاربران فعال است. فقط مدیر می‌تواند آن را تغییر دهد.':
-         'تم فعلی فقط برای این کاربر در همین رایانه انتخاب می‌شود و با دکمهٔ تغییر تم در منوی کناری همگام است.'}</p>
-       <div className="theme-picks">
-         <button type="button" className={theme==='light'?'selected':''}
-           disabled={sharedThemeEnabled&&!canManage} aria-pressed={theme==='light'}
-           onClick={()=>onThemeChange('light')}><Sun size={19}/> روشن {theme==='light'&&<Check size={16}/>}</button>
-         <button type="button" className={theme==='dark'?'selected':''}
-           disabled={sharedThemeEnabled&&!canManage} aria-pressed={theme==='dark'}
-           onClick={()=>onThemeChange('dark')}><Moon size={19}/> تاریک {theme==='dark'&&<Check size={16}/>}</button>
+     <div hidden={page!=='general'} className="settings-general-page">
+       <div className="settings-panel-heading"><strong>عمومی</strong><small>گزینه‌های نمایش، مخصوص همین کاربر در همین رایانه</small></div>
+       <div className="settings-density__quick-grid" aria-label="تنظیمات پرکاربرد">
+         <div className="settings-general-row"><span className="settings-general-label"><Moon size={18}/><span><strong>ظاهر برنامه</strong><small>{sharedThemeEnabled?'تم مشترک همهٔ کاربران فعال است. فقط مدیر می‌تواند آن را تغییر دهد.':'تم فعلی فقط برای این کاربر در همین رایانه انتخاب می‌شود و با دکمهٔ تغییر تم در منوی کناری همگام است.'}</small></span></span>
+           <div className="theme-picks settings-general-choice" role="group" aria-label="حالت تم">
+             <button type="button" disabled={sharedThemeEnabled} aria-pressed={!sharedThemeEnabled&&effectiveMode==='system'} className={effectiveMode==='system'?'selected':''} onClick={()=>onThemeChange('system')}><Monitor size={15}/> سیستم</button>
+             <button type="button" disabled={sharedThemeEnabled&&!canManage} aria-pressed={effectiveMode==='light'} className={effectiveMode==='light'?'selected':''} onClick={()=>onThemeChange('light')}><Sun size={15}/> روشن</button>
+             <button type="button" disabled={sharedThemeEnabled&&!canManage} aria-pressed={effectiveMode==='dark'} className={effectiveMode==='dark'?'selected':''} onClick={()=>onThemeChange('dark')}><Moon size={15}/> تاریک</button>
+           </div>
+         </div>
+         <label className="setting-toggle settings-general-shared"><input type="checkbox" checked={sharedThemeEnabled} disabled={!canManage} onChange={e=>updateSharedTheme(e.target.checked)}/><span><strong>اعمال تم برای همهٔ کاربران</strong><small>در حالت فعال، این تنظیم در دادهٔ مشترک ذخیره می‌شود؛ حالت سیستم برای تم مشترک پشتیبانی نمی‌شود.</small></span></label>
+         <div className="settings-general-row"><label htmlFor="madar-setting-font" className="settings-general-label"><Type size={18}/><span><strong>فونت رابط کاربری</strong><small>فونت نصب‌شدهٔ برنامه یا فونت سیستم</small></span></label><select id="madar-setting-font" value={font} onChange={e=>updateUi('font',e.target.value)}><option value="estedad">استعداد</option><option value="vazirmatn">وزیرمتن</option><option value="system">سیستم</option></select></div>
+         <div className="settings-general-row"><label htmlFor="madar-setting-density" className="settings-general-label"><Layers3 size={18}/><span><strong>تراکم متن و کارت‌ها</strong><small>فاصلهٔ محتوای فهرست‌ها و پنل‌ها</small></span></label><select id="madar-setting-density" value={density} onChange={e=>updateUi('density',e.target.value)}><option value="comfortable">راحت</option><option value="compact">فشرده</option></select></div>
+         <div className="settings-general-row"><label htmlFor="madar-setting-width" className="settings-general-label"><MoveHorizontal size={18}/><span><strong>عرض محتوای متنی</strong><small>خلاصه‌ها و نوشته‌ها؛ بردها همچنان اسکرول مستقل دارند</small></span></label><select id="madar-setting-width" value={textWidth} onChange={e=>updateUi('textWidth',e.target.value)}><option value="standard">استاندارد</option><option value="wide">تمام عرض</option></select></div>
+         <div className="settings-general-row"><label htmlFor="madar-setting-motion" className="settings-general-label"><SlidersHorizontal size={18}/><span><strong>حرکت و انیمیشن</strong><small>کاهش حرکت برای استفادهٔ راحت‌تر</small></span></label><select id="madar-setting-motion" value={motion} onChange={e=>updateUi('motion',e.target.value)}><option value="system">پیروی از سیستم</option><option value="reduce">کاهش حرکت</option></select></div>
+         <div className="settings-general-row"><span className="settings-general-label"><Layers3 size={18}/><span><strong>تقویم و نمایش تاریخ</strong><small>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها تغییر نمی‌کند.</small></span></span><div className="theme-picks settings-general-choice" role="group" aria-label="انتخاب تقویم"><button type="button" className={calendar==='jalali'?'selected':''} aria-pressed={calendar==='jalali'} onClick={()=>onCalendarChange('jalali')}>شمسی</button><button type="button" className={calendar==='gregorian'?'selected':''} aria-pressed={calendar==='gregorian'} onClick={()=>onCalendarChange('gregorian')}>میلادی</button></div></div>
        </div>
-       <label className="setting-toggle"><input type="checkbox"
-         checked={sharedThemeEnabled} disabled={!canManage}
-         onChange={e=>updateSharedTheme(e.target.checked)}/>
-         <span><strong>اعمال تم برای همهٔ کاربران</strong>
-           <small>در حالت فعال، این تنظیم در دادهٔ مشترک ذخیره می‌شود و انتخاب‌های محلی را تا زمان غیرفعال‌کردن آن کنار می‌گذارد.</small>
-         </span>
-       </label>
      </div>
-     <div className="setting-block"><h3><Layers3 size={17}/> تقویم و نمایش تاریخ</h3><p>انتخاب تقویم فقط روی این کامپیوتر ذخیره می‌شود؛ تاریخ واقعی کارها در همه سیستم‌ها یکسان می‌ماند.</p><div className="theme-picks"><button className={calendar==='jalali'?'selected':''} onClick={()=>onCalendarChange('jalali')}>شمسی {calendar==='jalali'&&<Check size={16}/>}</button><button className={calendar==='gregorian'?'selected':''} onClick={()=>onCalendarChange('gregorian')}>میلادی {calendar==='gregorian'&&<Check size={16}/>}</button></div></div>
+     <section hidden={page!=='taraz'} className="settings-special-page" aria-label="اتصال تراز">
+       <div className="settings-panel-heading"><strong><Link2 size={18}/> اتصال تراز</strong><small>اتصال اختیاری دو نرم‌افزار مستقل؛ بدون انتقال خودکار یا ثبت حسابداری</small></div>
+       <p>مدار فقط خلاصهٔ کارت ذخیره‌شده و شناسهٔ پروژه را، با درخواست شما، در صندوق پیشنهادهای محلی قرار می‌دهد. در صورت انتخاب هزینهٔ معتبر، فقط شناسه و مبلغ ریالی آن ارسال می‌شود. تراز باید جداگانه این پیشنهاد را بازبینی کند. هیچ سند یا پرداختی خودکار ثبت نمی‌شود.</p>
+       <div className="settings-general-row"><span className="settings-general-label"><ShieldCheck size={18}/><span><strong>وضعیت صندوق تبادل</strong><small>{tarazStatus?.message||'وضعیت هنوز خوانده نشده است.'}</small></span></span><button type="button" className="settings-inline-action" onClick={onRefreshTaraz}><RefreshCw size={15}/> بازخوانی وضعیت</button></div>
+       <p role="status" className="settings-inline-status">{tarazStatus?.supported?'صندوق محلی مدار آماده است؛ این به معنی اجرا یا نصب‌بودن تراز نیست.':'صندوق تبادل در این محیط قابل استفاده نیست.'} {tarazStatus?.supported&&Number.isSafeInteger(tarazStatus.pending)?'پیشنهادهای منتظر بررسی: '+tarazStatus.pending.toLocaleString('fa-IR'):''}</p>
+       <label className="setting-toggle settings-general-shared"><input type="checkbox" checked={tarazEnabled} disabled={!tarazStatus?.supported} onChange={e=>onTarazEnabledChange(e.target.checked)}/><span><strong>اجازهٔ ارسال دستی پیشنهاد از کارت به تراز</strong><small>پیش‌فرض خاموش است. فعال‌کردن این گزینه هیچ داده‌ای را خودکار ارسال نمی‌کند. ارسال فقط از دکمهٔ داخل کارت انجام می‌شود.</small></span></label>
+     </section>
+     <section hidden={page!=='account'} className="settings-special-page" aria-label="ثبت‌نام و حساب مدار">
+       <div className="settings-panel-heading"><strong><UserPlus size={18}/> ثبت‌نام و حساب مدار</strong><small>حساب محلی / شبکهٔ خصوصی، جدا از سرویس ابری عمومی</small></div>
+       <p>وضعیت فعلی: {accountMode==='solo'?'حالت شخصی بدون حساب شبکه':accountMode==='server'?'میزبان شبکه':'عضو شبکه'} · کاربر: {accountUser?.username||'محلی'}.</p>
+       <div className="settings-general-row"><span className="settings-general-label"><Users size={18}/><span><strong>ایجاد حساب کاربر</strong><small>{accountMode==='solo'?'ابتدا یک میزبان LAN امن بسازید؛ ثبت‌نام سراسری اینترنتی موجود نیست.':canManage?'مدیر شبکه می‌تواند با تعیین نام کاربری، رمز عبور و نقش، حساب واقعی بسازد.':'در این شبکه ایجاد حساب جدید به مدیر میزبان محدود است.'}</small></span></span><button type="button" className="settings-inline-action" onClick={accountMode==='solo'?onOpenLanSignup:onOpenUserManagement} disabled={accountMode!=='solo'&&!canManage}><UserPlus size={15}/>{accountMode==='solo'?'راه‌اندازی حساب شبکه':'فرم ایجاد حساب شبکه'}</button></div>
+       <div className="settings-general-row"><span className="settings-general-label"><ShieldCheck size={18}/><span><strong>پروفایل همین کاربر</strong><small>ویرایش نام نمایشی، تصویر و دسترسی‌های مجاز حساب شبکه</small></span></span><button type="button" className="settings-inline-action" onClick={onOpenProfile}>مشاهده پروفایل</button></div>
+       <p role="note">ثبت‌نام عمومی با ایمیل، تأیید ایمیل و سرور مرکزی هنوز پیاده‌سازی نشده است؛ این صفحه چنین حسابی ایجاد نمی‌کند.</p>
+     </section>
+     <section hidden={page!=='subscription'} className="settings-special-page" aria-label="خرید اشتراک مدار">
+       <div className="settings-panel-heading"><strong><CreditCard size={18}/> خرید اشتراک مدار</strong><small>اطلاعات خرید و پرداخت، فقط پس از اتصال به سرویس واقعی نمایش داده می‌شود</small></div>
+       <div className="settings-subscription-state"><LockKeyhole size={24}/><strong>فروش اشتراک هنوز فعال نیست</strong><p>سرور صدور اشتراک، طرح‌ها، قیمت‌های تأییدشده، درگاه پرداخت و امکان استعلام پرداخت در این نسخه تنظیم نشده‌اند.</p></div>
+       <div className="settings-general-row"><span className="settings-general-label"><CreditCard size={18}/><span><strong>انتخاب طرح و پرداخت</strong><small>هیچ مبلغ یا طرح غیرواقعی پیشنهاد نمی‌شود.</small></span></span><button type="button" className="settings-inline-action" disabled title="درگاه پرداخت و طرح‌های تأییدشده موجود نیست">ادامه خرید (غیرفعال)</button></div>
+       <p role="status">اشتراک فعال، پرداخت موفق یا سفارش ثبت‌شده‌ای از این رابط ادعا نمی‌شود.</p>
+     </section>
+     <div hidden={page!=='advanced'} className="settings-advanced-page">
      <ReleaseUpdateSettings api={updateApi} context="planner"/>
-     </div>
      {boardId&&<details className="settings-density__disclosure">
        <summary><span><Layers3 size={17}/> دکمه‌های برد</span><small>نمایش و اجرای دکمه‌های ثبت‌شده با سطح دسترسی کاربر</small></summary>
        <div className="setting-block"><button type="button" onClick={onOpenBoardButtons}>
@@ -123,7 +154,8 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
          </div>)}</div>:<p>ستون بایگانی‌شده‌ای برای بازیابی وجود ندارد.</p>}
        </div>
      </details>:null}
-     <p className="setting-foot">فونت داخلی برنامه: استعداد (Estedad) با وزیرمتن به‌عنوان جایگزین · تنظیمات برای داده‌های ذخیره‌شده اعمال می‌شوند.</p>
+     </div>
+     <p className="setting-foot">تنظیمات نمایشی محلی‌اند؛ تنظیمات مدیریتی، مراحل و اولویت‌ها با مجوز میزبان ذخیره می‌شوند.</p>
    </div>
  </section></div>;
 }

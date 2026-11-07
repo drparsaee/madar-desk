@@ -154,9 +154,21 @@ export function LabelEditor({library=[],labels=[],disabled=false,canManage=false
       {detail?<button type="button" className="label-editor-back" aria-label="بازگشت به فهرست برچسب‌ها" onClick={list}>
         <ArrowRight size={16}/></button>:null}
       <h3>{screen==='edit'?'ویرایش برچسب':screen==='create'?'ساخت برچسب':'برچسب‌ها'}</h3>
+      {screen==='edit'&&canManage&&onDelete&&<button type="button"
+        className="label-editor-delete label-editor-delete--header"
+        aria-expanded={confirmDelete} aria-controls="label-editor-delete-confirm"
+        onClick={()=>setConfirmDelete(value=>!value)}><Trash2 size={15}/> حذف برچسب</button>}
       {onClose&&<button type="button" className="label-editor-close" aria-label="بستن مدیریت برچسب‌ها" onClick={onClose}>
         <X size={16}/></button>}
     </header>
+    {confirmDelete&&screen==='edit'&&canManage&&onDelete&&<div id="label-editor-delete-confirm"
+      className="label-editor-confirm" role="group" aria-label="تأیید حذف برچسب">
+      <p>این برچسب از همهٔ کارت‌ها حذف می‌شود. حذف برچسب را تأیید می‌کنید؟</p>
+      <div className="label-editor-confirm-actions">
+        <button type="button" onClick={()=>setConfirmDelete(false)}>انصراف</button>
+        <button type="button" className="label-editor-delete" onClick={remove}>حذف از همهٔ کارت‌ها</button>
+      </div>
+    </div>}
     {!detail?<>
       <label className="label-editor-search"><Search size={15} aria-hidden="true"/>
         <input type="search" aria-label="جست‌وجوی برچسب‌ها" placeholder="جست‌وجوی برچسب..." value={search}
@@ -203,16 +215,7 @@ export function LabelEditor({library=[],labels=[],disabled=false,canManage=false
       <div className="label-editor-actions">
         <button type="submit" className="label-editor-save" disabled={!name.trim()}>
           <Check size={15}/> {screen==='edit'?'ذخیره':'ایجاد'}</button>
-        {screen==='edit'&&onDelete&&<button type="button" className="label-editor-delete"
-          onClick={()=>setConfirmDelete(true)}><Trash2 size={15}/> حذف برچسب</button>}
       </div>
-      {confirmDelete&&<div className="label-editor-confirm" role="group" aria-label="تأیید حذف برچسب">
-        <p>این برچسب از همهٔ کارت‌ها حذف می‌شود. حذف برچسب را تأیید می‌کنید؟</p>
-        <div className="label-editor-confirm-actions">
-          <button type="button" onClick={()=>setConfirmDelete(false)}>انصراف</button>
-          <button type="button" className="label-editor-delete" onClick={remove}>حذف از همهٔ کارت‌ها</button>
-        </div>
-      </div>}
     </form>:null}
   </section>;
 }
