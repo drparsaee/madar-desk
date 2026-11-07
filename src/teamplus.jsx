@@ -1,11 +1,98 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useId,useRef,useState} from 'react';
 import {Bell,Check,MessageCircle,Plus,RefreshCw,Trash2,X,CornerDownLeft,Pencil,Reply} from 'lucide-react';
 import './teamplus.css';
 
 const eventId=()=> 'ui_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
 const date=v=>v?new Date(v).toLocaleString('fa-IR',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
 
-function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,username='',title='گفت‌وگو'}){
+// Only trusted, explicitly supplied account profiles are considered. This is
+// presentation filtering; the collab backend remains the authority for ACL.
+export function eligibleMentionUsers(users,projectId,actor=''){
+ if(!Array.isArray(users)||typeof projectId!=='string'||!projectId)return [];
+ const seen=new Set();
+ return users.filter(user=>{
+   const name=user?.username;
+   if(typeof name!=='string'||!(/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/).test(name)||
+      name===actor||seen.has(name)||!['admin','editor','viewer'].includes(user.role)||
+      !(user.role==='admin'||user.projects===null||
+        (Array.isArray(user.projects)&&user.projects.includes(projectId))))return false;
+   seen.add(name);return true;
+ });
+}
+
+export function activeMentionToken(value,position){
+ if(typeof value!=='string'||!Number.isInteger(position)||position<0||position>value.length)return null;
+ const before=value.slice(0,position);
+ const match=/(^|[^\w@.-])@([A-Za-z0-9][A-Za-z0-9._-]{0,39})?$/.exec(before);
+ if(!match)return null;
+ const start=position-(match[2]||'').length-1;
+ // Replace the whole username when editing in the middle of a mention.
+ const suffix=/^[A-Za-z0-9._-]*/.exec(value.slice(position))?.[0]||'';
+ return {start,end:position+suffix.length,query:match[2]||''};
+}
+
+export function MentionTextarea({value,onChange,users=[],projectId='',username='',onSubmit,
+  disabled=false,rows=3,placeholder='',label='متن پیام'}){
+ const input=useRef(null),composing=useRef(false);
+ const [cursor,setCursor]=useState(0),[active,setActive]=useState(0),[dismissed,setDismissed]=useState(false);
+ const [composition,setComposition]=useState(false);
+ const listId=useId();
+ const token=activeMentionToken(value,cursor);
+ const candidates=eligibleMentionUsers(users,projectId,username)
+   .filter(user=>token&&user.username.toLowerCase().startsWith(token.query.toLowerCase())).slice(0,8);
+ const expanded=!disabled&&!composition&&!dismissed&&!!token&&candidates.length>0;
+ const selected=Math.min(active,Math.max(0,candidates.length-1));
+ const syncCursor=event=>{setCursor(event.currentTarget.selectionStart);setActive(0);setDismissed(false);};
+ const choose=user=>{
+   const field=input.current;
+   if(!field||!eligibleMentionUsers(users,projectId,username).some(item=>item.username===user.username))return;
+   const current=activeMentionToken(value,field.selectionStart);
+   if(!current)return;
+   const insertion='@'+user.username+' ';
+   const next=value.slice(0,current.start)+insertion+value.slice(current.end);
+   if(next.length>4000)return;
+   onChange(next);setDismissed(true);setActive(0);
+   const after=current.start+insertion.length;setCursor(after);
+   requestAnimationFrame(()=>{field.focus();field.setSelectionRange(after,after);});
+ };
+ const onKey=event=>{
+   if(composing.current||event.isComposing||event.keyCode===229)return;
+   if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
+     event.preventDefault();setDismissed(true);onSubmit?.();return;
+   }
+   if(!expanded)return;
+   if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+     event.preventDefault();setActive(index=>(index+(event.key==='ArrowDown'?1:candidates.length-1))%candidates.length);
+   }else if(event.key==='Enter'){
+     event.preventDefault();choose(candidates[selected]);
+   }else if(event.key==='Escape'){
+     event.preventDefault();event.stopPropagation();setDismissed(true);
+   }
+ };
+ return <div className="team-mention-field">
+   <textarea ref={input} rows={rows} dir="auto" value={value} disabled={disabled} maxLength={4000}
+     placeholder={placeholder} aria-label={label} role="combobox" aria-autocomplete="list"
+     aria-haspopup="listbox" aria-expanded={expanded} aria-controls={expanded?listId:undefined}
+     aria-activedescendant={expanded?listId+'-'+selected:undefined}
+     onChange={event=>{onChange(event.target.value);syncCursor(event);}}
+     onSelect={event=>{if(event.currentTarget.selectionStart!==cursor)syncCursor(event);}}
+     onClick={syncCursor} onKeyUp={event=>{
+       if(event.key.startsWith('Arrow')&&!expanded)syncCursor(event);
+     }} onKeyDown={onKey}
+     onCompositionStart={()=>{composing.current=true;setComposition(true);setDismissed(true);}}
+     onCompositionEnd={event=>{composing.current=false;setComposition(false);syncCursor(event);}}/>
+   {expanded&&<div className="team-mention-options" id={listId} role="listbox" aria-label="کاربران مجاز برای اشاره">
+     {candidates.map((user,index)=><div id={listId+'-'+index} role="option"
+       className={'team-mention-option'+(index===selected?' selected':'')} aria-selected={index===selected}
+       key={user.username} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(user)}>
+       <b dir="ltr">@{user.username}</b>
+       {user.displayName&&user.displayName!==user.username&&<small>{user.displayName}</small>}
+     </div>)}
+   </div>}
+ </div>;
+}
+
+function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,username='',title='گفت‌وگو',users=[],projectId=''}){
  const [items,setItems]=useState([]),[value,setValue]=useState(''),[busy,setBusy]=useState(false);
  const [error,setError]=useState(''),[replyTo,setReplyTo]=useState(null);
  const [editId,setEditId]=useState(''),[editValue,setEditValue]=useState('');
@@ -68,8 +155,9 @@ function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,use
          {!item.deletedAt&&canDelete(item)&&<button title="حذف نظر" disabled={busy} onClick={()=>remove(item)}><Trash2 size={13}/></button>}
        </div>
        {item.replyToId&&<small className="team-reply-label"><CornerDownLeft size={12}/> پاسخ به پیام قبلی</small>}
-       {editId===item.id?<div className="comment-compose"><textarea dir="auto" rows={2} value={editValue} maxLength={4000}
-         onChange={e=>setEditValue(e.target.value)}/><button className="btn primary" disabled={busy||!editValue.trim()} onClick={()=>edit(item)}>ذخیره</button>
+       {editId===item.id?<div className="comment-compose"><MentionTextarea label="ویرایش پیام" rows={2} value={editValue}
+         onChange={setEditValue} users={users} projectId={projectId} username={username}
+         disabled={busy} onSubmit={()=>edit(item)}/><button className="btn primary" disabled={busy||!editValue.trim()} onClick={()=>edit(item)}>ذخیره</button>
          <button className="btn secondary" onClick={()=>setEditId('')}>انصراف</button></div>:
          <p dir="auto">{item.deletedAt?'پیام حذف شده است.':item.text}</p>}
      </article>)}
@@ -78,19 +166,19 @@ function ConversationThread({kind,targetId,api,canEdit=false,canManage=false,use
    {canEdit&&<div className="comment-compose">
      {replyTo&&<div className="team-reply-hint">پاسخ به @{replyTo.author}
        <button type="button" aria-label="لغو پاسخ" onClick={()=>{setReplyTo(null);pending.current=null;}}><X size={13}/></button></div>}
-     <textarea rows={3} dir="auto" placeholder="پیام بنویس؛ با @username به کاربر اشاره کن." value={value}
-       maxLength={4000} onChange={e=>{setValue(e.target.value);pending.current=null;}}
-       onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();add();}}}/>
+     <MentionTextarea value={value} users={users} projectId={projectId} username={username}
+       disabled={busy} label="پیام جدید" placeholder="پیام بنویس؛ با @username به کاربر اشاره کن."
+       onChange={next=>{setValue(next);pending.current=null;}} onSubmit={add}/>
      <button className="btn primary" onClick={add} disabled={busy||!value.trim()}><Plus size={15}/> ارسال پیام</button>
    </div>}
    {error&&<p role="alert" className="field-error">{error}</p>}
  </div>;
 }
-export function CardComments({cardId,api,canEdit,canManage=false,username}){
+export function CardComments({cardId,projectId='',users=[],api,canEdit,canManage=false,username}){
  return <ConversationThread kind="comments" targetId={cardId} api={api} canEdit={canEdit} canManage={canManage}
-   username={username} title="نظرات و گفت‌وگوی کارت"/>;
+   username={username} users={users} projectId={projectId} title="نظرات و گفت‌وگوی کارت"/>;
 }
-export function ProjectConversation({projectId,projectName='',api,canEdit,canManage=false,username,onClose}){
+export function ProjectConversation({projectId,projectName='',api,canEdit,canManage=false,username,onClose,users=[]}){
  return <div className="overlay project-conversation-overlay" onMouseDown={onClose}>
    <section className="dialog project-conversation-dialog" role="dialog" aria-modal="true"
      aria-label={'گفت‌وگوی پروژه '+projectName} onMouseDown={e=>e.stopPropagation()}>
@@ -98,22 +186,122 @@ export function ProjectConversation({projectId,projectName='',api,canEdit,canMan
        <button className="icon-btn" title="بستن گفت‌وگو" onClick={onClose}><X size={19}/></button></div>
      <div className="dialog-body"><ConversationThread key={projectId} kind="project-comments"
        targetId={projectId} api={api} canEdit={canEdit} canManage={canManage} username={username}
+       users={users} projectId={projectId}
        title="پیام‌های پروژه"/></div>
    </section>
  </div>;
 }
 
-export function NotificationsDialog({api,onClose}){
- const [items,setItems]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const load=async()=>{try{setItems(await api.collabRead('notifications'));setError('');}catch(e){setError(e.message);}};
- useEffect(()=>{load();},[]);
- const mark=async item=>{setBusy(true);try{await api.collabCommand({type:'notification.read',eventId:eventId(),notificationId:item.id});await load();}catch(e){setError(e.message);}finally{setBusy(false);}};
- return <div className="overlay" onMouseDown={onClose}><section className="dialog notifications-dialog" role="dialog" aria-modal="true" onMouseDown={e=>e.stopPropagation()}>
-   <div className="dialog-head"><h2><Bell size={18}/> اعلان‌های من</h2><button className="icon-btn" onClick={onClose}><X size={19}/></button></div>
-   <div className="dialog-body notifications-body"><button className="btn secondary" onClick={load}><RefreshCw size={15}/> تازه‌سازی</button>
-   {items.map(item=><article key={item.id} className={item.readAt?'notice-read':''}><div><strong>{item.kind==='mention'?'اشاره به شما':item.kind==='watch'?'نظر جدید':'قانون خودکار'}</strong><small>{date(item.createdAt)}</small></div><p>{item.message}</p>{!item.readAt&&<button disabled={busy} onClick={()=>mark(item)}><Check size={15}/> خوانده شد</button>}</article>)}
-   {!items.length&&<p className="shared-empty">اعلان جدیدی وجود ندارد.</p>}{error&&<p className="field-error">{error}</p>}</div>
- </section></div>;
+// Resolve only inside the caller's authenticated task snapshot. The host still
+// checks current ACL before navigation; a notification ID is never a grant.
+export function resolveNotificationLocation(notice,{projects=[],boards=[],workspaces=[],tasks=[]}={}){
+ if(!notice||typeof notice.projectId!=='string')return null;
+ if(!projects.some(project=>project.id===notice.projectId))return null;
+ const visibleBoard=board=>board&&!board.archived&&board.projectId===notice.projectId&&
+   workspaces.some(space=>space.id===board.workspaceId&&!space.archived);
+ if(notice.cardId!=null){
+   const card=tasks.find(item=>item.id===notice.cardId&&item.projectId===notice.projectId&&
+     item.deleted!==true&&item.archived!==true);
+   const board=boards.find(item=>item.id===card?.boardId);
+   if(!card||!visibleBoard(board)||board.stages?.some(stage=>
+     stage.id===(card.listId||card.status)&&stage.archived===true))return null;
+   return {kind:'card',projectId:notice.projectId,cardId:card.id,boardId:board.id,workspaceId:board.workspaceId};
+ }
+ const board=boards.find(visibleBoard);
+ return board?{kind:'project',projectId:notice.projectId,boardId:board.id,workspaceId:board.workspaceId}:null;
+}
+
+export function NotificationsDialog({api,onClose,onOpenTarget}){
+ const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
+ const [busyId,setBusyId]=useState(''),[error,setError]=useState('');
+ const [message,setMessage]=useState('');
+ const dialogRef=useRef(null),mounted=useRef(false),pendingReads=useRef(new Map());
+ const load=async()=>{
+   setLoading(true);setError('');setMessage('');
+   try{
+     const received=await api.collabRead('notifications');
+     if(!Array.isArray(received))throw Error('Invalid notifications response');
+     if(mounted.current)setItems(received);
+   }catch{
+     if(mounted.current)setError('دریافت اعلان‌ها ممکن نشد. اتصال و دسترسی خود را بررسی کنید.');
+   }finally{if(mounted.current)setLoading(false);}
+ };
+ useEffect(()=>{
+   mounted.current=true;
+   const previous=document.activeElement;
+   dialogRef.current?.querySelector('.notifications-close')?.focus();
+   const handleKey=event=>{
+     if(event.key==='Escape'){
+       event.preventDefault();event.stopPropagation();onClose();return;
+     }
+     if(event.key!=='Tab')return;
+     const controls=Array.from(dialogRef.current?.querySelectorAll('button:not(:disabled),[href],[tabindex]:not([tabindex="-1"])')||[])
+       .filter(node=>node.getClientRects().length>0);
+     if(!controls.length){event.preventDefault();dialogRef.current?.focus();return;}
+     if(event.shiftKey&&(document.activeElement===controls[0]||!dialogRef.current?.contains(document.activeElement))){
+       event.preventDefault();controls[controls.length-1].focus();
+     }else if(!event.shiftKey&&(document.activeElement===controls[controls.length-1]||!dialogRef.current?.contains(document.activeElement))){
+       event.preventDefault();controls[0].focus();
+     }
+   };
+   document.addEventListener('keydown',handleKey);
+   load();
+   return()=>{mounted.current=false;document.removeEventListener('keydown',handleKey);if(previous?.isConnected)previous.focus();};
+ },[]);
+ const mark=async item=>{
+   if(busyId||item.readAt)return;
+   setBusyId(item.id);setError('');setMessage('');
+   // Reuse the same event ID on retry when an ACK may have been lost.
+   const command=pendingReads.current.get(item.id)||
+     {type:'notification.read',eventId:eventId(),notificationId:item.id};
+   pendingReads.current.set(item.id,command);
+   try{
+     const result=await api.collabCommand(command);
+     if(!result||result.notificationId!==item.id||!result.readAt)throw Error('Missing read acknowledgment');
+     pendingReads.current.delete(item.id);
+     if(mounted.current){
+       setItems(current=>current.map(notice=>notice.id===item.id?{...notice,readAt:result.readAt}:notice));
+       setMessage('اعلان به‌عنوان خوانده‌شده ثبت شد.');
+     }
+   }catch{
+     if(mounted.current)setError('ثبت وضعیت خوانده‌شدن ناموفق یا نامشخص بود. دوباره تلاش کنید.');
+   }finally{if(mounted.current)setBusyId('');}
+ };
+ const openTarget=async item=>{
+   if(busyId||typeof onOpenTarget!=='function')return;
+   setBusyId(item.id);setError('');setMessage('');
+   try{
+     if(await onOpenTarget(item)!==true)throw Error('Not available');
+     onClose();
+   }catch{
+     if(mounted.current)setError('مقصد این اعلان در دسترس نیست یا مجوز مشاهده آن وجود ندارد.');
+   }finally{if(mounted.current)setBusyId('');}
+ };
+ const unread=items.filter(item=>!item.readAt).length;
+ return <div className="overlay" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}>
+   <section ref={dialogRef} tabIndex={-1} className="dialog notifications-dialog" role="dialog" aria-modal="true"
+     aria-label="اعلان‌های من" onMouseDown={event=>event.stopPropagation()}>
+     <div className="dialog-head"><h2><Bell size={18}/> اعلان‌های من <span className="notifications-unread" aria-label={`${unread.toLocaleString('fa-IR')} اعلان خوانده‌نشده`}>{unread.toLocaleString('fa-IR')} خوانده‌نشده</span></h2>
+       <button type="button" className="icon-btn notifications-close" aria-label="بستن اعلان‌ها" onClick={onClose}><X size={19}/></button></div>
+     <div className="dialog-body notifications-body">
+       <button type="button" className="btn secondary" disabled={!!busyId||loading} onClick={load}><RefreshCw size={15}/> تازه‌سازی</button>
+       {loading&&<p role="status">در حال دریافت اعلان‌ها…</p>}
+       {items.map(item=><article key={item.id} className={item.readAt?'notice-read':''}>
+         <div className="notifications-meta"><strong>{item.kind==='mention'?'اشاره به شما':item.kind==='watch'?'نظر جدید':'قانون خودکار'}</strong>
+           <small>{date(item.createdAt)}</small>{!item.readAt&&<span className="notifications-dot">خوانده‌نشده</span>}</div>
+         <p dir="auto">{item.message}</p>
+         <div className="notifications-actions">
+           {typeof onOpenTarget==='function'&&<button type="button" disabled={!!busyId}
+             onClick={()=>openTarget(item)} aria-label="نمایش مقصد اعلان">نمایش مقصد</button>}
+           {!item.readAt&&<button type="button" disabled={!!busyId} onClick={()=>mark(item)}><Check size={15}/> خوانده شد</button>}
+         </div>
+       </article>)}
+       {!loading&&!items.length&&!error&&<p className="shared-empty">اعلانی برای نمایش وجود ندارد.</p>}
+       {error&&<p role="alert" className="field-error">{error}</p>}
+       {message&&<p role="status" className="notifications-status">{message}</p>}
+     </div>
+   </section>
+ </div>;
 }
 
 export function ActivityDialog({api,onClose}){

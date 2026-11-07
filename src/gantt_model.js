@@ -36,6 +36,150 @@ export function shiftPlan(task,days) {
   return dayNumber(plannedStart)===null||dayNumber(plannedEnd)===null
     ?null:{plannedStart,plannedEnd};
 }
+
+/** P2 schedule diagnostics for only the cards the current reader can see.
+ * A predecessor hidden by ACL/filtering is UNKNOWN, never assumed completed.
+ * Suggested shifts preserve duration and affect one card only; no cascade.
+ */
+export function inspectGanttDependencies(tasks=[]) {
+  if(!Array.isArray(tasks))throw Error('Invalid Gantt card collection');
+  const active=tasks.filter(t=>t&&!t.deleted&&!t.archived);
+  const byId=new Map(active.map(t=>[t.id,t]));
+  const byTask=new Map();
+  let overlaps=0,unknownDates=0,outsideView=0;
+  for(const task of active){
+    const start=dayNumber(task.plannedStart),end=dayNumber(task.plannedEnd);
+    const conflicts=[];
+    let incomplete=0,hidden=0,latestPredecessorEnd=null;
+    const dependencies=Array.isArray(task.dependencies)?new Set(task.dependencies):new Set();
+    for(const dependencyId of dependencies){
+      const predecessor=byId.get(dependencyId);
+      // The full task set is already ACL-filtered by its caller. Never look up
+      // missing predecessors in unfiltered host data or display their IDs.
+      if(!predecessor||predecessor.projectId!==task.projectId||dependencyId===task.id){
+        outsideView++;hidden++;continue;
+      }
+      const priorEnd=dayNumber(predecessor.plannedEnd);
+      if(start===null||end===null||start>end||priorEnd===null||
+          !validPlan(predecessor.plannedStart||'',predecessor.plannedEnd||'')){
+        unknownDates++;incomplete++;continue;
+      }
+      latestPredecessorEnd=Math.max(latestPredecessorEnd??priorEnd,priorEnd);
+      if(start<=priorEnd){
+        overlaps++;
+        conflicts.push({predecessorId:dependencyId,title:String(predecessor.title||'بدون عنوان'),
+          predecessorEnd:predecessor.plannedEnd});
+      }
+    }
+    // When any predecessor is hidden or undated, offering a one-card repair
+    // would incorrectly imply that all dependencies have been checked.
+    const days=latestPredecessorEnd===null||start===null?0:latestPredecessorEnd+1-start;
+    const suggestion=conflicts.length&&hidden===0&&incomplete===0&&days>0
+      ?shiftPlan(task,days):null;
+    byTask.set(task.id,{conflicts,hidden,incomplete,suggestion});
+  }
+  return {overlaps,conflictingCards:[...byTask.values()].filter(x=>x.conflicts.length).length,
+    unknownDates,outsideView,byTask};
+}
+
+/** A deterministic CPM-style read model for the *already-authorized* view.
+ * Task duration is the inclusive count of calendar days between planning dates.
+ * Intentional calendar gaps, holidays, costs and resource constraints are NOT
+ * inferred. A hidden/undated predecessor invalidates its entire project result.
+ * This never performs a write or silently edits a dependent card.
+ */
+export function analyzeCriticalPaths(tasks=[],limit=20000) {
+  if(!Array.isArray(tasks))throw Error('Invalid Gantt card collection');
+  const projects=new Map();
+  for(const item of tasks) {
+    if(!item||item.deleted||item.archived)continue;
+    const projectId=typeof item.projectId==='string'?item.projectId:'';
+    if(!projects.has(projectId))projects.set(projectId,[]);
+    projects.get(projectId).push(item);
+  }
+  const outcomes=[];
+  for(const [projectId,cards] of projects) {
+    const result={projectId,status:'ready',reason:'',taskCount:cards.length,
+      durationDays:null,criticalIds:[],pathIds:[],slackDays:new Map()};
+    const abort=reason=>{result.status='partial';result.reason=reason;outcomes.push(result);};
+    if(!projectId||cards.length>limit) {
+      abort(!projectId?'invalid_project':'too_many');continue;
+    }
+    const byId=new Map();
+    let invalid='';
+    for(const card of cards) {
+      if(typeof card.id!=='string'||!card.id||byId.has(card.id)) {
+        invalid='duplicate_or_invalid_id';break;
+      }
+      const start=dayNumber(card.plannedStart),end=dayNumber(card.plannedEnd);
+      if(start===null||end===null||end<start) {
+        invalid='missing_or_invalid_dates';break;
+      }
+      if(card.dependencies!==undefined&&!Array.isArray(card.dependencies)) {
+        invalid='invalid_dependencies';break;
+      }
+      byId.set(card.id,{card,duration:end-start+1});
+    }
+    if(invalid){abort(invalid);continue;}
+    const inDegree=new Map(),successors=new Map();
+    for(const id of byId.keys()){inDegree.set(id,0);successors.set(id,[]);}
+    for(const [id,{card}] of byId) {
+      const seen=new Set();
+      for(const predecessorId of card.dependencies||[]) {
+        if(typeof predecessorId!=='string'||seen.has(predecessorId)||
+           predecessorId===id){invalid='invalid_dependencies';break;}
+        seen.add(predecessorId);
+        if(!byId.has(predecessorId)){invalid='outside_authorized_view';break;}
+        successors.get(predecessorId).push(id);
+        inDegree.set(id,inDegree.get(id)+1);
+      }
+      if(invalid)break;
+    }
+    if(invalid){abort(invalid);continue;}
+    const queue=[...byId.keys()].filter(id=>!inDegree.get(id)).sort();
+    const order=[],earliestStart=new Map(),longestParent=new Map();
+    for(const id of byId.keys())earliestStart.set(id,0);
+    for(let cursor=0;cursor<queue.length;cursor++) {
+      const id=queue[cursor];
+      order.push(id);
+      const finish=earliestStart.get(id)+byId.get(id).duration;
+      for(const next of successors.get(id)) {
+        const current=earliestStart.get(next);
+        if(finish>current||(finish===current&&
+            (longestParent.get(next)===undefined||id<longestParent.get(next)))) {
+          earliestStart.set(next,finish);
+          longestParent.set(next,id);
+        }
+        inDegree.set(next,inDegree.get(next)-1);
+        if(inDegree.get(next)===0)queue.push(next);
+      }
+    }
+    if(order.length!==cards.length) {
+      result.status='cycle';result.reason='dependency_cycle';
+      outcomes.push(result);continue;
+    }
+    const durationDays=Math.max(0,...order.map(id=>
+      earliestStart.get(id)+byId.get(id).duration));
+    const latestFinish=new Map();
+    for(let i=order.length-1;i>=0;i--) {
+      const id=order[i],next=successors.get(id);
+      latestFinish.set(id,next.length?Math.min(...next.map(successor=>
+        latestFinish.get(successor)-byId.get(successor).duration)):durationDays);
+      result.slackDays.set(id,latestFinish.get(id)-byId.get(id).duration-earliestStart.get(id));
+    }
+    result.durationDays=durationDays;
+    result.criticalIds=order.filter(id=>result.slackDays.get(id)===0);
+    const last=order.filter(id=>earliestStart.get(id)+byId.get(id).duration===durationDays)
+      .sort()[0];
+    const reversed=[];
+    for(let cursor=last;cursor!==undefined;cursor=longestParent.get(cursor))
+      reversed.push(cursor);
+    result.pathIds=reversed.reverse();
+    outcomes.push(result);
+  }
+  outcomes.sort((a,b)=>a.projectId.localeCompare(b.projectId));
+  return {projects:outcomes,complete:outcomes.length>0&&outcomes.every(p=>p.status==='ready')};
+}
 export function ganttAxis(anchor,scale='day') {
   const day=dayNumber(anchor)??dayNumber(new Date().toISOString().slice(0,10));
   if(scale==='month'){

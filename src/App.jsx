@@ -14,7 +14,7 @@ import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} 
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
 import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
 import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
-import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
+import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog,resolveNotificationLocation} from './teamplus.jsx';
 import {RulesPanel} from './rulespanel.jsx';
 import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
@@ -560,7 +560,9 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
     <aside className="task-activity-panel" id="task-section-reports" tabIndex={-1} aria-label="فعالیت‌ها و نظرات کارت">
       <div className="task-activity-panel__head"><strong><MessageCircle size={17}/> فعالیت و گفتگو</strong><button type="button" onClick={()=>setActivityOpen(value=>!value)} aria-expanded={activityOpen}>{activityOpen?'پنهان‌کردن':'نمایش'}</button></div>
       {activityOpen&&<div className="task-activity-panel__content">
-        {showOperations&&chatAvailable&&<CardComments cardId={task.id} api={api} canEdit={canEdit} canManage={canManage} username={username}/>}
+        {showOperations&&chatAvailable&&<CardComments cardId={task.id}
+          projectId={task.projectId} users={users} api={api} canEdit={canEdit}
+          canManage={canManage} username={username}/>}
         {showOperations&&!chatAvailable&&<p role="status" className="field-help">برای مشاهده یا ارسال گفت‌وگوی مشترک، ابتدا وارد حساب وب شوید. گزارش‌های کارت به‌صورت محلی در دسترس‌اند.</p>}
         <div className="task-activity-panel__reports">
           <div className="section-header task-section-heading"><h3><MessageCircle size={17}/> گزارش پیشرفت <small>{task.reports.length.toLocaleString('fa-IR')}</small></h3>
@@ -1507,6 +1509,34 @@ export default function App(){
     setFilter('all');
     setAdvanced(a=>({...a,status:'all'}));
     setSearch('');
+  };
+  const openNotificationTarget=async notice=>{
+    const resolve=snapshot=>resolveNotificationLocation(notice,snapshot);
+    const initial=resolve(latestData.current||data);
+    if(!initial)return false;
+    // Never treat a previously delivered notification as a permanent grant:
+    // the API must authorize the current conversation before navigation.
+    try{
+      const result=await api.collabRead(initial.kind==='card'?'comments':'project-comments',
+        initial.kind==='card'?initial.cardId:initial.projectId);
+      if(!Array.isArray(result))return false;
+    }catch{return false;}
+    const current=resolve(latestData.current||data);
+    if(!current||current.kind!==initial.kind||current.boardId!==initial.boardId||
+       current.workspaceId!==initial.workspaceId||current.cardId!==initial.cardId)return false;
+    setWorkspaceId(current.workspaceId);
+    setSelected(current.projectId);
+    setBoardId(current.boardId);
+    setMode('board');setFilter('all');setSearch('');
+    setMobileNavOpen(false);setDesktopNavOpen(false);
+    if(current.kind==='card'){
+      setEditorInitialSection(null);
+      setEditorId(current.cardId);
+    }else{
+      setEditorId(null);
+      setProjectChatOpen(true);
+    }
+    return true;
   };
   const reorderCard=(cardId,toListId,anchorCardId=null,placement='end')=>{
     if(!canEdit||!activeBoard)return;
@@ -2472,9 +2502,10 @@ export default function App(){
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
-    {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
+    {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
+      onOpenTarget={openNotificationTarget}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
-      projectId={selectedProject.id} projectName={selectedProject.name} api={api}
+      projectId={selectedProject.id} projectName={selectedProject.name} api={api} users={users}
       canEdit={canEdit} canManage={canManage} username={lanStatus.user?.username||''}
       onClose={()=>setProjectChatOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
