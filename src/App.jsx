@@ -29,6 +29,7 @@ import {sharedLabelLibrary,sharedLabelColor,editSharedLabelState} from './label_
 import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
 import {GanttView} from './gantt_view.jsx';
+import {validPlanningPatch} from './gantt_model.js';
 import {TrelloImportPanel} from './trello_import.jsx';
 import {CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
 import {PlannerPanel} from './planner.jsx';
@@ -1618,6 +1619,10 @@ export default function App(){
   };
   const taskUpdate=(id,fields)=>{
     const originalTask=data.tasks.find(t=>t.id===id);
+    if(originalTask&&!validPlanningPatch(originalTask,fields)){
+      setToast('شروع و پایان برنامه باید تاریخ معتبر داشته باشند و پایان پیش از شروع نباشد؛ هیچ تغییری ذخیره نشد.');
+      return;
+    }
     if(originalTask&&fields.projectId&&fields.projectId!==originalTask.projectId){
       setToast('انتقال کارت به پروژه دیگر تا آماده‌شدن انتقال اتمیک نظرات، دسترسی و اسناد مالی غیرفعال است؛ کارت تغییری نکرد.');
       return;
@@ -1640,6 +1645,9 @@ export default function App(){
     const actionId=uid();
     change(s=>{
     const original=s.tasks.find(t=>t.id===id);
+    // Recheck against the latest committed React state. A second fast edit
+    // must not bypass the autosave planning-date integrity guard.
+    if(original&&!validPlanningPatch(original,fields))return s;
     const board=s.boards?.find(b=>b.id===original?.boardId);
     const requestedList=fields.listId||(fields.status&&board?.stages.some(x=>x.id===fields.status)?fields.status:null);
     if(requestedList&&board?.stages.some(stage=>stage.id===requestedList&&stage.archived===true)&&requestedList!==original?.listId)return s;
