@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "مدار | مدیریت کارها",
+  "short_name": "مدار",
+  "description": "نسخه وب محلی مدار برای بردها و کارت‌ها",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#253e62",
+  "lang": "fa",
+  "dir": "rtl",
+  "icons": [
+    {"src": "./madar-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+    {"src": "./madar-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any"}
+  ]
+}

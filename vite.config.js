@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import {resolve} from 'node:path';
 
-export default defineConfig({
+export default defineConfig(({mode})=>({
   plugins: [react()],
   base: './',
   build: {rollupOptions: {input: {
@@ -14,4 +14,4 @@ export default defineConfig({
     // sources. Watching them can hit Windows EBUSY during Inno compilation.
     watch: {ignored: ['**/release/**', '**/.qa-inno-*/**', '**/.qa-p0-pyinstaller/**']},
   }
-});
+}));

@@ -1,0 +1,18 @@
+.web-pwa-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:10px 16px 4px;padding:10px 14px;border:1px solid var(--border,#cdd9e8);border-radius:13px;background:var(--surface-soft,#f5f8fd);color:var(--text,#253850);font-size:12px}
+.web-pwa-banner__identity,.web-pwa-banner__actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.web-pwa-banner__identity strong{white-space:nowrap}
+.web-pwa-banner__identity span{color:var(--text-muted,#536781);line-height:1.6}
+.web-pwa-banner__actions button,.web-backup-actions button,.web-backup-import{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:35px;padding:7px 12px;border:1px solid var(--border,#bdcfe2);border-radius:9px;background:var(--surface,#fff);color:var(--text,#253850);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.web-pwa-banner__actions button:hover,.web-backup-actions button:hover,.web-backup-import:hover{background:var(--surface-soft,#eaf1fd)}
+.web-backup-dialog{position:relative;width:min(540px,calc(100vw - 24px));max-height:calc(100vh - 30px);overflow:auto;background:var(--surface,#fff);color:var(--text,#24334c);border:1px solid var(--border,#cbd6e6);border-radius:16px;box-shadow:0 20px 60px #0005;padding:20px}
+.web-backup-dialog header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.web-backup-dialog h2{font-size:16px;display:flex;align-items:center;gap:8px;margin:0}
+.web-backup-dialog header button{border:0;background:transparent;color:inherit;cursor:pointer;min-width:34px;min-height:34px}
+.web-backup-dialog p{font-size:13px;line-height:1.85}
+.web-backup-actions{display:flex;flex-wrap:wrap;gap:10px;padding:10px 0}
+.web-backup-import{position:relative;overflow:hidden}
+.web-backup-import input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.web-backup-dialog small{display:block;margin-top:15px;line-height:1.8;color:var(--text-muted,#536781)}
+.web-backup-error{color:#c43541}
+.web-backup-success{color:#287450}
+@media(max-width:600px){.web-pwa-banner{margin:9px 10px;padding:10px}.web-pwa-banner__actions{width:100%}}

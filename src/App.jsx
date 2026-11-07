@@ -59,6 +59,9 @@ import {VitreaOverview} from './vitrea_overview.jsx';
 import {DEFAULT_WIDGET_SETTINGS,normalizeWidgetSettings} from './widget_preferences.js';
 import {ChecklistTaskRow} from './checklist_task_row.jsx';
 import {emptyCardHistory,isUndoableCardPatch,recordCardEdit,cardHistoryAvailability,applyCardHistory} from './card_undo.js';
+import {createWebStorage,downloadWebBackup} from './web_storage.js';
+import {WebBackupDialog} from './web_backup_dialog.jsx';
+import {WebPwaBanner} from './web_pwa.jsx';
 import './interface_mode.css';
 import './boardplus.css';
 import './task_editor_compact.css';
@@ -71,6 +74,7 @@ import './trello_quick_add.css';
 import './sidebar_compact.css';
 import './backup_easy.css';
 import './general_ui_preferences.css';
+import './web_pwa.css';
 
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const now=()=>new Date().toISOString();
@@ -156,8 +160,23 @@ const mockBridge={
   ,attachmentBackup:async()=>{throw Error('بکاپ فایل فقط روی میزبان ویندوز فعال است.');}
   ,createUnifiedSqliteBackup:async()=>{throw Error('خروجی SQLite فقط روی میزبان ویندوز فعال است.');}
 };
-const api=window.madar||mockBridge;
+// Browser builds get independent IndexedDB storage. Never silently reuse the
+// legacy localStorage preview or the installed Windows application's profile.
 const isDesktop=!!window.madar;
+const isWebApp=import.meta.env.MODE==='web'&&!isDesktop;
+const webStorage=isWebApp?createWebStorage():null;
+const webBridge=isWebApp?{
+  ...mockBridge,
+  getState:()=>webStorage.read(seed),
+  saveState:state=>webStorage.save(state),
+  webBackup:()=>webStorage.backup(),
+  webReplaceState:(state,revision)=>webStorage.replace(state,revision),
+  exportBackup:async()=>downloadWebBackup(await webStorage.backup()),
+  syncStatus:async()=>({mode:'solo',connected:false,pending:false,drive:false,localOnly:true,folder:{configured:false}}),
+  lanStatus:async()=>({mode:'solo',user:{username:'web-local',role:'admin',projects:null}}),
+  lanProfiles:async()=>[{username:'web-local',displayName:'این مرورگر',role:'admin',projects:null}],
+}:null;
+const api=window.madar||webBridge||mockBridge;
 const shortDate=v=>{if(!v)return '';try{return new Date(v).toLocaleDateString('fa-IR',{month:'short',day:'numeric'});}catch{return v;}};
 
 function Empty({title,description,onAdd}){
@@ -1186,7 +1205,14 @@ export default function App(){
   const cardUndoEnabled=canEdit&&lanStatus?.mode==='solo'&&!blocked.current&&!saving.current;
   const canUndo=cardHistoryAvailability(cardUndo.current,data,'undo',cardUndoScope,cardUndoEnabled);
   const canRedo=cardHistoryAvailability(cardUndo.current,data,'redo',cardUndoScope,cardUndoEnabled);
-  const show=feature=>isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
+  const webUnavailable=new Set([
+    'networkStatus','lanUserManagement','secureApiKeys','cardAttachments',
+    'projectFiles','projectFinance','financeHub','profitPeek','taskCostControls',
+    'checklistCostControls','projectPricing','accountingDashboard','aiAgent',
+    'automationRules','calendarInterop','activity','cardComments',
+  ]);
+  const show=feature=>(!isWebApp||!webUnavailable.has(feature))&&
+    isManagedFeatureVisible(displayScope,feature,{canManage,canEdit});
   useEffect(()=>{
     if(interfaceMode==='basic'){
       setMode(previous=>previous==='time'?'board':previous);
@@ -1989,15 +2015,15 @@ export default function App(){
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
       <SyncIndicator compact status={syncInfo} conflict={pendingRecovery||blocked.current}
-        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={openNetwork}/>
+        saving={dirty.current||saving.current} lastSync={lastSync} showDetails={isWebApp?()=>setCloudOpen(true):openNetwork}/>
       <button type="button" className="vitrea-quickdock__refresh" onClick={manualRefresh}
         disabled={syncing} title="تازه‌سازی دستی و دریافت آخرین تغییرات" aria-label="تازه‌سازی اتصال">
         <RefreshCw size={19} className={syncing?'spin':''}/><span className="vitrea-quickdock__label" aria-hidden="true">تازه‌سازی</span></button>
-      <button type="button" className={'vitrea-quickdock__update'+(updateInfo?' vitrea-quickdock__update--available':'')}
+      {!isWebApp&&<button type="button" className={'vitrea-quickdock__update'+(updateInfo?' vitrea-quickdock__update--available':'')}
         onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}
         aria-label={updateBusy?'در حال بررسی به‌روزرسانی':updateInfo?(updateDownloaded?'نصب نسخهٔ جدید بعد از خروج':'دریافت نسخهٔ جدید '+updateInfo.latest):'بررسی به‌روزرسانی نرم‌افزار'}
         title={updateInfo?'نسخهٔ جدید '+updateInfo.latest+' آماده است':'بررسی نسخهٔ جدید مدار'}>
-        <Download size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">به‌روزرسانی</span></button>
+        <Download size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">به‌روزرسانی</span></button>}
       <span className="vitrea-quickdock__divider" aria-hidden="true"/>
       <button ref={quickDockTrigger} type="button" className="vitrea-quickdock__main" title="نمایش منوی کامل"
         aria-label="نمایش منوی کامل مدار" aria-controls="madar-sidebar" aria-expanded={desktopNavOpen||mobileNavOpen}
@@ -2008,11 +2034,11 @@ export default function App(){
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">گزارش‌ها</span></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">اعلان‌ها</span></button>
-      {canManage&&<button type="button" onClick={openUserManagement}
+      {!isWebApp&&canManage&&<button type="button" onClick={openUserManagement}
         title={lanStatus.mode==='solo'?'تعریف کاربر: ابتدا میزبان شبکه را فعال کنید':'تعریف کاربران'}
         aria-label="تعریف کاربران"><Users size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">کاربران</span></button>}
       <button type="button" onClick={()=>setCloudOpen(true)}
-        title="Google Drive" aria-label="Google Drive"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
+        title={isWebApp?'پشتیبان محلی نسخهٔ وب':'Google Drive'} aria-label="پشتیبان‌گیری"><Cloud size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">پشتیبان‌گیری</span></button>
       <button type="button" title={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         aria-label={uiTheme==='dark'?'انتخاب تم روشن':'انتخاب تم تاریک'}
         disabled={sharedThemeEnabled&&!canManage}
@@ -2079,16 +2105,16 @@ export default function App(){
           <summary><ShieldCheck size={17}/> مدیریت <ChevronDown size={15}/></summary>
           <nav className="sidebar-nav" aria-label="مدیریت و دسترسی‌ها">
             {show('workspaceManagement')&&<button onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> فضاهای کاری</button>}
-            <button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>
+            {!isWebApp&&<button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>}
             {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> کلید API امن</button>}
           </nav>
         </details>}
         <button type="button" className="sidebar-settings" onClick={()=>openSharedLabelManager()}><Tag size={18}/> مدیریت برچسب‌ها</button>
-        <button type="button" className="sidebar-settings sidebar-update" onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}>
-          <Download size={18}/> {updateBusy?'در حال بررسی…':updateInfo?(updateDownloaded?'نصب پس از خروج':'دریافت نسخهٔ '+updateInfo.latest):'بررسی به‌روزرسانی'}</button>
+        {!isWebApp&&<button type="button" className="sidebar-settings sidebar-update" onClick={updateInfo?actOnUpdate:checkForAppUpdate} disabled={updateBusy}>
+          <Download size={18}/> {updateBusy?'در حال بررسی…':updateInfo?(updateDownloaded?'نصب پس از خروج':'دریافت نسخهٔ '+updateInfo.latest):'بررسی به‌روزرسانی'}</button>}
         <button className="sidebar-settings" onClick={()=>setCloudOpen(true)}><Cloud size={18}/> پشتیبان‌گیری</button>
         <button className="sidebar-settings" onClick={()=>setSettingsOpen(true)}><Settings2 size={18}/> تنظیمات</button>
-        <button className="sidebar-profile profile-click" title="ویرایش پروفایل من" onClick={()=>setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
+        <button className="sidebar-profile profile-click" title={isWebApp?'پشتیبان محلی':'ویرایش پروفایل من'} onClick={()=>isWebApp?setCloudOpen(true):setProfileOpen(true)}><Avatar user={lanStatus.user} size={38}/><div><strong>{lanStatus.user?.displayName||lanStatus.user?.username||'فضای من'}</strong><span>{isWebApp?'ذخیره در این مرورگر':lanStatus.mode==='solo'?'حالت شخصی':'پروفایل و حساب شبکه'}</span></div><span className="profile-online"/></button>
       </div>
     </aside>
 
@@ -2131,6 +2157,7 @@ export default function App(){
       <div className="vitrea-header-clock"><ClockWidget calendar={calendar}/></div>
       </div>
       <div className="workspace-scroll">
+        {isWebApp&&<WebPwaBanner onBackup={()=>setCloudOpen(true)}/>}
         {search.trim()&&<>{globalSearch.error&&<p role="alert" className="warning">{globalSearch.error}</p>}
           <SearchResultsPanel query={search} results={globalSearch.results} canEdit={canEdit}
             formatDate={date=>displayDate(date,calendar,true)}
@@ -2327,7 +2354,10 @@ export default function App(){
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
     {activityOpen&&<ActivityDialog api={api} onClose={()=>setActivityOpen(false)}/>}
     {profileOpen&&<ProfilePanel api={api} user={lanStatus.user} onClose={()=>setProfileOpen(false)} onUpdated={async()=>{await refreshLan();await refreshUsers();}}/>}
-    {cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}
+    {isWebApp&&cloudOpen&&<WebBackupDialog api={api} state={data}
+      onClose={()=>setCloudOpen(false)} onRestore={restoreState}
+      onRestoreStart={startBackupRestore} onRestoreFinished={finishBackupRestore}/>}
+    {!isWebApp&&cloudOpen&&<DrivePanel data={data} isClient={lanStatus.mode==='client'}
       onClose={()=>setCloudOpen(false)} onRestore={restoreState}
       onRestoreStart={startBackupRestore} onRestoreFinished={finishBackupRestore}/>}
   </div>;
