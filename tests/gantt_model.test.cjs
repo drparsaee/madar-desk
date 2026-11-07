@@ -11,7 +11,7 @@ mod.filename=path.join(root,'gantt-model-test.cjs');
 mod.paths=Module._nodeModulePaths(root);
 mod._compile(output,mod.filename);
 const {dayNumber,dayString,ganttAxis,validPlan,validPlanningPatch,shiftPlan,barPosition,buildGanttRows,
-  inspectGanttDependencies,analyzeCriticalPaths}=mod.exports;
+  inspectGanttDependencies,analyzeCriticalPaths,previewGanttShiftImpact}=mod.exports;
 
 test('partial card planning-date edits fail before autosave without breaking unrelated changes',()=>{
   const task={plannedStart:'2026-11-08',plannedEnd:'2026-11-12'};
@@ -181,4 +181,69 @@ test('P2 CPM processes a long DAG iteratively and bounds unsupported cardinality
   assert.equal(analysis.projects[0].durationDays,1200);
   assert.equal(analysis.projects[0].pathIds.length,1200);
   assert.equal(analyzeCriticalPaths(tasks,200).projects[0].reason,'too_many');
+});
+
+test('P2 impact preview follows converging successors and preserves existing slack without writes',()=>{
+  const card=(id,start,end,dependencies=[])=>({
+    id,projectId:'p',title:'Task '+id,plannedStart:start,plannedEnd:end,dependencies});
+  const tasks=[card('a','2026-11-01','2026-11-03'),
+    card('b','2026-11-05','2026-11-06',['a']),
+    card('c','2026-11-04','2026-11-08',['a']),
+    card('d','2026-11-09','2026-11-10',['b','c']),
+    card('e','2026-11-19','2026-11-20',['a'])];
+  const before=structuredClone(tasks);
+  const result=previewGanttShiftImpact(tasks,'a',2);
+  assert.equal(result.status,'ready');
+  assert.equal(result.scope,'visible');
+  assert.equal(result.checkedCount,5);
+  assert.equal(result.affectedCount,3);
+  assert.deepEqual(result.source.to,{plannedStart:'2026-11-03',plannedEnd:'2026-11-05'});
+  assert.deepEqual(result.successors.map(row=>[row.id,row.shiftDays,row.to]),
+    [['b',1,{plannedStart:'2026-11-06',plannedEnd:'2026-11-07'}],
+     ['c',2,{plannedStart:'2026-11-06',plannedEnd:'2026-11-10'}],
+     ['d',2,{plannedStart:'2026-11-11',plannedEnd:'2026-11-12'}]]);
+  assert.deepEqual(tasks,before);
+  const earlier=previewGanttShiftImpact(tasks,'a',-1);
+  assert.equal(earlier.status,'ready');
+  assert.equal(earlier.affectedCount,0);
+  assert.equal(previewGanttShiftImpact(tasks,'b',-2).reason,'earlier_than_predecessor');
+});
+
+test('P2 impact preview fails closed for hidden, invalid, or cyclic dependency graphs',()=>{
+  const a={id:'a',projectId:'p',title:'Visible A',
+    plannedStart:'2026-11-01',plannedEnd:'2026-11-03'};
+  const b={id:'b',projectId:'p',title:'Visible B',dependencies:['a'],
+    plannedStart:'2026-11-04',plannedEnd:'2026-11-05'};
+  assert.equal(previewGanttShiftImpact([a,{...b,dependencies:['hidden-id']}],'a',1)
+    .reason,'outside_authorized_view');
+  assert.equal(previewGanttShiftImpact([a,{...b,dependencies:['a','a']}],'a',1)
+    .reason,'invalid_dependencies');
+  assert.equal(previewGanttShiftImpact([a,{...b,plannedStart:'2026-11-02'}],'a',1)
+    .reason,'existing_conflict');
+  assert.equal(previewGanttShiftImpact([{...a,dependencies:['b']},b],'a',1)
+    .reason,'dependency_cycle');
+  assert.equal(previewGanttShiftImpact([a,{...b,plannedEnd:''}],'a',1)
+    .reason,'invalid_or_missing_plan');
+  assert.equal(previewGanttShiftImpact([a,{...a}],'a',1).reason,'unavailable_target');
+  assert.equal(previewGanttShiftImpact([a],'hidden-id',1).reason,'unavailable_target');
+  assert.equal(previewGanttShiftImpact([a],a.id,0).reason,'invalid_request');
+  assert.equal(previewGanttShiftImpact([a],a.id,3661).reason,'invalid_request');
+  assert.equal(previewGanttShiftImpact([a],a.id,1,0).reason,'too_many');
+  assert.equal(previewGanttShiftImpact([a],'a',1).affectedCount,0);
+});
+
+test('P2 impact preview never traverses unrelated projects or private references',()=>{
+  const a={id:'a',projectId:'p',plannedStart:'0001-01-01',plannedEnd:'0001-01-02'};
+  const b={id:'b',projectId:'p',plannedStart:'0001-01-03',
+    plannedEnd:'0001-01-04',dependencies:['a']};
+  const q={id:'q',projectId:'other',plannedStart:'0001-01-01',
+    plannedEnd:'0001-01-05',dependencies:['unseen-private']};
+  const preview=previewGanttShiftImpact([a,b,q],'a',2);
+  assert.equal(preview.status,'ready');
+  assert.equal(preview.checkedCount,2);
+  assert.equal(preview.affectedCount,1);
+  assert.deepEqual(preview.successors[0].to,
+    {plannedStart:'0001-01-05',plannedEnd:'0001-01-06'});
+  assert.equal(JSON.stringify(preview).includes('unseen-private'),false);
+  assert.equal(previewGanttShiftImpact([a,b,q],'q',1).status,'blocked');
 });

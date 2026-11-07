@@ -79,8 +79,23 @@ test('P2 Chromium Gantt reports dependency conflicts, fixes one card and respect
     assert.match(await critical.innerText(),/پیش‌نیاز عمومی/);
     assert.match(await critical.innerText(),/مرحله دوم/);
     assert.match(await page.locator('.gantt-critical-chip').first().innerText(),/بحرانی/);
+    await page.getByRole('button',{name:'پیش‌نمایش جابه‌جایی کارت پیش‌نیاز عمومی'}).click();
+    const impact=page.getByRole('region',{name:'پیش‌نمایش اثر جابه‌جایی'});
+    await impact.waitFor();
+    assert.match(await impact.innerText(),/۱ فعالیت وابسته/);
+    assert.match(await impact.innerText(),/هیچ تغییری ذخیره نشده/);
+    assert.equal(await impact.getByRole('button',{name:'تأیید جابه‌جایی فقط همین کارت'}).count(),0);
+    assert.equal((await page.evaluate(()=>window.__updates.filter(item=>item[0]==='update'))).length,1);
+    await impact.getByRole('button',{name:'یک روز زودتر'}).click();
+    assert.match(await impact.innerText(),/۰ فعالیت وابسته/);
+    await impact.getByRole('button',{name:'تأیید جابه‌جایی فقط همین کارت'}).click();
+    assert.equal(await impact.count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.__updates.filter(item=>item[0]==='update')),
+      [['update','b',{plannedStart:'2026-11-11',plannedEnd:'2026-11-14'}],
+       ['update','a',{plannedStart:'2026-11-06',plannedEnd:'2026-11-09'}]]);
     await page.evaluate(()=>window.__setCanEdit(false));
     assert.equal(await page.getByRole('button',{name:/اصلاح تاریخ کارت/}).count(),0);
+    assert.equal(await page.getByRole('button',{name:/پیش‌نمایش جابه‌جایی کارت/}).count(),0);
     assert.equal(await page.getByLabel('شروع مرحله دوم').isDisabled(),true);
     for(const width of [320,375,768]){
       await page.setViewportSize({width,height:780});
