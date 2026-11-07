@@ -180,6 +180,98 @@ export function analyzeCriticalPaths(tasks=[],limit=20000) {
   outcomes.sort((a,b)=>a.projectId.localeCompare(b.projectId));
   return {projects:outcomes,complete:outcomes.length>0&&outcomes.every(p=>p.status==='ready')};
 }
+
+/** Preview a change to one card and the forward-only effect on its successors.
+ * Uses only the already-authorized, currently visible task collection.
+ * No writes, no silent bulk edits, and no assumption that hidden dependencies
+ * have been satisfied. Existing schedule conflicts must be resolved first.
+ */
+export function previewGanttShiftImpact(tasks=[],taskId,days,limit=20000) {
+  const denied=reason=>({status:'blocked',reason,scope:'visible',
+    source:null,successors:[],affectedCount:0,checkedCount:0});
+  if(!Array.isArray(tasks)||typeof taskId!=='string'||!taskId||
+     !Number.isSafeInteger(days)||days===0||Math.abs(days)>3660)
+    return denied('invalid_request');
+  const active=tasks.filter(t=>t&&!t.deleted&&!t.archived);
+  const selected=active.filter(t=>t.id===taskId);
+  if(selected.length!==1)return denied('unavailable_target');
+  const target=selected[0],projectId=target.projectId;
+  if(typeof projectId!=='string'||!projectId)return denied('invalid_project');
+  const project=active.filter(t=>t.projectId===projectId);
+  if(project.length>limit)return denied('too_many');
+  const byId=new Map(),inDegree=new Map(),successors=new Map();
+  let existingConflict=false;
+  for(const card of project) {
+    if(typeof card.id!=='string'||!card.id||byId.has(card.id)||
+       dayNumber(card.plannedStart)===null||dayNumber(card.plannedEnd)===null||
+       !validPlan(card.plannedStart,card.plannedEnd)||
+       (card.dependencies!==undefined&&!Array.isArray(card.dependencies)))
+      return denied('invalid_or_missing_plan');
+    byId.set(card.id,card);
+    inDegree.set(card.id,0);
+    successors.set(card.id,[]);
+  }
+  for(const card of project) {
+    const seen=new Set();
+    for(const predecessorId of card.dependencies||[]) {
+      if(typeof predecessorId!=='string'||seen.has(predecessorId)||predecessorId===card.id)
+        return denied('invalid_dependencies');
+      seen.add(predecessorId);
+      const predecessor=byId.get(predecessorId);
+      if(!predecessor)return denied('outside_authorized_view');
+      if(dayNumber(card.plannedStart)<=dayNumber(predecessor.plannedEnd))
+        existingConflict=true;
+      successors.get(predecessorId).push(card.id);
+      inDegree.set(card.id,inDegree.get(card.id)+1);
+    }
+  }
+  const queue=[...byId.keys()].filter(id=>inDegree.get(id)===0).sort();
+  const order=[];
+  for(let cursor=0;cursor<queue.length;cursor++) {
+    const id=queue[cursor];order.push(id);
+    for(const successor of successors.get(id)) {
+      inDegree.set(successor,inDegree.get(successor)-1);
+      if(inDegree.get(successor)===0)queue.push(successor);
+    }
+  }
+  if(order.length!==project.length)return denied('dependency_cycle');
+  if(existingConflict)return denied('existing_conflict');
+  const shifted=shiftPlan(target,days);
+  if(!shifted)return denied('date_out_of_range');
+  const after=new Map([[taskId,shifted]]),impacted=[];
+  for(const id of order) {
+    const card=byId.get(id);
+    if(id===taskId)continue;
+    const predecessors=card.dependencies||[];
+    const movedParents=predecessors.filter(parentId=>after.has(parentId));
+    if(!movedParents.length)continue;
+    let required=dayNumber(card.plannedStart);
+    for(const parentId of predecessors) {
+      const parent=byId.get(parentId);
+      const replacement=after.get(parentId);
+      const end=dayNumber(replacement?.plannedEnd||parent.plannedEnd);
+      required=Math.max(required,end+1);
+    }
+    const offset=required-dayNumber(card.plannedStart);
+    if(offset>0) {
+      const proposal=shiftPlan(card,offset);
+      if(!proposal)return denied('date_out_of_range');
+      after.set(id,proposal);
+      impacted.push({id,title:String(card.title||'بدون عنوان'),
+        from:{plannedStart:card.plannedStart,plannedEnd:card.plannedEnd},
+        to:proposal,shiftDays:offset});
+    }
+  }
+  for(const predecessorId of target.dependencies||[]) {
+    const predecessor=byId.get(predecessorId);
+    if(dayNumber(shifted.plannedStart)<=dayNumber(predecessor.plannedEnd))
+      return denied('earlier_than_predecessor');
+  }
+  return {status:'ready',reason:'',scope:'visible',checkedCount:project.length,
+    source:{id:taskId,title:String(target.title||'بدون عنوان'),days,
+      from:{plannedStart:target.plannedStart,plannedEnd:target.plannedEnd},to:shifted},
+    successors:impacted,affectedCount:impacted.length};
+}
 export function ganttAxis(anchor,scale='day') {
   const day=dayNumber(anchor)??dayNumber(new Date().toISOString().slice(0,10));
   if(scale==='month'){
