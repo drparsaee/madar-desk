@@ -953,6 +953,30 @@ class LanService:
             data = view_for(self.bridge.getState(), who)
             return {"state": data, "revision": revision(data), "user": self._public_user(who)}
 
+    def gantt_shift_preview(self, token, request):
+        """Read-only, host-authoritative successor calculation; no mutation."""
+        from gantt_shift_guard import GanttShiftError, prepare_gantt_shift
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who["role"] == "viewer":
+                raise PermissionError("این کاربر فقط اجازه مشاهده دارد.")
+            full = self.bridge.getState()
+            visible_revision = revision(view_for(full, who))
+            try:
+                result = prepare_gantt_shift(
+                    full, request, role=who["role"], projects=who["projects"],
+                    actual_revision=visible_revision)
+            except GanttShiftError as error:
+                if error.code == "stale_revision":
+                    raise RuntimeError(
+                        "CONFLICT: نسخه برنامه تغییر کرده است؛ ابتدا تازه‌سازی کنید."
+                    ) from error
+                # Out-of-grant and non-existent targets must look identical.
+                raise ValueError("gantt_preview_unavailable") from error
+            return {"readOnly": True, "revision": visible_revision,
+                    "scope": result["scope"], "updates": result["updates"],
+                    "changedCount": result["changedCount"]}
+
     def write_state(self, token, incoming, expected):
         from native_app import is_valid, normalize_state
         # Keep the same lock order as user-management actions (users -> state).
@@ -1433,6 +1457,7 @@ class LanService:
                     self.wfile.write(outcome.body)
                     return
                 if endpoint not in ("/api/login", "/api/state", "/api/me", "/api/display-roles", "/api/users", "/api/user",
+                                    "/api/gantt/shift/preview",
                                     "/api/profiles", "/api/profile", "/api/password",
                                     "/api/reset-password", "/api/comments", "/api/project-comments", "/api/notifications",
                                     "/api/activity", "/api/collab",
@@ -1486,6 +1511,8 @@ class LanService:
                     if self.command == "POST" and endpoint == "/api/state":
                         return self.reply(200, service.write_state(token, payload.get("state"),
                                                                     payload.get("revision")))
+                    if self.command == "POST" and endpoint == "/api/gantt/shift/preview":
+                        return self.reply(200, service.gantt_shift_preview(token, payload))
                     if self.command == "GET" and endpoint in ("/api/comments", "/api/project-comments", "/api/notifications", "/api/activity", "/api/rules"):
                         params = parse_qs(urlparse(self.path).query)
                         return self.reply(200, {"items": service.collab_read(
