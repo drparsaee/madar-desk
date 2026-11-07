@@ -977,9 +977,30 @@ class LanService:
                             and t["projectId"] not in target["projects"]
                         ):
                             raise PermissionError("کاربر مسئول به پروژه دسترسی ندارد.")
-                self.bridge._save_local_state(next_view, actor=who["username"],
-                                              accounts=self.users,
-                                              expected_local_revision=revision(old))
+                try:
+                    self.bridge._save_local_state(next_view, actor=who["username"],
+                                                  accounts=self.users,
+                                                  expected_local_revision=revision(old))
+                except PermissionError as error:
+                    # The native project-integrity guard is authoritative. Add
+                    # the affected account names only when that guard rejects
+                    # a removed project with existing scoped LAN grants.
+                    if "دسترسی فعال کاربر شبکه" not in str(error):
+                        raise
+                    removed = ({project["id"] for project in old["projects"]} -
+                               {project["id"] for project in next_view["projects"]})
+                    affected = []
+                    for username, account in sorted(self.users.items()):
+                        grants = account.get("projects")
+                        if isinstance(grants, list):
+                            matches = sorted(removed.intersection(grants))
+                            if matches:
+                                affected.append(f"{username} ({', '.join(matches)})")
+                    if not affected:
+                        raise
+                    raise PermissionError(
+                        "حذف پروژه مجاز نیست؛ ابتدا دسترسی کاربران شبکه را اصلاح کنید: " +
+                        "، ".join(affected)) from error
                 return self.read_state(token)
             # Editors cannot edit structure or global configuration, only tasks
             # in the projects explicitly granted to them.
