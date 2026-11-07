@@ -20,6 +20,8 @@ export function duplicateCard(source, newId, timestamp, idFactory){
    'purchaseId','saleId','purchaseSourceId','accountingEntryId'])delete copy[key];
  copy.assignees=[];copy.fileLinks=[];copy.attachments=[];
  copy.reports=[];copy.actualMinutes=0;copy.dueDate='';
+ // Dependencies and scheduled dates belong to the original execution, not its template.
+ copy.dependencies=[];copy.plannedStart='';copy.plannedEnd='';
  // A duplicate is a new active task, not another archived item, even when
  // its source was recovered from a historical archived list/card.
  copy.archived=false;copy.archivedByBoard=false;
