@@ -7,6 +7,7 @@ const {
 }=require('./storage.cjs');
 const {ValidationError,validateSnapshot,projectSnapshot,mergeEditor}=require('./policy.cjs');
 const {ConversationError,listMessages,messageAction}=require('./conversations.cjs');
+const {GanttShiftError,prepareGanttShift}=require('./gantt_shift_guard.cjs');
 
 const PREFIX='/api/web/v1';
 const SESSION_COOKIE='madar_web_session';
@@ -262,6 +263,33 @@ function createApp({dbPath,publicOrigin,host='127.0.0.1'}={}){
         const input=await jsonInput(req);
         response(res,200,messageAction(db,session,{method,messageId:message[1],
           payload:input,key:req.headers['idempotency-key']}));return;
+      }
+      if(method==='POST'&&pathname==='/gantt/shift/preview'){
+        checkOrigin(req);
+        const session=requireSession(jar);checkCsrf(req,jar,session);
+        if(session.role==='viewer')reject(403,'insufficient_permissions');
+        const request=await jsonInput(req);
+        const head=db.prepare('SELECT revision,state_json FROM web_workspace_heads WHERE workspace_id=?')
+          .get(session.workspace_id);
+        if(!head)reject(404,'state_not_initialized');
+        try {
+          // Full host state (never the filtered UI projection). Preview is
+          // read-only; transaction-bound revalidation is mandatory for commit.
+          const result=prepareGanttShift(JSON.parse(head.state_json),request,{
+            role:session.role,
+            projects:session.project_ids_json===null?null:JSON.parse(session.project_ids_json),
+            actualRevision:head.revision
+          });
+          response(res,200,{schemaVersion:1,readOnly:true,revision:head.revision,
+            scope:result.scope,changedCount:result.changedCount,updates:result.updates},
+          {ETag:etagFor(head.revision)});return;
+        }catch(error){
+          if(!(error instanceof GanttShiftError))throw error;
+          if(error.code==='stale_revision')reject(409,'revision_conflict');
+          if(error.code==='forbidden'||error.code==='unavailable_target')
+            reject(404,'gantt_preview_unavailable');
+          reject(422,'gantt_preview_unavailable');
+        }
       }
       if(method==='GET'&&pathname==='/state'){
         const session=requireSession(jar);

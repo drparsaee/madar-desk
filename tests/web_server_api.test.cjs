@@ -265,6 +265,48 @@ test('SQLite conditional writes, durable receipt, stale conflict and exact repla
   assert.equal((await c.call('GET','/state')).payload.state.tasks[0].title,'Changed');
 });
 
+test('host Gantt preview checks session, scoped grants and revision without any state write',async t=>{
+  const {app,origin}=await fixture(t);
+  const admin=client(origin),editor=client(origin),viewer=client(origin);
+  await admin.login();
+  const initial=state();
+  initial.tasks[0].plannedStart='2026-11-01';
+  initial.tasks[0].plannedEnd='2026-11-03';
+  initial.tasks.push({
+    id:'t3',projectId:'p1',boardId:'b1',listId:'todo',status:'todo',
+    title:'Dependent',checklist:[],labels:[],dependencies:['t1'],
+    plannedStart:'2026-11-04',plannedEnd:'2026-11-06'
+  });
+  initial.tasks[1].plannedStart='2026-11-01';
+  initial.tasks[1].plannedEnd='2026-11-02';
+  assert.equal((await admin.put(initial,null,'gantt-bootstrap')).status,201);
+  await editor.login('editor');
+  await viewer.login('viewer');
+  const read=await editor.call('GET','/state');
+  const rev=read.payload.revision;
+  const preview=async(c,taskId,days,expectedRevision=rev,headers={})=>
+    c.call('POST','/gantt/shift/preview',{taskId,days,expectedRevision},{
+      'X-CSRF-Token':c.csrf,...headers});
+  const ready=await preview(editor,'t1',2);
+  assert.equal(ready.status,200);
+  assert.equal(ready.payload.readOnly,true);
+  assert.equal(ready.payload.scope,'full_host');
+  assert.deepEqual(ready.payload.updates,[
+    {id:'t1',plannedStart:'2026-11-03',plannedEnd:'2026-11-05'},
+    {id:'t3',plannedStart:'2026-11-06',plannedEnd:'2026-11-08'}
+  ]);
+  assert.equal((await preview(viewer,'t1',2)).status,403);
+  assert.equal((await preview(editor,'t2',2)).status,404);
+  assert.equal((await preview(editor,'not-here',2)).status,404);
+  assert.equal((await preview(editor,'t1',2,'stale')).status,409);
+  assert.equal((await preview(editor,'t1',2,rev,{'X-CSRF-Token':'wrong'})).status,403);
+  const after=await admin.call('GET','/state');
+  assert.equal(after.payload.revision,rev);
+  assert.equal(after.payload.state.tasks[0].plannedStart,'2026-11-01');
+  assert.equal(app.db.prepare('SELECT count(*) AS c FROM web_workspace_snapshots').get().c,1);
+  assert.equal(app.db.prepare('SELECT count(*) AS c FROM web_audit_events').get().c,1);
+});
+
 test('server-owned roles, project grant, hidden records and finance denial',async t=>{
   const {app,origin}=await fixture(t),admin=client(origin),editor=client(origin),viewer=client(origin);
   await admin.login();
