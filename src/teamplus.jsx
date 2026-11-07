@@ -103,17 +103,116 @@ export function ProjectConversation({projectId,projectName='',api,canEdit,canMan
  </div>;
 }
 
-export function NotificationsDialog({api,onClose}){
- const [items,setItems]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const load=async()=>{try{setItems(await api.collabRead('notifications'));setError('');}catch(e){setError(e.message);}};
- useEffect(()=>{load();},[]);
- const mark=async item=>{setBusy(true);try{await api.collabCommand({type:'notification.read',eventId:eventId(),notificationId:item.id});await load();}catch(e){setError(e.message);}finally{setBusy(false);}};
- return <div className="overlay" onMouseDown={onClose}><section className="dialog notifications-dialog" role="dialog" aria-modal="true" onMouseDown={e=>e.stopPropagation()}>
-   <div className="dialog-head"><h2><Bell size={18}/> اعلان‌های من</h2><button className="icon-btn" onClick={onClose}><X size={19}/></button></div>
-   <div className="dialog-body notifications-body"><button className="btn secondary" onClick={load}><RefreshCw size={15}/> تازه‌سازی</button>
-   {items.map(item=><article key={item.id} className={item.readAt?'notice-read':''}><div><strong>{item.kind==='mention'?'اشاره به شما':item.kind==='watch'?'نظر جدید':'قانون خودکار'}</strong><small>{date(item.createdAt)}</small></div><p>{item.message}</p>{!item.readAt&&<button disabled={busy} onClick={()=>mark(item)}><Check size={15}/> خوانده شد</button>}</article>)}
-   {!items.length&&<p className="shared-empty">اعلان جدیدی وجود ندارد.</p>}{error&&<p className="field-error">{error}</p>}</div>
- </section></div>;
+// Resolve only inside the caller's authenticated task snapshot. The host still
+// checks current ACL before navigation; a notification ID is never a grant.
+export function resolveNotificationLocation(notice,{projects=[],boards=[],workspaces=[],tasks=[]}={}){
+ if(!notice||typeof notice.projectId!=='string')return null;
+ if(!projects.some(project=>project.id===notice.projectId))return null;
+ const visibleBoard=board=>board&&!board.archived&&board.projectId===notice.projectId&&
+   workspaces.some(space=>space.id===board.workspaceId&&!space.archived);
+ if(notice.cardId!=null){
+   const card=tasks.find(item=>item.id===notice.cardId&&item.projectId===notice.projectId&&
+     item.deleted!==true&&item.archived!==true);
+   const board=boards.find(item=>item.id===card?.boardId);
+   if(!card||!visibleBoard(board)||board.stages?.some(stage=>
+     stage.id===(card.listId||card.status)&&stage.archived===true))return null;
+   return {kind:'card',projectId:notice.projectId,cardId:card.id,boardId:board.id,workspaceId:board.workspaceId};
+ }
+ const board=boards.find(visibleBoard);
+ return board?{kind:'project',projectId:notice.projectId,boardId:board.id,workspaceId:board.workspaceId}:null;
+}
+
+export function NotificationsDialog({api,onClose,onOpenTarget}){
+ const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
+ const [busyId,setBusyId]=useState(''),[error,setError]=useState('');
+ const [message,setMessage]=useState('');
+ const dialogRef=useRef(null),mounted=useRef(false),pendingReads=useRef(new Map());
+ const load=async()=>{
+   setLoading(true);setError('');setMessage('');
+   try{
+     const received=await api.collabRead('notifications');
+     if(!Array.isArray(received))throw Error('Invalid notifications response');
+     if(mounted.current)setItems(received);
+   }catch{
+     if(mounted.current)setError('دریافت اعلان‌ها ممکن نشد. اتصال و دسترسی خود را بررسی کنید.');
+   }finally{if(mounted.current)setLoading(false);}
+ };
+ useEffect(()=>{
+   mounted.current=true;
+   const previous=document.activeElement;
+   dialogRef.current?.querySelector('.notifications-close')?.focus();
+   const handleKey=event=>{
+     if(event.key==='Escape'){
+       event.preventDefault();event.stopPropagation();onClose();return;
+     }
+     if(event.key!=='Tab')return;
+     const controls=Array.from(dialogRef.current?.querySelectorAll('button:not(:disabled),[href],[tabindex]:not([tabindex="-1"])')||[])
+       .filter(node=>node.getClientRects().length>0);
+     if(!controls.length){event.preventDefault();dialogRef.current?.focus();return;}
+     if(event.shiftKey&&(document.activeElement===controls[0]||!dialogRef.current?.contains(document.activeElement))){
+       event.preventDefault();controls[controls.length-1].focus();
+     }else if(!event.shiftKey&&(document.activeElement===controls[controls.length-1]||!dialogRef.current?.contains(document.activeElement))){
+       event.preventDefault();controls[0].focus();
+     }
+   };
+   document.addEventListener('keydown',handleKey);
+   load();
+   return()=>{mounted.current=false;document.removeEventListener('keydown',handleKey);if(previous?.isConnected)previous.focus();};
+ },[]);
+ const mark=async item=>{
+   if(busyId||item.readAt)return;
+   setBusyId(item.id);setError('');setMessage('');
+   // Reuse the same event ID on retry when an ACK may have been lost.
+   const command=pendingReads.current.get(item.id)||
+     {type:'notification.read',eventId:eventId(),notificationId:item.id};
+   pendingReads.current.set(item.id,command);
+   try{
+     const result=await api.collabCommand(command);
+     if(!result||result.notificationId!==item.id||!result.readAt)throw Error('Missing read acknowledgment');
+     pendingReads.current.delete(item.id);
+     if(mounted.current){
+       setItems(current=>current.map(notice=>notice.id===item.id?{...notice,readAt:result.readAt}:notice));
+       setMessage('اعلان به‌عنوان خوانده‌شده ثبت شد.');
+     }
+   }catch{
+     if(mounted.current)setError('ثبت وضعیت خوانده‌شدن ناموفق یا نامشخص بود. دوباره تلاش کنید.');
+   }finally{if(mounted.current)setBusyId('');}
+ };
+ const openTarget=async item=>{
+   if(busyId||typeof onOpenTarget!=='function')return;
+   setBusyId(item.id);setError('');setMessage('');
+   try{
+     if(await onOpenTarget(item)!==true)throw Error('Not available');
+     onClose();
+   }catch{
+     if(mounted.current)setError('مقصد این اعلان در دسترس نیست یا مجوز مشاهده آن وجود ندارد.');
+   }finally{if(mounted.current)setBusyId('');}
+ };
+ const unread=items.filter(item=>!item.readAt).length;
+ return <div className="overlay" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}>
+   <section ref={dialogRef} tabIndex={-1} className="dialog notifications-dialog" role="dialog" aria-modal="true"
+     aria-label="اعلان‌های من" onMouseDown={event=>event.stopPropagation()}>
+     <div className="dialog-head"><h2><Bell size={18}/> اعلان‌های من <span className="notifications-unread" aria-label={`${unread.toLocaleString('fa-IR')} اعلان خوانده‌نشده`}>{unread.toLocaleString('fa-IR')} خوانده‌نشده</span></h2>
+       <button type="button" className="icon-btn notifications-close" aria-label="بستن اعلان‌ها" onClick={onClose}><X size={19}/></button></div>
+     <div className="dialog-body notifications-body">
+       <button type="button" className="btn secondary" disabled={!!busyId||loading} onClick={load}><RefreshCw size={15}/> تازه‌سازی</button>
+       {loading&&<p role="status">در حال دریافت اعلان‌ها…</p>}
+       {items.map(item=><article key={item.id} className={item.readAt?'notice-read':''}>
+         <div className="notifications-meta"><strong>{item.kind==='mention'?'اشاره به شما':item.kind==='watch'?'نظر جدید':'قانون خودکار'}</strong>
+           <small>{date(item.createdAt)}</small>{!item.readAt&&<span className="notifications-dot">خوانده‌نشده</span>}</div>
+         <p dir="auto">{item.message}</p>
+         <div className="notifications-actions">
+           {typeof onOpenTarget==='function'&&<button type="button" disabled={!!busyId}
+             onClick={()=>openTarget(item)} aria-label="نمایش مقصد اعلان">نمایش مقصد</button>}
+           {!item.readAt&&<button type="button" disabled={!!busyId} onClick={()=>mark(item)}><Check size={15}/> خوانده شد</button>}
+         </div>
+       </article>)}
+       {!loading&&!items.length&&!error&&<p className="shared-empty">اعلانی برای نمایش وجود ندارد.</p>}
+       {error&&<p role="alert" className="field-error">{error}</p>}
+       {message&&<p role="status" className="notifications-status">{message}</p>}
+     </div>
+   </section>
+ </div>;
 }
 
 export function ActivityDialog({api,onClose}){

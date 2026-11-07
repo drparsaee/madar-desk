@@ -14,7 +14,7 @@ import {DEFAULT_STAGES,SettingsPanel,LanPanel,MoneyField,money,cardCostEnabled} 
 import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchText,durationText} from './productivity.jsx';
 import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
 import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
-import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog} from './teamplus.jsx';
+import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog,resolveNotificationLocation} from './teamplus.jsx';
 import {RulesPanel} from './rulespanel.jsx';
 import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
@@ -1508,6 +1508,34 @@ export default function App(){
     setAdvanced(a=>({...a,status:'all'}));
     setSearch('');
   };
+  const openNotificationTarget=async notice=>{
+    const resolve=snapshot=>resolveNotificationLocation(notice,snapshot);
+    const initial=resolve(latestData.current||data);
+    if(!initial)return false;
+    // Recheck current server permissions. A previously delivered notification
+    // does not prove continued access to its project or referenced card.
+    try{
+      const result=await api.collabRead(initial.kind==='card'?'comments':'project-comments',
+        initial.kind==='card'?initial.cardId:initial.projectId);
+      if(!Array.isArray(result))return false;
+    }catch{return false;}
+    const current=resolve(latestData.current||data);
+    if(!current||current.kind!==initial.kind||current.boardId!==initial.boardId||
+       current.workspaceId!==initial.workspaceId||current.cardId!==initial.cardId)return false;
+    setWorkspaceId(current.workspaceId);
+    setSelected(current.projectId);
+    setBoardId(current.boardId);
+    setMode('board');setFilter('all');setSearch('');
+    setMobileNavOpen(false);setDesktopNavOpen(false);
+    if(current.kind==='card'){
+      setEditorInitialSection(null);
+      setEditorId(current.cardId);
+    }else{
+      setEditorId(null);
+      setProjectChatOpen(true);
+    }
+    return true;
+  };
   const reorderCard=(cardId,toListId,anchorCardId=null,placement='end')=>{
     if(!canEdit||!activeBoard)return;
     if(!activeBoardLists(activeBoard).some(s=>s.id===toListId))return;
@@ -2472,7 +2500,8 @@ export default function App(){
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
-    {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}/>}
+    {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
+      onOpenTarget={openNotificationTarget}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
       projectId={selectedProject.id} projectName={selectedProject.name} api={api}
        canEdit={canEdit} canManage={canManage} username={isWebApp?(lanStatus.user?.username||''):(lanStatus.user?.username||'local')}
