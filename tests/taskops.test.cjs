@@ -72,6 +72,18 @@ test('paid, completed or deleted card duplicates as an independent uncompleted t
  assert.equal(src.completed,true);assert.equal(src.deleted,true);
 });
 
+test('duplicate does not inherit predecessor blockers or old Gantt schedule',()=>{
+ const original={id:'old',title:'Scheduled',projectId:'p',boardId:'b',
+   dependencies:['predecessor'],plannedStart:'2026-11-08',plannedEnd:'2026-11-12',
+   checklist:[],checklists:[]};
+ const copy=duplicateCard(original,'new','2026-11-07',()=> 'fresh-id');
+ assert.deepEqual(Array.from(copy.dependencies),[]);
+ assert.equal(copy.plannedStart,'');
+ assert.equal(copy.plannedEnd,'');
+ assert.deepEqual(original.dependencies,['predecessor']);
+ assert.equal(original.plannedStart,'2026-11-08');
+});
+
 test('moving cards cannot silently discard custom field values or unknown board labels',()=>{
  const sourceBoard={id:'a',labelDefinitions:[{id:'l1',name:'چاپ',color:'#ff0000'}],
    customFields:[{id:'f1',name:'ضخامت',type:'number',options:[]}]};
