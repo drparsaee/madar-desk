@@ -1,10 +1,10 @@
 import React,{useMemo,useRef,useState} from 'react';
 import {CalendarRange,ChevronLeft,ChevronRight,GitBranch} from 'lucide-react';
-import {barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,shiftPlan,validPlan} from './gantt_model.js';
+import {barPosition,buildGanttRows,dayNumber,dayString,ganttAxis,inspectGanttDependencies,shiftPlan,validPlan} from './gantt_model.js';
 import './gantt_view.css';
 
 const CELL_WIDTH=44;
-const ROW_HEIGHT=72;
+const ROW_HEIGHT=94;
 const LABEL_WIDTH=276;
 const humanDate=(date,calendar)=>new Date(date+'T12:00:00Z').toLocaleDateString(
   calendar==='gregorian'?'fa-IR-u-ca-gregory':'fa-IR-u-ca-persian',
@@ -26,6 +26,7 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
     (!priority||t.priority===priority)&&(!query||String(t.title||'').toLowerCase().includes(query.trim().toLowerCase()))),
     [tasks,member,priority,query]);
   const {rows,total,truncated}=useMemo(()=>buildGanttRows(shown),[shown]);
+  const diagnostics=useMemo(()=>inspectGanttDependencies(rows),[rows]);
   const axis=useMemo(()=>ganttAxis(anchor,scale),[anchor,scale]);
   const bars=useMemo(()=>new Map(rows.map(t=>[t.id,barPosition(t,axis)])),[rows,axis]);
   const width=axis.length*CELL_WIDTH;
@@ -94,6 +95,15 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
     </div>
     <p className="gantt-hint"><CalendarRange size={14}/> تاریخ شروع و پایان از موعد تحویل و نفرساعت جدا هستند.
       {canEdit?' در مقیاس روز می‌توان نوار فعالیت را جابه‌جا کرد.':''}</p>
+    <div className="gantt-schedule-health" role="status" aria-label="کنترل ارتباط و زمان‌بندی گانت">
+      <strong>{diagnostics.overlaps?`${diagnostics.conflictingCards.toLocaleString('fa-IR')} کارت دارای تداخل زمانی با پیش‌نیاز`:'برای کارت‌های نمایش‌داده‌شده تداخل زمانی شناسایی نشد'}</strong>
+      <span>{diagnostics.overlaps.toLocaleString('fa-IR')} ارتباط با شروع زودهنگام</span>
+      {(diagnostics.unknownDates>0||diagnostics.outsideView>0)&&<small>
+        {diagnostics.unknownDates>0?`${diagnostics.unknownDates.toLocaleString('fa-IR')} ارتباط به‌دلیل تاریخ ناقص بررسی نشد. `:''}
+        {diagnostics.outsideView>0?`${diagnostics.outsideView.toLocaleString('fa-IR')} پیش‌نیاز در نمای فعلی قابل بررسی نیست. `:''}
+        نبود تداخل در این نما به معنی تأیید کل پروژه نیست.
+      </small>}
+    </div>
     {error&&<p role="alert" className="gantt-error">{error}</p>}
     {truncated&&<p role="status" className="gantt-error">برای حفظ عملکرد، {rows.length.toLocaleString('fa-IR')} فعالیت نخست نشان داده می‌شود. از فیلتر استفاده کنید.</p>}
     <div className="gantt-scroll" tabIndex={0} aria-label="جدول زمانی قابل پیمایش">
@@ -107,6 +117,8 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
         <div className="gantt-content">
           {rows.map(task=>{
             const bar=bars.get(task.id),missing=dayNumber(task.plannedStart)===null||dayNumber(task.plannedEnd)===null;
+            const schedule=diagnostics.byTask.get(task.id);
+            const hasConflict=Boolean(schedule?.conflicts.length);
             return <div key={task.id} className="gantt-row" style={{height:ROW_HEIGHT}}>
               <div className="gantt-task" style={{width:LABEL_WIDTH}}>
                 <button className="gantt-task-title" type="button" title={task.title} onClick={()=>onOpen(task.id)}>{task.title||'بدون عنوان'}</button>
@@ -117,15 +129,23 @@ export function GanttView({tasks=[],calendar='jalali',canEdit=false,onUpdate=()=
                   <input type="date" aria-label={'پایان '+task.title} title="پایان برنامه" value={task.plannedEnd||''}
                     disabled={!canEdit} min={task.plannedStart||undefined} onChange={e=>change(task,'plannedEnd',e.target.value)}/>
                 </div>
+                {hasConflict&&<div className="gantt-schedule-warning">
+                  <span title={schedule.conflicts.map(c=>c.title+' · '+c.predecessorEnd).join('؛ ')}>
+                    تداخل با {schedule.conflicts.length.toLocaleString('fa-IR')} پیش‌نیاز
+                  </span>
+                  {canEdit&&schedule.suggestion&&<button type="button" title="فقط تاریخ همین کارت تغییر می‌کند؛ کارت‌های وابسته خودکار جابه‌جا نمی‌شوند"
+                    aria-label={'اصلاح تاریخ کارت '+task.title+' بر اساس پیش‌نیازها'}
+                    onClick={()=>onUpdate(task.id,schedule.suggestion)}>اصلاح تاریخ</button>}
+                </div>}
               </div>
               <div className="gantt-track" style={{width,backgroundSize:CELL_WIDTH+'px 100%'}}>
-                {bar&&<button type="button" className={'gantt-bar'+(task.completed||task.status==='done'?' is-done':'')}
+                {bar&&<button type="button" className={'gantt-bar'+(task.completed||task.status==='done'?' is-done':'')+(hasConflict?' has-conflict':'')}
                   style={{left:(bar.left*CELL_WIDTH)+'px',width:Math.max(5,bar.width*CELL_WIDTH)+'px'}}
-                  title={task.title+' | '+task.plannedStart+' تا '+task.plannedEnd}
+                  title={task.title+' | '+task.plannedStart+' تا '+task.plannedEnd+(hasConflict?' | تداخل با پیش‌نیاز':'')}
                   onPointerDown={e=>onDragStart(e,task)} onPointerUp={e=>onDragEnd(e,task)}
                   onPointerCancel={()=>{drag.current=null;}}
                   onKeyDown={()=>{suppressBarClick.current=false;}}
-                  onClick={()=>{if(suppressBarClick.current){suppressBarClick.current=false;return;}onOpen(task.id);}} aria-label={'نوار '+task.title} />}
+                  onClick={()=>{if(suppressBarClick.current){suppressBarClick.current=false;return;}onOpen(task.id);}} aria-label={'نوار '+task.title+(hasConflict?'، دارای تداخل با پیش‌نیاز':'')} />}
                 {missing&&<span className="gantt-empty">تاریخ شروع/پایان تعیین نشده</span>}
                 {!missing&&!bar&&<span className="gantt-empty">خارج از بازهٔ نمایش</span>}
               </div>
