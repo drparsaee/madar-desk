@@ -112,7 +112,11 @@ class IntegrationRouter:
             raise TypeError("Expected a running Madar LAN service")
         self.service = service
         self._lock = threading.RLock()
-        self._keys = {}      # SHA256(secret) -> metadata
+        # Compatibility with historical read-only test introspection. The
+        # source of truth is the durable hash-only registry, NOT this cache.
+        self._keys = {}
+        from integration_key_registry import IntegrationKeyRegistry
+        self._key_store = IntegrationKeyRegistry(service.users_path)
         self._replays = {}   # (key_id, idempotency_key) -> response + digest
 
     def _require_https(self):
@@ -125,8 +129,6 @@ class IntegrationRouter:
 
     def _prune(self):
         now = time.time()
-        self._keys = {key: item for key, item in self._keys.items()
-                      if item["expiresAt"] > now}
         self._replays = {key: item for key, item in self._replays.items()
                          if item["expiresAt"] > now}
         if len(self._replays) > _MAX_REPLAYS:
@@ -151,8 +153,6 @@ class IntegrationRouter:
             if type(lifetime_seconds) is not int or not 60 <= lifetime_seconds <= 86400:
                 raise ValueError("Key TTL must be between 60 and 86400 seconds")
             self._prune()
-            if len(self._keys) >= _MAX_KEYS:
-                raise RuntimeError("Integration key limit reached; revoke an old key")
             target = self.service.users[username]
             # Password reset/replacement immediately invalidates all old keys.
             password_revision = hashlib.sha256(target["passwordHash"].encode()).digest()
@@ -160,11 +160,10 @@ class IntegrationRouter:
             digest = hashlib.sha256(raw.encode("ascii")).digest()
             key_id = "ik_" + secrets.token_hex(12)
             expiry = time.time() + lifetime_seconds
-            self._keys[digest] = {
-                "keyId": key_id, "username": username,
-                "permissions": frozenset(permissions),
-                "passwordRevision": password_revision, "expiresAt": expiry,
-            }
+            self._key_store.issue(digest, key_id=key_id, username=username,
+                                  permissions=frozenset(permissions),
+                                  password_revision=password_revision,
+                                  expires_at=expiry, now=time.time(), limit=_MAX_KEYS)
             return {"key": raw, "keyId": key_id, "expiresAt": int(expiry),
                     "permissions": sorted(set(permissions)), "username": username}
 
@@ -173,22 +172,18 @@ class IntegrationRouter:
             admin = self.service.account_for(admin_lan_token)
             if admin["role"] != "admin":
                 raise PermissionError("Only a LAN administrator can revoke integration keys")
-            matches = [digest for digest, item in self._keys.items()
-                       if item["keyId"] == key_id]
-            if not matches:
-                return False
-            for digest in matches:
-                del self._keys[digest]
+            changed = self._key_store.revoke(key_id, now=time.time())
             self._replays = {key: item for key, item in self._replays.items()
                              if key[0] != key_id}
-            return True
+            return changed
 
     def _authorize(self, headers, permission):
         raw = headers.get("x-madar-integration-key")
         if not isinstance(raw, str) or not _KEY_RE.fullmatch(raw):
             raise _Problem(401, "authentication_required")
-        entry = self._keys.get(hashlib.sha256(raw.encode("ascii")).digest())
-        if entry is None or entry["expiresAt"] <= time.time():
+        entry = self._key_store.lookup(hashlib.sha256(raw.encode("ascii")).digest(),
+                                       now=time.time())
+        if entry is None:
             raise _Problem(401, "invalid_or_expired_key")
         account = self.service.users.get(entry["username"])
         if not account:
