@@ -587,6 +587,12 @@ class LanService:
                 self.failed.pop(ip, None)
                 self.failed_target.pop(ip, None)
             self.failed_accounts.pop(key, None)
+            # Abandoned tokens otherwise survive indefinitely unless their
+            # exact bearer value is presented again after expiry. Reclaim them
+            # on a successful login without touching still-valid sessions.
+            for session_token, record in list(self.sessions.items()):
+                if now >= record[1]:
+                    del self.sessions[session_token]
             token = secrets.token_urlsafe(32)
             self.sessions[token] = (username, now + 12 * 3600)
             return {"token": token, "user": self._public_user(account)}

@@ -5,6 +5,7 @@ Only uses a disposable loopback host and synthetic identities.
 
 import http.client
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -40,29 +41,44 @@ class LanOriginAndFramingTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def assert_malformed_rejection(self, attempt):
+        # A Windows TCP stack can abort a malformed request that carries an
+        # unread body before the server's 400 response reaches http.client.
+        # Both outcomes reject the request; a live host and no issued session
+        # are the security invariants. Never accept a timeout or a normal 2xx.
+        try:
+            status = attempt()
+        except (ConnectionAbortedError, ConnectionResetError) as error:
+            if os.name != "nt" or getattr(error, "winerror", None) not in (10053, 10054):
+                raise
+        else:
+            self.assertEqual(status, 400)
+        self.assertEqual(self.service.sessions, {})
+        self.assertEqual(self.request("GET", "/api/me")[0], 403)
+
     def test_post_rejects_signed_content_length_before_login(self):
         payload = json.dumps({"username": "test-owner", "password": "test-only-secret-123"}).encode()
-        status, _ = self.request("POST", "/api/login", payload,
-                                 {"Content-Type": "application/json",
-                                  "Content-Length": "+" + str(len(payload))})
-        self.assertEqual(status, 400)
-        self.assertEqual(self.service.sessions, {})
+        self.assert_malformed_rejection(lambda: self.request(
+            "POST", "/api/login", payload,
+            {"Content-Type": "application/json",
+             "Content-Length": "+" + str(len(payload))})[0])
 
     def test_http11_missing_host_rejected_before_login(self):
         payload = json.dumps({"username": "test-owner", "password": "test-only-secret-123"}).encode()
-        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=4)
-        try:
-            conn.putrequest("POST", "/api/login", skip_host=True)
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", str(len(payload)))
-            conn.endheaders(payload)
-            response = conn.getresponse()
-            status = response.status
-            response.read()
-        finally:
-            conn.close()
-        self.assertEqual(status, 400)
-        self.assertEqual(self.service.sessions, {})
+        def malformed_request():
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=4)
+            try:
+                conn.putrequest("POST", "/api/login", skip_host=True)
+                conn.putheader("Content-Type", "application/json")
+                conn.putheader("Content-Length", str(len(payload)))
+                conn.endheaders(payload)
+                response = conn.getresponse()
+                status = response.status
+                response.read()
+                return status
+            finally:
+                conn.close()
+        self.assert_malformed_rejection(malformed_request)
 
     def test_patch_rejects_signed_content_length_before_routing(self):
         status, _ = self.request("PATCH", "/api/me", b"{}",
