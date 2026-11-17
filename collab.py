@@ -205,21 +205,23 @@ def _validate_rule(rule):
 
 def empty_state():
     """Initial JSON-serializable collaboration state, schema version 1."""
-    return {"schemaVersion": SCHEMA_VERSION, "comments": [], "notifications": [],
-            "activity": [], "watchers": {}, "rules": [], "runs": [], "receipts": {}}
+    return {"schemaVersion": SCHEMA_VERSION, "comments": [], "projectComments": [],
+            "notifications": [], "activity": [], "watchers": {}, "rules": [],
+            "runs": [], "receipts": {}}
 
 
 def validate_state(state):
     """Fail closed on corrupt/mismatched persisted collaboration snapshots."""
-    _record(state, {"schemaVersion", "comments", "notifications", "activity", "watchers", "rules", "runs", "receipts"})
+    _record(state, {"schemaVersion", "comments", "notifications", "activity", "watchers", "rules", "runs", "receipts"},
+            {"projectComments"})
     if type(state["schemaVersion"]) is not int or state["schemaVersion"] != SCHEMA_VERSION:
         raise ValueError("Unsupported collaboration schema")
-    for field in ("comments", "notifications", "activity", "rules", "runs"):
-        if not isinstance(state[field], list):
+    for field in ("comments", "projectComments", "notifications", "activity", "rules", "runs"):
+        if not isinstance(state.get(field, []), list):
             raise ValueError("Invalid " + field)
-        _unique(state[field], "id")
+        _unique(state.get(field, []), "id")
     for comment in state["comments"]:
-        _record(comment, {"id", "cardId", "projectId", "author", "text", "mentions", "createdAt", "updatedAt", "deletedAt"})
+        _record(comment, {"id", "cardId", "projectId", "author", "text", "mentions", "createdAt", "updatedAt", "deletedAt"}, {"replyToId"})
         for key in ("id", "cardId", "projectId"):
             _identifier(comment[key], key)
         _username(comment["author"])
@@ -236,10 +238,43 @@ def validate_state(state):
             _timestamp(comment["deletedAt"])
             if comment["text"] or comment["mentions"]:
                 raise ValueError("Deleted comment retains contents")
+        if "replyToId" in comment and not isinstance(comment["replyToId"], str):
+            raise ValueError("Invalid card reply field")
+        if "replyToId" in comment and comment["replyToId"]:
+            reply = next((c for c in state["comments"] if c["id"] == comment["replyToId"]), None)
+            if not reply or reply["cardId"] != comment["cardId"] or reply["projectId"] != comment["projectId"]:
+                raise ValueError("Invalid card comment reply target")
+    for comment in state.get("projectComments", []):
+        _record(comment, {"id", "projectId", "author", "text", "mentions",
+                          "createdAt", "updatedAt", "deletedAt", "replyToId"})
+        for field in ("id", "projectId"):
+            _identifier(comment[field], field)
+        _username(comment["author"])
+        _text(comment["text"], "project message", 4000, allow_empty=True)
+        if not isinstance(comment["replyToId"], str):
+            raise ValueError("Invalid project reply field")
+        if not isinstance(comment["mentions"], list) or len(comment["mentions"]) > 100:
+            raise ValueError("Invalid project message mentions")
+        for member in comment["mentions"]:
+            _username(member)
+        if len(set(comment["mentions"])) != len(comment["mentions"]):
+            raise ValueError("Duplicate project message mentions")
+        _timestamp(comment["createdAt"])
+        _timestamp(comment["updatedAt"])
+        if comment["deletedAt"] is not None:
+            _timestamp(comment["deletedAt"])
+            if comment["text"] or comment["mentions"]:
+                raise ValueError("Deleted project message retains content")
+        if comment["replyToId"]:
+            parent = next((c for c in state["projectComments"] if c["id"] == comment["replyToId"]), None)
+            if not parent or parent["projectId"] != comment["projectId"]:
+                raise ValueError("Invalid project reply target")
     for notice in state["notifications"]:
         _record(notice, {"id", "recipient", "projectId", "cardId", "kind", "originId", "message", "createdAt", "readAt"})
-        for key in ("id", "projectId", "cardId", "originId"):
+        for key in ("id", "projectId", "originId"):
             _identifier(notice[key], key)
+        if notice["cardId"] is not None:
+            _identifier(notice["cardId"], "cardId")
         _username(notice["recipient"])
         if notice["kind"] not in {"mention", "watch", "rule"}:
             raise ValueError("Invalid notification kind")
@@ -254,7 +289,9 @@ def validate_state(state):
         if entry["cardId"] is not None:
             _identifier(entry["cardId"], "cardId")
         _username(entry["actor"])
-        if entry["action"] not in {"comment.add", "comment.edit", "comment.delete", "watch.set",
+        if entry["action"] not in {"comment.add", "comment.edit", "comment.delete",
+                                   "comment.reply", "project.comment.add", "project.comment.edit",
+                                   "project.comment.delete", "watch.set",
                                    "rule.upsert", "rule.delete", "event.publish", "automation.comment"}:
             raise ValueError("Invalid activity action")
         _timestamp(entry["at"])
@@ -315,14 +352,15 @@ def _notify(state, *, origin, kind, recipients, actor, project_id, card_id, user
     return created
 
 
-def _append_comment(state, *, origin, text, actor, card, users, now, automated=False):
+def _append_comment(state, *, origin, text, actor, card, users, now, automated=False, reply_to_id=""):
     project_id, card_id = card["projectId"], card["id"]
     mentions = [name for name in extract_mentions(text)
                 if name in users and _permitted(users[name], project_id)]
     comment_id = _id("c_", origin)
     state["comments"].append({"id": comment_id, "cardId": card_id, "projectId": project_id,
                               "author": actor, "text": text, "mentions": mentions,
-                              "createdAt": now, "updatedAt": now, "deletedAt": None})
+                              "createdAt": now, "updatedAt": now, "deletedAt": None,
+                              **({"replyToId": reply_to_id} if reply_to_id else {})})
     watchers = state["watchers"].get(card_id, [])
     recipients = mentions + [name for name in watchers if name not in mentions]
     notifications = _notify(state, origin=origin, kind="mention", recipients=mentions,
@@ -331,7 +369,8 @@ def _append_comment(state, *, origin, text, actor, card, users, now, automated=F
     notifications += _notify(state, origin=origin, kind="watch", recipients=[n for n in recipients if n not in mentions],
                              actor=actor, project_id=project_id, card_id=card_id,
                              users=users, now=now, message="New comment on a watched card")
-    _activity(state, origin, actor, "automation.comment" if automated else "comment.add",
+    _activity(state, origin, actor, "automation.comment" if automated else
+              "comment.reply" if reply_to_id else "comment.add",
               project_id, card_id, now)
     return {"commentId": comment_id, "notificationIds": notifications}
 
@@ -390,11 +429,16 @@ def apply_command(state, command, *, actor, accounts, cards, projects, now):
     validate_state(state)
     users, indexed_cards, indexed_projects = _context(actor, accounts, cards, projects)
     _timestamp(now)
-    _record(command, {"type", "eventId"}, {"cardId", "text", "commentId", "enabled",
+    _record(command, {"type", "eventId"}, {"cardId", "projectId", "replyToId",
+                                           "text", "commentId", "enabled",
                                            "notificationId", "rule", "ruleId", "trigger", "data"})
     kind, event_id = command["type"], _identifier(command["eventId"], "eventId")
     fields = {
-        "comment.add": {"cardId", "text"}, "comment.edit": {"commentId", "text"},
+        "comment.add": {"cardId", "text"}, "comment.reply": {"cardId", "text", "replyToId"},
+        "project.comment.add": {"projectId", "text", "replyToId"},
+        "project.comment.edit": {"commentId", "text"},
+        "project.comment.delete": {"commentId"},
+        "comment.edit": {"commentId", "text"},
         "comment.delete": {"commentId"}, "watch.set": {"cardId", "enabled"},
         "notification.read": {"notificationId"}, "rule.upsert": {"rule"},
         "rule.delete": {"ruleId"}, "event.publish": {"cardId", "trigger", "data"},
@@ -412,13 +456,71 @@ def apply_command(state, command, *, actor, accounts, cards, projects, now):
         return {"state": deepcopy(state), "changed": False, "result": deepcopy(receipt["result"])}
     next_state = deepcopy(state)
     user = users[actor]
-    if kind == "comment.add":
+    if kind in {"comment.add", "comment.reply"}:
         card = _card(indexed_cards, command["cardId"])
         _require(user, card["projectId"], write=True)
         receipt_project = card["projectId"]
         _text(command["text"], "comment text", 4000)
+        reply = ""
+        if kind == "comment.reply":
+            reply = _identifier(command["replyToId"], "replyToId")
+            parent = _comment(next_state, reply)
+            if parent is None or parent["deletedAt"] or parent["cardId"] != card["id"]:
+                raise ValueError("Invalid card comment reply")
         result = _append_comment(next_state, origin=event_id, text=command["text"],
-                                 actor=actor, card=card, users=users, now=now)
+                                 actor=actor, card=card, users=users, now=now, reply_to_id=reply)
+    elif kind == "project.comment.add":
+        project_id = _identifier(command["projectId"], "projectId")
+        if project_id not in indexed_projects:
+            raise ValueError("Unknown project")
+        _require(user, project_id, write=True)
+        _text(command["text"], "project comment", 4000)
+        reply = command["replyToId"]
+        if reply:
+            _identifier(reply, "replyToId")
+            parent = next((m for m in next_state.get("projectComments", []) if m["id"] == reply), None)
+            if not parent or parent["projectId"] != project_id or parent["deletedAt"]:
+                raise ValueError("Invalid project reply")
+        elif reply != "":
+            raise ValueError("Invalid project reply")
+        receipt_project = project_id
+        mentions = [name for name in extract_mentions(command["text"])
+                    if name in users and _permitted(users[name], project_id)]
+        comment_id = _id("pc_", event_id)
+        next_state.setdefault("projectComments", []).append({
+            "id": comment_id, "projectId": project_id, "author": actor,
+            "text": command["text"], "mentions": mentions,
+            "replyToId": reply, "createdAt": now, "updatedAt": now, "deletedAt": None})
+        notifications = _notify(next_state, origin=event_id, kind="mention",
+                                recipients=mentions, actor=actor, project_id=project_id,
+                                card_id=None, users=users, now=now,
+                                message="You were mentioned in a project conversation")
+        _activity(next_state, event_id, actor, kind, project_id, None, now)
+        result = {"commentId": comment_id, "notificationIds": notifications}
+    elif kind in {"project.comment.edit", "project.comment.delete"}:
+        comment_id = _identifier(command["commentId"], "commentId")
+        comment = next((m for m in next_state.get("projectComments", [])
+                        if m["id"] == comment_id), None)
+        if not comment or comment["deletedAt"] is not None:
+            raise ValueError("Project message not found")
+        receipt_project = comment["projectId"]
+        if receipt_project not in indexed_projects:
+            raise ValueError("Project not found")
+        _require(user, receipt_project, write=True)
+        if kind == "project.comment.edit" and comment["author"] != actor:
+            raise PermissionError("Only author may edit a message")
+        if kind == "project.comment.delete" and comment["author"] != actor and user["role"] != "admin":
+            raise PermissionError("Only author or admin may delete a message")
+        if kind == "project.comment.edit":
+            _text(command["text"], "project comment", 4000)
+            comment["text"] = command["text"]
+            comment["mentions"] = [name for name in extract_mentions(command["text"])
+                                   if name in users and _permitted(users[name], receipt_project)]
+        else:
+            comment["text"], comment["mentions"], comment["deletedAt"] = "", [], now
+        comment["updatedAt"] = now
+        _activity(next_state, event_id, actor, kind, receipt_project, None, now)
+        result = {"commentId": comment_id, "notificationIds": []}
     elif kind in {"comment.edit", "comment.delete"}:
         comment = _comment(next_state, command["commentId"])
         if comment is None or comment["deletedAt"] is not None:
@@ -529,6 +631,17 @@ def list_comments(state, card_id, *, actor, accounts, cards, projects):
                      if item["cardId"] == card_id and item["projectId"] == card["projectId"]])
 
 
+def list_project_comments(state, project_id, *, actor, accounts, cards, projects):
+    validate_state(state)
+    users, _, indexed_projects = _context(actor, accounts, cards, projects)
+    project_id = _identifier(project_id, "projectId")
+    if project_id not in indexed_projects:
+        raise ValueError("Unknown project")
+    _require(users[actor], project_id)
+    return deepcopy([item for item in state.get("projectComments", [])
+                     if item["projectId"] == project_id])
+
+
 def list_notifications(state, *, actor, accounts, cards, projects, unread_only=False):
     validate_state(state)
     users, _, _ = _context(actor, accounts, cards, projects)
@@ -560,5 +673,5 @@ def list_activity(state, *, actor, accounts, cards, projects, limit=100):
 
 
 __all__ = ["SCHEMA_VERSION", "TRIGGERS", "empty_state", "validate_state",
-           "extract_mentions", "apply_command", "list_comments",
+           "extract_mentions", "apply_command", "list_comments", "list_project_comments",
            "list_notifications", "list_activity"]

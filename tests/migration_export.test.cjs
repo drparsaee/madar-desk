@@ -100,6 +100,30 @@ test('round trip creates new safe independent model and validates against native
   assert.equal(checked.status,0,checked.stderr||checked.stdout);
   assert.match(checked.stdout,/VALID_M09/);
 });
+test('portable export preserves dependency DAG and planned dates but rejects corrupted graphs',()=>{
+  const state=fixture();
+  const older=state.tasks.find(t=>t.id==='t2'),newer=state.tasks.find(t=>t.id==='t1');
+  Object.assign(older,{projectId:'p1',boardId:'b1',listId:'todo',
+    plannedStart:'2026-11-08',plannedEnd:'2026-11-09'});
+  Object.assign(newer,{plannedStart:'2026-11-10',plannedEnd:'2026-11-12',dependencies:['t2']});
+  const bundle=createPortableExport(state,{acknowledgeFinancialExclusion:true});
+  const imported=importPortableSubset(bundle);
+  assert.deepEqual(imported.tasks.find(t=>t.id==='t1').dependencies,['t2']);
+  assert.equal(imported.tasks.find(t=>t.id==='t1').plannedStart,'2026-11-10');
+  assert.equal(imported.tasks.find(t=>t.id==='t1').plannedEnd,'2026-11-12');
+  assert.deepEqual(createPortableExport(imported).data,bundle.data);
+  const cycle=structuredClone(state);
+  cycle.tasks.find(t=>t.id==='t2').dependencies=['t1'];
+  assert.throws(()=>createPortableExport(cycle,{acknowledgeFinancialExclusion:true}),/cycle/);
+  const cross=structuredClone(state);
+  cross.tasks.find(t=>t.id==='t2').projectId='p2';
+  cross.tasks.find(t=>t.id==='t2').boardId='b2';
+  cross.tasks.find(t=>t.id==='t2').listId='todo2';
+  assert.throws(()=>createPortableExport(cross,{acknowledgeFinancialExclusion:true}),/dependency reference/);
+  const invalidDate=structuredClone(state);
+  invalidDate.tasks.find(t=>t.id==='t1').plannedEnd='2026-11-01';
+  assert.throws(()=>createPortableExport(invalidDate,{acknowledgeFinancialExclusion:true}),/after end date/);
+});
 
 test('attachment manifest has metadata only and rejects binaries, incorrect associations, duplicates',()=>{
   const sha='a'.repeat(64),metadata={id:'att1',cardId:'t1',projectId:'p1',

@@ -57,6 +57,14 @@ class CollaborationIntegrationTests(unittest.TestCase):
                                'text':'توضیح برای @admin'},writer)
             self.assertEqual(len(req('/api/comments?cardId=example-1',token=owner)['items']),1)
             self.assertEqual(len(req('/api/notifications',token=owner)['items']),1)
+            req('/api/collab',{'type':'project.comment.add','eventId':'project-comment-1',
+                               'projectId':'p-sample','text':'گفت‌وگوی پروژه @admin',
+                               'replyToId':''},writer)
+            self.assertEqual(len(req('/api/project-comments?projectId=p-sample',
+                                     token=owner)['items']),1)
+            with self.assertRaises(HTTPError) as caught:
+                req('/api/project-comments?projectId=p-sample',token=viewer)
+            self.assertEqual(caught.exception.code,403)
             with self.assertRaises(HTTPError) as caught:
                 req('/api/comments?cardId=example-1',token=viewer)
             self.assertEqual(caught.exception.code,403)

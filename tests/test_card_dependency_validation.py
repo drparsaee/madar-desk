@@ -13,6 +13,19 @@ def cards():
 
 
 class CardDependencyValidation(unittest.TestCase):
+    def test_planning_range_is_checked_without_changing_due_date(self):
+        state = native_app.normalize_state(native_app.initial_state())
+        task = state["tasks"][0]
+        task["plannedStart"] = "2026-11-08"
+        task["plannedEnd"] = "2026-11-12"
+        self.assertTrue(native_app.is_valid(state))
+        task["plannedEnd"] = "2026-11-07"
+        with self.assertRaises(ValueError):
+            native_app.is_valid(state)
+        task["plannedEnd"] = "2026-02-30"
+        with self.assertRaises(ValueError):
+            native_app.is_valid(state)
+
     def test_no_dependency_legacy_is_accepted(self):
         self.assertTrue(validate_task_dependencies(cards()[:1]))
 

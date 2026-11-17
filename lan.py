@@ -1027,6 +1027,8 @@ class LanService:
                       "cards": state["tasks"], "projects": state["projects"]}
             if kind == "comments":
                 return collab.list_comments(stored, card_id, **kwargs)
+            if kind == "project-comments":
+                return collab.list_project_comments(stored, card_id, **kwargs)
             if kind == "notifications":
                 return collab.list_notifications(stored, **kwargs)
             if kind == "rules":
@@ -1411,7 +1413,7 @@ class LanService:
                     return
                 if endpoint not in ("/api/login", "/api/state", "/api/me", "/api/display-roles", "/api/users", "/api/user",
                                     "/api/profiles", "/api/profile", "/api/password",
-                                    "/api/reset-password", "/api/comments", "/api/notifications",
+                                    "/api/reset-password", "/api/comments", "/api/project-comments", "/api/notifications",
                                     "/api/activity", "/api/collab", "/api/finance", "/api/finance-status",
                                     "/api/finance-overview", "/api/accounting",
                                     "/api/standalone-accounting", "/api/standalone-accounting/prepare",
@@ -1467,11 +1469,11 @@ class LanService:
                     if self.command == "POST" and endpoint == "/api/state":
                         return self.reply(200, service.write_state(token, payload.get("state"),
                                                                     payload.get("revision")))
-                    if self.command == "GET" and endpoint in ("/api/comments", "/api/notifications", "/api/activity", "/api/rules"):
+                    if self.command == "GET" and endpoint in ("/api/comments", "/api/project-comments", "/api/notifications", "/api/activity", "/api/rules"):
                         params = parse_qs(urlparse(self.path).query)
                         return self.reply(200, {"items": service.collab_read(
                             token, endpoint.removeprefix("/api/"), params.get(
-                                "projectId" if endpoint == "/api/rules" else "cardId", [""])[0])})
+                                "projectId" if endpoint in ("/api/rules", "/api/project-comments") else "cardId", [""])[0])})
                     if self.command == "POST" and endpoint == "/api/collab":
                         return self.reply(200, {"result": service.collab_command(token, payload)})
                     if self.command == "GET" and endpoint == "/api/buttons":

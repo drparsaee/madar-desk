@@ -13,6 +13,49 @@ LATER = "2026-10-20T15:35:00Z"
 
 
 class CollaborationTests(unittest.TestCase):
+    def test_project_conversation_replies_idempotency_and_acl(self):
+        first = self.operate("alice", "project.comment.add", projectId="p1",
+                             text="سلام @bob", replyToId="",
+                             event_id="project-message-1")
+        parent = first["result"]["commentId"]
+        duplicate = self.operate("alice", "project.comment.add", projectId="p1",
+                                 text="سلام @bob", replyToId="",
+                                 event_id="project-message-1")
+        self.assertEqual(first["result"], duplicate["result"])
+        self.assertEqual(len(self.state["projectComments"]), 1)
+        self.assertEqual(self.notices("bob")[0]["cardId"], None)
+        child = self.operate("dave", "project.comment.add", projectId="p1",
+                             text="پاسخ", replyToId=parent)
+        self.assertEqual(self.state["projectComments"][1]["replyToId"], parent)
+        self.assertTrue(child["result"]["commentId"])
+        with self.assertRaises(PermissionError):
+            self.operate("carol", "project.comment.add",
+                         projectId="p1", text="not mine", replyToId="")
+        with self.assertRaises(PermissionError):
+            self.operate("bob", "project.comment.add",
+                         projectId="p1", text="viewer", replyToId="")
+        from collab import list_project_comments
+        self.assertEqual(len(list_project_comments(
+            self.state, "p1", actor="bob", accounts=self.accounts,
+            cards=self.cards, projects=self.projects)), 2)
+        with self.assertRaises(PermissionError):
+            list_project_comments(self.state, "p1", actor="carol",
+                                  accounts=self.accounts, cards=self.cards, projects=self.projects)
+        with self.assertRaises(PermissionError):
+            self.operate("dave", "project.comment.edit", commentId=parent, text="steal")
+        self.operate("alice", "project.comment.edit", commentId=parent, text="ویرایش")
+        self.operate("admin", "project.comment.delete", commentId=parent)
+        self.assertEqual(self.state["projectComments"][0]["text"], "")
+
+    def test_card_reply_requires_a_parent_in_the_same_card(self):
+        parent = self.operate("alice", "comment.add", cardId="c1", text="first")["result"]["commentId"]
+        reply = self.operate("dave", "comment.reply", cardId="c1",
+                             replyToId=parent, text="second")
+        self.assertEqual(self.comments()[1]["replyToId"], parent)
+        self.assertTrue(reply["result"]["commentId"])
+        with self.assertRaises(ValueError):
+            self.operate("admin", "comment.reply", cardId="c2",
+                         replyToId=parent, text="wrong thread")
     def setUp(self):
         self.state = empty_state()
         self.projects = [{"id": "p1"}, {"id": "p2"}]
