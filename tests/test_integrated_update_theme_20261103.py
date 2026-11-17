@@ -13,8 +13,11 @@ from standalone_accounting_desktop import AccountingDesktopAPI, JS_BRIDGE
 
 class IntegratedUpdaterTests(unittest.TestCase):
     def test_release_bridge_exposes_only_fixed_host_update_commands(self):
-        from native_app import ACCOUNTING_JS_BRIDGE, JS_BRIDGE as TASK_JS_BRIDGE
-        for bridge in (JS_BRIDGE, ACCOUNTING_JS_BRIDGE, TASK_JS_BRIDGE):
+        from native_app import JS_BRIDGE as TASK_JS_BRIDGE
+        # The independent accounting desktop keeps its updater API; the
+        # Madar task host intentionally no longer exports an accounting bridge.
+        self.assertFalse(hasattr(native_app, "ACCOUNTING_JS_BRIDGE"))
+        for bridge in (JS_BRIDGE, TASK_JS_BRIDGE):
             for name in ("releaseCheck", "releaseDownload", "releaseInstall"):
                 self.assertIn("'" + name + "'", bridge)
         for command in ("saveState", "plannerWrite", "runCommand"):

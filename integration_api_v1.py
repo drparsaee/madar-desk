@@ -27,6 +27,8 @@ _REPLAY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}\Z", re.ASCII)
 _READ_FIELDS = ("id", "projectId", "title", "status", "priority", "dueDate")
 _RESPONSE_LIMIT = 200
 _MAX_BODY = 8192
+_MAX_MAILBOX_REPLY_BODY = 32768
+_MAILBOX_PATHS = frozenset({"/mailbox/poll", "/mailbox/reply", "/mailbox/delivery-ack"})
 _MAX_KEYS = 512
 _MAX_REPLAYS = 1024
 
@@ -256,9 +258,9 @@ class IntegrationRouter:
         if not parsed.path.startswith(API_PREFIX + "/"):
             raise _Problem(404, "not_found")
         suffix = parsed.path[len(API_PREFIX):]
-        if method == "POST" and suffix != "/pair":
+        if method == "POST" and suffix not in ({"/pair"} | _MAILBOX_PATHS):
             raise _Problem(405, "method_not_allowed")
-        if method != "POST" and suffix == "/pair":
+        if method != "POST" and suffix in ({"/pair"} | _MAILBOX_PATHS):
             raise _Problem(405, "method_not_allowed")
         if not isinstance(headers, dict) or any(
                 not isinstance(k, str) or not isinstance(v, str) or len(k) > 120
@@ -270,7 +272,8 @@ class IntegrationRouter:
             if low in normalized:
                 raise _Problem(400, "duplicate_headers")
             normalized[low] = value
-        if not isinstance(body, bytes) or len(body) > _MAX_BODY:
+        max_body = _MAX_MAILBOX_REPLY_BODY if suffix == "/mailbox/reply" else _MAX_BODY
+        if not isinstance(body, bytes) or len(body) > max_body:
             raise _Problem(413, "invalid_body_length")
         if method == "GET" and body:
             raise _Problem(400, "get_body_forbidden")
@@ -293,7 +296,7 @@ class IntegrationRouter:
                 self._require_https()
                 suffix, query, normalized = self._parse(method, path, headers or {}, body)
                 self._prune()
-                if method == "POST":
+                if method == "POST" and suffix == "/pair":
                     if query:
                         raise _Problem(400, "invalid_query")
                     from integration_pairing_v1 import PairingDenied
@@ -326,6 +329,14 @@ class IntegrationRouter:
                                            "permissions": issued["permissions"]})
                 permission = "write" if method == "PATCH" else "read"
                 entry, account = self._authorize(normalized, permission)
+                if suffix in _MAILBOX_PATHS:
+                    if method != "POST" or query:
+                        raise _Problem(400, "invalid_mailbox_query")
+                    from integration_mailbox_http_v1 import dispatch_authenticated_peer
+                    return _response(200, dispatch_authenticated_peer(
+                        self, path=suffix, payload=_strict_object(body),
+                        peer_entry=entry,
+                        bearer=normalized["x-madar-integration-key"]))
                 token = self._session(account["username"])
                 try:
                     return self._dispatch(method, suffix, query, normalized, body,

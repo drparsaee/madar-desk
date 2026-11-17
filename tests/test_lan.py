@@ -87,30 +87,29 @@ class LanTests(unittest.TestCase):
             ("Authorization", "Bearer " + self.token),
             ("Authorization", "Bearer " + self.token)]), 400)
 
-    def test_standalone_prepare_http_route_is_reachable_and_admin_guarded(self):
-        # Deliberately unknown synthetic task: admin reaches the validated
-        # handler (400), rather than a dead endpoint (404). Unauthenticated
-        # requests cannot even attempt authoritative task resolution (403).
+    def test_standalone_prepare_http_route_remains_retired_for_every_role(self):
+        # The separate Taraz application now owns official financial actions.
+        # The obsolete standalone prepare endpoint must remain absent for
+        # *every* caller, including LAN administrators.
         request = {"taskId": "unknown.synthetic", "expenseId": None}
-        self.assertStatus(403, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/prepare", request))
-        self.assertStatus(400, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/prepare", request, self.token))
-        self.assertStatus(400, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/prepare", {
                 **request, "unitPrice": 1}, self.token))
 
-    def test_standalone_quote_http_uses_exact_accounting_engine_and_admin_acl(self):
+    def test_standalone_quote_http_remains_retired_without_local_finance(self):
         payload = {"quantity": 100, "unitPrice": 20000, "currency": "TOMAN"}
-        self.assertStatus(403, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/quote", payload))
         editor = self.create_user("quote-editor", "editor")
-        self.assertStatus(403, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/quote", payload, editor))
-        quote = self.request("/api/standalone-accounting/quote", payload, self.token)
-        self.assertEqual((quote["status"], quote["amountRial"]),
-                         ("quote-only", "20000000"))
-        self.assertStatus(400, lambda: self.request(
+        self.assertStatus(404, lambda: self.request(
+            "/api/standalone-accounting/quote", payload, self.token))
+        self.assertStatus(404, lambda: self.request(
             "/api/standalone-accounting/quote", {**payload, "quantity": True},
             self.token))
 

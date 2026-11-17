@@ -72,7 +72,21 @@ class MountedIntegrationSecurityTests(unittest.TestCase):
 
     def _issue(self, username="editor", permissions=("read",), ttl=3600):
         return self.bridge.integrationIssueKey(username, list(permissions),
-                                               lifetime_seconds=ttl)
+            lifetime_seconds=ttl,
+            adminCredentials={"username": "admin", "password": SECRET})
+
+    def test_native_bridge_requires_fresh_admin_password_for_legacy_key_methods(self):
+        with self.assertRaises(PermissionError):
+            self.bridge.integrationIssueKey("editor", ["read"])
+        with self.assertRaises(PermissionError):
+            self.bridge.integrationStartPairing("editor", "TARAZ", ["read"])
+        with self.assertRaises(PermissionError):
+            self.bridge.integrationConnections()
+        with self.assertRaises(PermissionError):
+            self.bridge.integrationRevokeKey("ik_"+"a"*24)
+        with self.assertRaises(PermissionError):
+            self.bridge.integrationIssueKey("editor", ["read"],
+                adminCredentials={"username": "admin", "password": "wrong"})
 
     def _connection(self, *, tls=True):
         if tls:
@@ -183,13 +197,18 @@ class MountedIntegrationSecurityTests(unittest.TestCase):
 
     def test_integration_key_cannot_authenticate_at_legacy_lan_endpoint(self):
         key = self._issue("admin", ("read", "write"))["key"]
+        # Retired standalone finance endpoints must remain *absent* (404),
+        # not be reopened merely to return a 403 for forged credentials.
+        retired_finance = frozenset({
+            "/api/finance", "/api/finance-status", "/api/finance-overview",
+        })
         for path in ("/api/state", "/api/finance",
                      "/api/finance-status", "/api/finance-overview",
                      "/api/users"):
             with self.subTest(path=path):
                 code, payload, _ = self._request("GET", path, headers=[
                     ("Authorization", "Bearer " + key)])
-                self.assertEqual(code, 403)
+                self.assertEqual(code, 404 if path in retired_finance else 403)
                 self.assertIn("error", payload)
         lan_token = self.service.authenticate("admin", SECRET)["token"]
         for bad_key in (None, "Bearer " + lan_token, lan_token, "invalid"):

@@ -118,7 +118,16 @@ test('finance and privileged tool visibility never bypasses the existing permiss
   for(const feature of restricted){
     assert.equal(m.isInterfaceFeatureVisible('finance',feature,{canEdit:true,aiAvailable:true}),false,feature);
   }
-  assert.equal(m.isInterfaceFeatureVisible('finance','financeHub',{canManage:true}),true);
+  // These historical standalone-finance entry points are intentionally not
+  // in the Madar UI allowlist after Taraz became the finance authority.
+  for(const feature of ['financeHub','projectFinance','profitPeek',
+    'taskCostControls','checklistCostControls','projectPricing',
+    'accountingDashboard']){
+    for(const mode of m.INTERFACE_MODES){
+      assert.equal(m.isInterfaceFeatureVisible(mode,feature,{canManage:true}),false,
+        `${feature}: ${mode} must not resurrect standalone finance`);
+    }
+  }
   assert.equal(m.isInterfaceFeatureVisible('operations','financeHub',{canManage:true}),false);
   assert.equal(m.isInterfaceFeatureVisible('basic','financeHub',{canManage:true}),false);
   assert.equal(m.isInterfaceFeatureVisible('finance','aiAgent',{canManage:true}),false);

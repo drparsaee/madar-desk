@@ -15,6 +15,7 @@ import {CalendarField,SharedLinks,TimeDashboard,displayDate,similarTasks,searchT
 import {Avatar,AssignedMembers,AssigneeSelector,ProfilePanel} from './members.jsx';
 import {LabelChip,InlineChecklist,AdvancedFilters,matchAdvanced,RichDescription} from './boardplus.jsx';
 import {CardComments,ProjectConversation,NotificationsDialog,ActivityDialog,resolveNotificationLocation} from './teamplus.jsx';
+import {MtrInternalNoticePanel} from './mtr_internal_notice_panel.jsx';
 import {RulesPanel} from './rulespanel.jsx';
 import {AutomationButtonsPanel,AutomationButtonsLauncher,AutomationButtonStrip} from './automation_buttons.jsx';
 import {duplicateCard} from './taskops.js';
@@ -30,6 +31,7 @@ import {priorityDefs,priorityById,reorderStageArray} from './priorities.js';
 import {ReportingPanel} from './reporting.jsx';
 import {TrelloImportPanel} from './trello_import.jsx';
 import {CardChecklists,CardCustomFields,BoardFieldEditor,coverTextColor,editCardChecklists} from './cardextras.jsx';
+import TarazCustomerPicker from './taraz_customer_picker.jsx';
 import {PlannerPanel} from './planner.jsx';
 import {removeUnpaidLegacyStep} from './checklistguard.js';
 import {plannerIdentity} from './planner_identity.js';
@@ -101,6 +103,7 @@ const mockBridge={
   driveRestore:async()=>{throw new Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
   driveDisconnect:async()=>({connected:false}),
   lanStatus:async()=>({mode:'solo',user:{username:'local',role:'admin',projects:null}}),
+  mtrNoticeCommand:async()=>{throw Error('صندوق اعلان داخلی E6 فقط در کلاینت HTTPS احرازشده فعال است.');},
   lanDiscover:async()=>[],
   hostServiceStatus:async()=>({supported:false,installed:false,running:false}),
   lanHost:async()=>{throw Error('امکان شبکه در نسخه EXE فعال است.');},
@@ -118,6 +121,8 @@ const mockBridge={
   lanResetPassword:async()=>{throw Error('حساب شبکه فعال نیست.');},
   integrationIssueKey:async()=>{throw Error('کلید API فقط روی میزبان HTTPS ویندوز فعال است.');},
   integrationRevokeKey:async()=>{throw Error('کلید API فقط روی میزبان HTTPS ویندوز فعال است.');},
+  integrationStartPairing:async()=>{throw Error('اتصال نرم‌افزارها فقط روی میزبان HTTPS ویندوز فعال است.');},
+  integrationConnections:async()=>({connections:[]}),
   calendarExportIcs:async()=>{throw Error('خروجی ICS فقط از برنامه ویندوز قابل دریافت است.');},
   calendarImportPreview:async()=>{throw Error('ورود ICS فقط در برنامه ویندوز فعال است.');},
   automationEngineStatus:async()=>({mode:'legacy',ready:false,pending:0,dead:0}),
@@ -133,7 +138,11 @@ const mockBridge={
   cloudPeerGenerate:async()=>{throw Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
   cloudPeerForget:async()=>({paired:false,enabled:false,cloudVerified:false}),
   tarazIntegrationStatus:async()=>({supported:false,postingEnabled:false,message:'صندوق تبادل تراز در نسخه نصب‌شده ویندوز در دسترس است.'}),
+  tarazIntegrationOpenLocal:async()=>{throw Error('بازکردن تراز فقط در برنامه ویندوز و با اقدام دستی ممکن است.');},
+  tarazIntegrationPrepare:async()=>{throw Error('آماده‌سازی درخواست تراز فقط در برنامه ویندوز فعال است.');},
   tarazIntegrationQueue:async()=>{throw Error('ارسال پیشنهاد تراز فقط در برنامه ویندوز فعال است.');},
+  tarazIntegrationHistory:async()=>({supported:false,state:'unavailable',items:[],peerVerified:false,postingEnabled:false}),
+  aiDraftSuggest:async()=>{throw Error('دستیار محلی فقط در برنامه دسکتاپ ویندوز قابل استفاده است.');},
   getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
@@ -160,6 +169,20 @@ const mockBridge={
 };
 const api=window.madar||mockBridge;
 const isDesktop=!!window.madar;
+function isPinnedE6NoticeClient(status){
+  if(!isDesktop||typeof api.mtrNoticeCommand!=='function'
+    ||status?.mode!=='client'||status?.connected!==true
+    ||status?.transport!=='https'||typeof status?.fingerprint!=='string'
+    ||!/^[a-fA-F0-9]{64}$/.test(status.fingerprint)
+    ||typeof status?.url!=='string'||typeof status.user?.username!=='string'
+    ||!['admin','editor','viewer'].includes(status.user?.role))return false;
+  try{
+    const target=new URL(status.url);
+    return target.protocol==='https:'&&!!target.hostname&&!!target.port
+      &&!target.username&&!target.password&&target.pathname==='/'
+      &&!target.search&&!target.hash;
+  }catch{return false;}
+}
 const shortDate=v=>{if(!v)return '';try{return new Date(v).toLocaleDateString('fa-IR',{month:'short',day:'numeric'});}catch{return v;}};
 
 function Empty({title,description,onAdd}){
@@ -234,6 +257,39 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,tarazQueueAvailable=false,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true}){
   const [newStep,setNewStep]=useState('');
+  const [tarazHistory,setTarazHistory]=useState(null);
+  const [tarazHistoryBusy,setTarazHistoryBusy]=useState(false);
+  const [aiDraft,setAiDraft]=useState(null);
+  const [aiOpen,setAiOpen]=useState(false);
+  const [aiBaseline,setAiBaseline]=useState(task.title);
+  const [aiBusy,setAiBusy]=useState(false);
+  const [aiError,setAiError]=useState('');
+  const [aiPrompt,setAiPrompt]=useState(task.title||'');
+  const requestAiDraft=async()=>{
+    if(!canEdit||!aiPrompt.trim()||aiBusy)return;
+    setAiDraft(null);setAiError('');setAiBusy(true);
+    try{
+      const result=await api.aiDraftSuggest(task.id,aiPrompt,true);
+      if(result?.status!=='preview'||result?.requiresHumanReview!==true||!result.draft)
+        throw Error('پاسخ دستیار قابل بررسی نیست.');
+      setAiBaseline(task.title);
+      setAiDraft(result.draft);
+    }catch(error){setAiError(String(error?.message||error));}
+    finally{setAiBusy(false);}
+  };
+  const loadTarazHistory=async()=>{
+    if(!tarazQueueAvailable)return;
+    setTarazHistoryBusy(true);
+    try{setTarazHistory(await api.tarazIntegrationHistory(task.id,true));}
+    catch(error){setTarazHistory({supported:false,state:'unavailable',items:[],message:String(error?.message||error)});}
+    finally{setTarazHistoryBusy(false);}
+  };
+  const retryTarazProposal=async item=>{
+    if(!canEdit||!tarazQueueAvailable||item?.state!=='pending')return;
+    if(!window.confirm('درخواست قبلی با همان شناسه، بدون ساخت درخواست جدید، دوباره بررسی شود؟ اگر داده کارت تغییر کرده باشد ارسال انجام نمی‌شود.'))return;
+    await onSendToTaraz(task.id,item.id);
+    await loadTarazHistory();
+  };
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
   const [quickMenu,setQuickMenu]=useState(null);
@@ -380,6 +436,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>jumpToSection('metadata')}><Flag size={14}/>{priorityById(priorities,task.priority).label}</button>
         {task.dueDate&&<span className="task-editor-due"><Clock3 size={14}/>{displayDate(task.dueDate,calendar,true)}</span>}
       </div>
+      <TarazCustomerPicker api={api} task={task} username={username} canEdit={canEdit} onUpdate={update}/>
       <nav ref={quickNavRef} className="task-quick-actions task-quick-actions--minimal" aria-label="اقدام‌های اصلی کارت">
         <button type="button" onClick={()=>toggleQuickMenu('members')} aria-expanded={quickMenu==='members'}><Users size={15}/> اعضا</button>
         <button type="button" onClick={()=>toggleQuickMenu('date')} aria-expanded={quickMenu==='date'}><CalendarDays size={15}/> تاریخ</button>
@@ -387,6 +444,8 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'}><ListChecks size={15}/> چک‌لیست</button>
         <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><Paperclip size={15}/> فایل</button>
         {canEdit&&<button type="button" onClick={()=>onSendToTaraz(task.id)} disabled={!tarazQueueAvailable} title={tarazQueueAvailable?'ارسال دستی خلاصهٔ کارت برای بررسی در برنامه مستقل تراز':'ابتدا در تنظیمات، اتصال تراز و اجازهٔ ارسال دستی را فعال کنید'}><FileText size={15}/> ارسال به تراز</button>}
+        {canEdit&&<button type="button" onClick={loadTarazHistory} disabled={!tarazQueueAvailable||tarazHistoryBusy} title="خواندن وضعیت محلی پیشنهادهای همین کارت، بدون ثبت سند">{tarazHistoryBusy?'در حال بررسی':'وضعیت تراز'}</button>}
+        {canEdit&&<button type="button" onClick={()=>setAiOpen(open=>!open)} aria-expanded={aiOpen} title="دستیار اختیاری فقط با اقدام شما و مدل محلی اجرا می‌شود">پیشنهاد هوشمند</button>}
         <button type="button" className="task-quick-actions__more" aria-expanded={quickMenu==='more'} onClick={()=>toggleQuickMenu('more')}><MoreHorizontal size={15}/> بیشتر</button>
         {quickMenu&&<div className="task-quick-popover" role="group" aria-label={'ویرایش سریع '+({date:'تاریخ',members:'اعضا',labels:'برچسب‌ها',checklist:'چک‌لیست',more:'گزینه‌های تکمیلی'}[quickMenu]||'کارت')} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setQuickMenu(null);quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();}}}>
           <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',more:'گزینه‌های تکمیلی'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
@@ -402,6 +461,36 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           </div>}
         </div>}
       </nav>
+      {aiOpen&&<section className="task-primary-section" aria-label="پیش‌نویس هوش مصنوعی محلی">
+        <h3>پیشنهاد هوشمند محلی</h3>
+        <p>فقط متن زیر، با اقدام شما، برای مدل محلی ارسال می‌شود. هیچ پیشنهادی خودکار ذخیره یا به حسابداری ارسال نمی‌شود.</p>
+        <textarea aria-label="متن ورودی دستیار محلی" maxLength={4000} value={aiPrompt} disabled={aiBusy} onChange={event=>{setAiPrompt(event.target.value);setAiDraft(null);}} rows={3}/>
+        <button type="button" disabled={!canEdit||aiBusy||!aiPrompt.trim()} onClick={requestAiDraft}>{aiBusy?'در حال دریافت پیشنهاد':'ساخت پیش‌نویس با مدل محلی'}</button>
+        {!!aiError&&<p role="alert">دستیار در دسترس نیست یا پاسخ معتبر نداد: {aiError}. ویرایش دستی همچنان فعال است.</p>}
+        {aiDraft&&<div role="group" aria-label="پیش‌نمایش بدون اعمال">
+          <p><strong>عنوان پیشنهادی:</strong> {aiDraft.title}</p>
+          {!!aiDraft.checklist?.length&&<><strong>چک‌لیست پیشنهادی:</strong><ul>{aiDraft.checklist.map((step,index)=><li key={index}>{step}</li>)}</ul></>}
+          {!!aiDraft.missingFields?.length&&<p>اطلاعات نامشخص: {aiDraft.missingFields.join('، ')}</p>}
+          <button type="button" disabled={!canEdit||!aiDraft.title||aiDraft.title===task.title||aiBaseline!==task.title} onClick={()=>{if(window.confirm('عنوان پیشنهادی جایگزین عنوان فعلی کارت شود؟')){update({title:aiDraft.title});setAiDraft(null);}}}>پذیرش عنوان با تأیید من</button>
+          {aiBaseline!==task.title&&<small role="alert">عنوان کارت پس از تولید پیشنهاد تغییر کرده است؛ پیشنهاد تازه بگیرید.</small>}
+          <button type="button" onClick={()=>setAiDraft(null)}>رد پیشنهاد</button>
+          <small>مراحل صرفاً برای بررسی نمایش داده شده‌اند. افزودن آن‌ها از بخش چک‌لیست به انتخاب کاربر است.</small>
+        </div>}
+      </section>}
+      {tarazHistory&&<section className="task-primary-section" aria-label="وضعیت تبادل محلی تراز" aria-live="polite">
+        <h3>وضعیت پیشنهادهای تراز</h3>
+        <small>صرفاً مشاهده فایل‌های صندوق محلی؛ هویت برنامه مقابل و ثبت سند رسمی تأیید نشده است.</small>
+        {!tarazHistory.supported?<p role="status">صندوق محلی در دسترس نیست یا خواندن آن مجاز نیست.</p>:
+          !tarazHistory.items?.length?<p>برای این کارت، پیشنهاد قابل اعتبارسنجی پیدا نشد.</p>:
+          <ul>{tarazHistory.items.map(item=><li key={item.id}>
+            {(tarazHistory.peerVerified===true?
+              {pending:'در صندوق، بدون تأیید دریافت',reviewed:'بررسی‌شده توسط همتای احرازشده (غیرمالی)',rejected:'ردشده توسط همتای احرازشده (غیرمالی)',unknown:'وضعیت نامعلوم'}:
+              {pending:'در صندوق محلی، دریافت تأییدنشده',reviewed:'علامت بررسی‌شده در فایل محلی (هویت تراز تأییدنشده)',rejected:'علامت ردشده در فایل محلی (هویت تراز تأییدنشده)',unknown:'وضعیت نامعلوم'})[item.state]||'وضعیت نامعلوم'} | شناسه: {item.id.slice(0,8)}
+            {canEdit&&item.state==='pending'&&<button type="button" disabled={tarazHistoryBusy}
+              onClick={()=>retryTarazProposal(item)} aria-label={'بررسی دوباره شناسه محلی درخواست '+item.id.slice(0,8)}>بررسی دوباره همان درخواست</button>}
+          </li>)}</ul>}
+        {tarazHistory.scanTruncated&&<small>فهرست کامل نیست و بررسی محدود شده است.</small>}
+      </section>}
       {!!task.labels?.length&&<div className="task-editor-labels" aria-label="برچسب‌های کارت">{task.labels.map((label,index)=><LabelChip key={index} label={{name:label,color:sharedLabelColor(labelLibrary,label,task.labelColors)}}/>)}<button type="button" disabled={!canEdit} onClick={()=>toggleQuickMenu('labels')}><Plus size={14}/> انتخاب برچسب‌ها</button></div>}
       <section className="task-primary-section" id="task-section-description" tabIndex={-1} aria-label="توضیحات کارت">
         <h3><FileText size={17}/> توضیحات</h3>
@@ -657,30 +746,82 @@ function DrivePanel({data,onClose,onRestore,onRestoreStart,onRestoreFinished,isC
 
 function IntegrationKeyPanel({api,users,onClose}){
   const [username,setUsername]=useState(users[0]?.username||'');
+  const [adminUser,setAdminUser]=useState(users.find(user=>user.role==='admin')?.username||'');
+  const [adminPassword,setAdminPassword]=useState('');
+  const credentials=()=>({username:adminUser,password:adminPassword});
   const [writeAccess,setWriteAccess]=useState(false);
+  const [product,setProduct]=useState('TARAZ');
   const [issued,setIssued]=useState(null);
+  const [pairing,setPairing]=useState(null);
+  const [connections,setConnections]=useState([]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [hostSecurity,setHostSecurity]=useState(null);
+  useEffect(()=>{
+    let mounted=true;
+    Promise.resolve().then(()=>api.lanStatus()).then(status=>{
+      if(mounted&&status?.mode==='server'&&status?.transport==='https'
+        &&typeof status?.port==='number'&&Number.isInteger(status.port)
+        &&status.port>0&&status.port<65536
+        &&typeof status?.fingerprint==='string'
+        &&/^[a-f0-9]{64}$/i.test(status.fingerprint)){
+        setHostSecurity({port:status.port,pin:status.fingerprint.toLowerCase()});
+      }
+    }).catch(()=>{});
+    return()=>{mounted=false;};
+  },[api]);
+  const refresh=async()=>{
+    const result=await api.integrationConnections(credentials());
+    setConnections(Array.isArray(result?.connections)?result.connections:[]);
+  };
+  const beginPairing=async()=>{
+    setBusy(true);setError('');setPairing(null);
+    try{setPairing(await api.integrationStartPairing(username,product,writeAccess?['read','write']:['read'],credentials()));await refresh();}
+    catch(e){setError(e.message||String(e));}
+    finally{setAdminPassword('');setBusy(false);}
+  };
   const issue=async()=>{
     setBusy(true);setError('');setIssued(null);
-    try{setIssued(await api.integrationIssueKey(username,writeAccess?['read','write']:['read'],3600));}
+    try{setIssued(await api.integrationIssueKey(username,writeAccess?['read','write']:['read'],3600,credentials()));}
     catch(e){setError(e.message||String(e));}
-    finally{setBusy(false);}
+    finally{setAdminPassword('');setBusy(false);}
   };
   const revoke=async()=>{
     if(!issued)return;
     setBusy(true);setError('');
-    try{await api.integrationRevokeKey(issued.keyId);setIssued(null);}
+    try{await api.integrationRevokeKey(issued.keyId,credentials());setIssued(null);}
     catch(e){setError(e.message||String(e));}
-    finally{setBusy(false);}
+    finally{setAdminPassword('');setBusy(false);}
   };
-  return <Modal title="کلید API یکپارچه‌سازی" onClose={onClose} width={580}>
+  const revokeConnection=async keyId=>{
+    setBusy(true);setError('');
+    try{await api.integrationRevokeKey(keyId,credentials());await refresh();}
+    catch(e){setError(e.message||String(e));}
+    finally{setAdminPassword('');setBusy(false);}
+  };
+  return <Modal title="اتصال نرم‌افزارها" onClose={onClose} width={580}>
     <div className="dialog-body">
-      <p>این کلید فقط با شبکه HTTPS فعال معتبر است، یک ساعت عمر دارد و پس از بستن این پنجره دیگر قابل نمایش نیست. آن را فقط در برنامه مورد اعتماد نگهداری کنید.</p>
+      <p>اتصال یک نرم‌افزار دیگر به این میزبان با تأیید مدیر و کد یک‌بارمصرف پنج‌دقیقه‌ای آغاز می‌شود. کد، رمز دائمی اتصال نیست؛ نرم‌افزار مقصد باید آن را از مسیر HTTPS دارای گواهی تأییدشده به اعتبارنامه مستقل تبدیل کند.</p>
+      {hostSecurity&&<div role="note" className="inline-message"><strong>اطلاعات هویت میزبان برای تطبیق در تراز</strong>
+        <p>برای اتصال روی همین کامپیوتر: <code dir="ltr">{'https://127.0.0.1:'+hostSecurity.port}</code></p>
+        <p>اثر انگشت SHA-256 گواهی میزبان:</p><textarea aria-label="SHA-256 گواهی میزبان" dir="ltr" readOnly rows={2} value={hostSecurity.pin} onFocus={event=>event.target.select()}/>
+        <small>برای رایانهٔ دیگر باید IP معتبر LAN جایگزین 127.0.0.1 شود. اثر انگشت را از کانال مستقل با مدیر میزبان تطبیق دهید؛ کشف شبکه به‌تنهایی اثبات هویت نیست.</small>
+      </div>}
+      <label>نام مدیر میزبان<input autoComplete="username" maxLength={40} value={adminUser} disabled={busy} onChange={e=>setAdminUser(e.target.value)}/></label>
+      <label>رمز ورود مجدد مدیر<input type="password" autoComplete="off" value={adminPassword} disabled={busy} onChange={e=>setAdminPassword(e.target.value)}/></label>
+      <small>برای هر صدور، مشاهده یا ابطال اعتبارنامه، احراز هویت مدیر دوباره انجام می‌شود. رمز در کارت یا تنظیمات ذخیره نمی‌شود.</small>
       <label>حساب هدف<select disabled={busy||!!issued} value={username} onChange={e=>setUsername(e.target.value)}>{users.map(u=><option value={u.username} key={u.username}>{u.displayName||u.username} ({u.role})</option>)}</select></label>
+      <label>نرم‌افزار مقصد<select disabled={busy} value={product} onChange={e=>setProduct(e.target.value)}><option value="TARAZ">تراز</option><option value="RADAR">رادار (آماده‌سازی اتصال)</option></select></label>
       <label className="setting-toggle"><input type="checkbox" disabled={busy||!!issued} checked={writeAccess} onChange={e=>setWriteAccess(e.target.checked)}/><span>اجازه ویرایش عنوان کارت‌ها (بدون دسترسی مالی)</span></label>
-      {!issued&&<button className="btn primary" disabled={busy||!username} onClick={issue}>ساخت کلید یک‌ساعته</button>}
+      <button className="btn primary" type="button" disabled={busy||!username||!adminUser||!adminPassword} onClick={beginPairing}>ایجاد کد اتصال یک‌بارمصرف</button>
+      {pairing&&<div role="status" className="inline-message"><p>کد اتصال، فقط برای همین درخواست و تا پنج دقیقه:</p><textarea dir="ltr" aria-label="کد اتصال یک‌بارمصرف" readOnly value={pairing.code} rows={2} onFocus={e=>e.target.select()}/><small>این کد را فقط در برنامه مقصد و پس از بررسی هویت میزبان وارد کنید؛ حداکثر پنج تلاش ناموفق پذیرفته می‌شود.</small></div>}
+      <button type="button" className="btn secondary" disabled={busy||!adminUser||!adminPassword} onClick={async()=>{setBusy(true);setError('');try{await refresh();}catch(e){setError(e.message||String(e));}finally{setAdminPassword('');setBusy(false);}}}>نمایش اتصال‌های ثبت‌شده</button>
+      {connections.map(item=><div className="backup-row" key={item.keyId}><div><strong>{item.product} · {item.username}</strong><small dir="ltr">{item.installationId}</small><small>{item.status==='active'?'فعال':item.status==='revoked'?'لغوشده':'منقضی'}</small></div>{item.status==='active'&&<button type="button" disabled={busy} onClick={()=>revokeConnection(item.keyId)}>لغو اتصال</button>}</div>)}
+      <details><summary>کلید API قدیمی (برای یکپارچه‌سازی‌های موجود)</summary>
+      <p>این کلید فقط با HTTPS معتبر است، یک ساعت عمر دارد و فقط یک‌بار نمایش داده می‌شود.</p>
+      {!issued&&<button className="btn primary" disabled={busy||!username||!adminUser||!adminPassword} onClick={issue}>ساخت کلید یک‌ساعته</button>}
       {issued&&<div role="status" className="inline-message"><p>کلید فقط همین یک‌بار نمایش داده می‌شود:</p><textarea dir="ltr" aria-label="کلید API ساخته‌شده" readOnly value={issued.key} rows={3} onFocus={e=>e.target.select()}/><small>شناسه: {issued.keyId} | مسیر: /integrations/v1/</small><div><button className="btn secondary" disabled={busy} onClick={revoke}>ابطال کلید</button></div></div>}
+      </details>
       {error&&<p role="alert" className="error-toast">{error}</p>}
     </div>
   </Modal>;
@@ -818,6 +959,7 @@ export default function App(){
   const [lanOpen,setLanOpen]=useState(false);
   const [lanInitialView,setLanInitialView]=useState('connection');
   const [notificationsOpen,setNotificationsOpen]=useState(false);
+  const [internalNoticeOpen,setInternalNoticeOpen]=useState(null);
   const [activityOpen,setActivityOpen]=useState(false);
   const [projectChatOpen,setProjectChatOpen]=useState(false);
   const [tarazStatus,setTarazStatus]=useState(null);
@@ -1076,6 +1218,18 @@ export default function App(){
     try{setTarazStatus(await api.tarazIntegrationStatus());}
     catch(error){setTarazStatus({supported:false,postingEnabled:false,message:String(error?.message||error)});}
   };
+  const openLocalTaraz=async()=>{
+    if(tarazStatus?.localPeer?.approvedBuild!==true||
+       tarazStatus?.localPeer?.canOpenManually!==true){
+      setToast('نسخهٔ نصب‌شدهٔ تراز برای اتصال محلی تأیید نشده است.');return;
+    }
+    try{
+      const result=await api.tarazIntegrationOpenLocal(true);
+      if(result?.launchRequested!==true||result?.financialEventCreated!==false)
+        throw Error('پاسخ راه‌اندازی تراز معتبر نیست.');
+      setToast('درخواست بازکردن تراز ارسال شد. ورود و بررسی ارجاع‌ها در خود تراز انجام می‌شود.');
+    }catch(error){setToast('تراز باز نشد: '+String(error?.message||error));}
+  };
   const sharedThemeEnabled=data?.settings?.themeForAllUsers===true;
   const generalUi=generalUiChoice?.scope===appearanceScope?generalUiChoice.value:
     readGeneralUi(localStorage,appearanceScope);
@@ -1277,6 +1431,36 @@ export default function App(){
     matchIds:new Set(filtered.map(t=>t.id))
   }):new Map(),[boardIndex,activeWorkspaceId,selected,activeBoard?.id,filtered]);
   const selectedProject=projects.find(p=>p.id===selected);
+  // E6 remains operator-mounted at the HOST. Client UI is a manual pilot
+  // visible only for a presently authorized selected project and pinned
+  // HTTPS LAN session. Every host request is additionally guarded in Bridge.
+  const internalNoticeReady=isPinnedE6NoticeClient(lanStatus)
+    &&typeof selectedProject?.id==='string'
+    &&permittedSearchProjects.includes(selectedProject.id);
+  const internalNoticeContext=useRef(null);
+  internalNoticeContext.current={
+    session:lanStatus,projectId:selectedProject?.id,ready:internalNoticeReady,
+  };
+  const internalNoticeCommand=useMemo(()=>{
+    const snapshot=lanStatus,projectId=selectedProject?.id;
+    return envelope=>{
+      const now=internalNoticeContext.current;
+      if(now?.session!==snapshot||now.projectId!==projectId||!now.ready
+        ||!envelope||typeof envelope!=='object'||Array.isArray(envelope)
+        ||!['list','mark-read'].includes(envelope.action)
+        ||(envelope.action==='list'&&envelope.params?.projectId!==projectId))
+        throw Error('نشست یا محدودهٔ پروژهٔ اعلان داخلی تغییر کرده است.');
+      return api.mtrNoticeCommand(envelope);
+    };
+  },[lanStatus,selectedProject?.id,internalNoticeReady]);
+  useEffect(()=>{
+    // A refresh, permission change, reconnect, project switch or explicit
+    // LAN status replacement closes the pilot. Existing collab inbox stays.
+    setInternalNoticeOpen(null);
+  },[lanStatus,selectedProject?.id,internalNoticeReady]);
+  const showInternalNotice=internalNoticeReady
+    &&internalNoticeOpen?.session===lanStatus
+    &&internalNoticeOpen?.projectId===selectedProject?.id;
   const activeTask=tasks.find(t=>t.id===editorId);
   const change=(next,preserveCardUndo=false)=>{if(!canEdit||nativeClosePending.current)return;
     if(recoveryReload.current){
@@ -2020,7 +2204,7 @@ export default function App(){
     catch(e){blocked.current=true;setPendingRecovery(true);setSavingError(e.message);}
     finally{recoveryReload.current=false;setSyncing(false);}
   };
-  const sendToTaraz=async taskId=>{
+  const sendToTaraz=async(taskId,requestId=null)=>{
     if(!tarazEnabled){setToast('ارسال دستی به تراز خاموش است؛ ابتدا از تنظیمات، اتصال تراز آن را فعال کنید.');return;}
     if(!tarazStatus?.supported||tarazStatus?.postingEnabled!==false){
       setToast('صندوق پیشنهادهای تراز در این محیط آماده یا امن نیست.');return;
@@ -2030,10 +2214,20 @@ export default function App(){
       setToast('برای ارسال به تراز، ابتدا ذخیره کارت باید کامل شود.');return;
     }
     try{
-      const result=await api.tarazIntegrationQueue(taskId);
-      if(!result?.queued||result?.postingPerformed!==false)
+      // Reserve the stable request ID durably on the native Python side
+      // before the first file publication. A lost reply is then recoverable
+      // by a fresh manual click without silently creating another request.
+      const prepared=requestId===null?await api.tarazIntegrationPrepare(taskId):null;
+      if(prepared&&(prepared.prepared!==true||prepared.postingPerformed!==false||
+          !/^[0-9a-f]{32}$/.test(prepared.id)))
+        throw Error('پاسخ آماده‌سازی پایدار درخواست معتبر نیست.');
+      const targetId=requestId===null?prepared.id:requestId;
+      const result=await api.tarazIntegrationQueue(taskId,null,targetId);
+      if(result?.postingPerformed!==false||
+          result?.id!==targetId||(result?.queued!==true&&result?.replayed!==true))
         throw Error('پاسخ صندوق تبادل معتبر نیست.');
-      setToast('خلاصه کارت در صندوق تراز قرار گرفت. بازبینی و ثبت در برنامه مستقل تراز انجام می‌شود.');
+      setToast(result.replayed?'درخواست قبلی با همان شناسه پیدا شد؛ درخواست جدیدی ساخته نشد.':
+        'خلاصه کارت در صندوق تراز قرار گرفت. بازبینی و ثبت در برنامه مستقل تراز انجام می‌شود.');
       await refreshTarazStatus();
     }catch(err){setToast('ارسال پیشنهاد به تراز ناموفق: '+String(err?.message||err));}
   };
@@ -2062,6 +2256,12 @@ export default function App(){
         onClick={()=>setReportingOpen(true)}><BarChart3 size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">گزارش‌ها</span></button>}
       <button type="button" onClick={()=>setNotificationsOpen(true)}
         title="اعلان‌های من" aria-label="اعلان‌ها"><Bell size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">اعلان‌ها</span></button>
+      {internalNoticeReady&&<button type="button"
+        title="صندوق آزمایشی اعلان‌های داخلی این پروژه (دریافت فقط با اقدام شما)"
+        aria-label="صندوق اعلان‌های داخلی پروژه"
+        onClick={()=>setInternalNoticeOpen({session:lanStatus,projectId:selectedProject.id})}>
+        <Bell size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">اعلان داخلی</span>
+      </button>}
       {canManage&&<button type="button" onClick={openUserManagement}
         title={lanStatus.mode==='solo'?'تعریف کاربر: ابتدا میزبان شبکه را فعال کنید':'تعریف کاربران'}
         aria-label="تعریف کاربران"><Users size={19}/><span className="vitrea-quickdock__label" aria-hidden="true">کاربران</span></button>}
@@ -2113,6 +2313,8 @@ export default function App(){
         <div className="sidebar-nav" role="note">
           <p>{tarazStatus?.message||'در حال بررسی صندوق تبادل تراز…'}</p>
           {tarazStatus?.supported&&<p>پیشنهادهای منتظر بررسی: {Number(tarazStatus.pending||0).toLocaleString('fa-IR')}</p>}
+          <p>{tarazStatus?.localPeer?.approvedBuild?'نسخهٔ محلی تراز شناسایی شد؛ ورود و احراز هویت آن هنوز تأیید نشده است.':'نسخهٔ تأییدشدهٔ تراز روی همین حساب ویندوز شناسایی نشد.'}</p>
+          {tarazStatus?.localPeer?.canOpenManually&&<button type="button" onClick={openLocalTaraz}>بازکردن تراز</button>}
           <p>{tarazEnabled?'ارسال دستی در همین رایانه مجاز شده است.':'ارسال دستی خاموش است؛ برای فعال‌سازی به تنظیمات ← اتصال تراز بروید.'}</p>
           <p>ارسال خلاصه از دکمه «ارسال به تراز» داخل هر کارت انجام می‌شود. تراز را به‌عنوان برنامه جداگانه اجرا کنید.</p>
         </div>
@@ -2134,7 +2336,7 @@ export default function App(){
           <nav className="sidebar-nav" aria-label="مدیریت و دسترسی‌ها">
             {show('workspaceManagement')&&<button onClick={()=>setWorkspaceOpen(true)}><FolderOpen size={17}/> فضاهای کاری</button>}
             <button onClick={openUserManagement}><Users size={17}/> کاربران و دسترسی‌ها</button>
-            {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> کلید API امن</button>}
+            {show('secureApiKeys')&&lanStatus.mode==='server'&&lanStatus.transport==='https'&&<button onClick={()=>setIntegrationOpen(true)}><ShieldCheck size={17}/> اتصال نرم‌افزارها</button>}
           </nav>
         </details>}
         <button type="button" className="sidebar-settings" onClick={()=>openSharedLabelManager()}><Tag size={18}/> مدیریت برچسب‌ها</button>
@@ -2375,12 +2577,25 @@ export default function App(){
     {boardModal&&<Modal title="برد جدید در پروژه" onClose={()=>setBoardModal(false)}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();createBoard();}}><label>نام برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required placeholder="مثلاً: تولید محتوا"/></label><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>setBoardModal(false)}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ساخت برد</button></div></form></Modal>}
     {renameBoardId&&<Modal title="تغییر نام برد" onClose={()=>{setRenameBoardId(null);setBoardName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();renameBoard();}}><label>نام جدید برد<input autoFocus maxLength={180} value={boardName} onChange={e=>setBoardName(e.target.value)} required/></label><p className="board-info-note">کارت‌ها و مراحل برد حفظ می‌شوند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{setRenameBoardId(null);setBoardName('');}}>انصراف</button><button type="submit" className="btn primary" disabled={!boardName.trim()}>ذخیره نام</button></div></form></Modal>}
     {canManage&&show('projectAdministration')&&!!projectSettings&&<Modal title="تنظیمات پروژه" onClose={()=>{setProjectSettings(null);setProjectName('');}}><form className="dialog-body task-create" onSubmit={e=>{e.preventDefault();updateProject();}}><label>نام پروژه<input autoFocus maxLength={180} value={projectName} onChange={e=>setProjectName(e.target.value)} required/></label>{show('projectPricing')&&<label className="setting-toggle" style={{marginTop:18}}><input type="checkbox" checked={!!projects.find(p=>p.id===projectSettings)?.costEnabled} onChange={e=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,costEnabled:e.target.checked}:p)}))}/><span><strong>فعال کردن فیلد هزینه</strong><small>قیمت پروژه، هزینه کار و مراحل و محاسبه سود نشان داده می‌شود.</small></span></label>}{show('projectPricing')&&projects.find(p=>p.id===projectSettings)?.costEnabled&&<div className="project-price-field"><strong>قیمت پروژه</strong><MoneyField value={projects.find(p=>p.id===projectSettings)?.price||0} onChange={price=>changeAdmin(s=>({...s,projects:s.projects.map(p=>p.id===projectSettings?{...p,price}:p)}))}/></div>}<p className="project-setting-note">کارهای داخل این پروژه با تغییر نام محفوظ می‌مانند.</p><div className="form-footer"><button type="button" className="btn secondary" onClick={()=>{if(!window.confirm('پروژه خالی حذف شود؟ کارتها و اسناد مالی منتقل نخواهند شد.'))return;deleteProject();}} disabled={projects.length<=1||tasks.some(t=>t.projectId===projectSettings)} title={tasks.some(t=>t.projectId===projectSettings)?'ابتدا پروژه را خالی کنید؛ اسناد مالی نباید جدا شوند.':'حذف پروژه خالی'}>حذف پروژه</button><button type="submit" disabled={!projectName.trim()} className="btn primary"><Check size={17}/> ذخیره تغییرات</button></div></form></Modal>}
-    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} themeMode={sharedThemeEnabled?uiTheme:currentThemeMode} generalUi={generalUi} onGeneralUiChange={updateGeneralUi} tarazStatus={tarazStatus} tarazEnabled={tarazEnabled} onTarazEnabledChange={updateTarazConsent} onRefreshTaraz={refreshTarazStatus} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} accountStatus={lanStatus} onOpenLanSignup={()=>{setSettingsOpen(false);setLanInitialView('connection');setLanOpen(true);}} onOpenUserManagement={()=>{setSettingsOpen(false);openUserManagement();}} onOpenProfile={()=>{setSettingsOpen(false);setProfileOpen(true);}} onClose={()=>setSettingsOpen(false)}/>}
+    {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} themeMode={sharedThemeEnabled?uiTheme:currentThemeMode} generalUi={generalUi} onGeneralUiChange={updateGeneralUi} tarazStatus={tarazStatus} tarazEnabled={tarazEnabled} onTarazEnabledChange={updateTarazConsent} onRefreshTaraz={refreshTarazStatus} onOpenLocalTaraz={openLocalTaraz} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} accountStatus={lanStatus} onOpenLanSignup={()=>{setSettingsOpen(false);setLanInitialView('connection');setLanOpen(true);}} onOpenUserManagement={()=>{setSettingsOpen(false);openUserManagement();}} onOpenProfile={()=>{setSettingsOpen(false);setProfileOpen(true);}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
     {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
       onOpenTarget={openNotificationTarget}/>}
+    {showInternalNotice&&<Modal title="صندوق آزمایشی اعلان‌های داخلی"
+      onClose={()=>setInternalNoticeOpen(null)} width={880}>
+      <div className="dialog-body" dir="rtl">
+        <p role="note">این صندوق فقط در صورت فعال‌سازی دستی پایلوت E6 توسط مدیر میزبان کار می‌کند.
+          دریافت اعلان و ثبت خوانده‌شدن با اقدام شما انجام می‌شود.</p>
+        <MtrInternalNoticePanel command={internalNoticeCommand}
+          projectId={selectedProject.id} limit={50} pageSize={10}/>
+        <div className="form-footer">
+          <button type="button" className="btn secondary"
+            onClick={()=>setInternalNoticeOpen(null)}>بستن صندوق داخلی</button>
+        </div>
+      </div>
+    </Modal>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}
       projectId={selectedProject.id} projectName={selectedProject.name} api={api} users={users}
       canEdit={canEdit} canManage={canManage} username={lanStatus.user?.username||'local'}

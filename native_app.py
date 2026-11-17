@@ -226,6 +226,30 @@ def is_valid(state):
                 or len(task["checklist"]) > 300 or len(task["reports"]) > 500):
             raise ValueError("یک کار نامعتبر است.")
         task_ids.add(task["id"])
+        external_party = task.get("tarazCustomerRef")
+        if external_party is not None:
+            if (type(external_party) is not dict or
+                    set(external_party) != {"workspaceId", "installationId", "companyId",
+                                            "partyId", "kind"} or
+                    any(type(external_party.get(name)) is not str or
+                        not re.fullmatch(r"[a-f0-9]{32}", external_party[name])
+                        for name in ("workspaceId", "installationId", "companyId")) or
+                    type(external_party.get("partyId")) is not str or
+                    not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}",
+                                     external_party["partyId"]) or
+                    external_party["partyId"].startswith("ps.parsian.") or
+                    external_party.get("kind") not in ("customer", "both")):
+                raise ValueError("شناسه مرتبط مشتری تراز معتبر نیست.")
+        queued_party = task.get("tarazCustomerRequest")
+        if queued_party is not None:
+            if (type(queued_party) is not dict or
+                    set(queued_party) != {"workspaceId", "installationId", "companyId",
+                                          "requestId"} or
+                    any(type(queued_party.get(name)) is not str or
+                        not re.fullmatch(r"[a-f0-9]{32}", queued_party[name])
+                        for name in ("workspaceId", "installationId", "companyId",
+                                     "requestId"))):
+                raise ValueError("شناسه درخواست جست‌وجوی مشتری تراز معتبر نیست.")
         if "cardOrder" in task and (type(task["cardOrder"]) is not int
                                    or not 0 <= task["cardOrder"] <= 1_000_000):
             raise ValueError("ترتیب کارت باید عدد صحیح بین صفر و یک میلیون باشد.")
@@ -1376,7 +1400,16 @@ class Bridge:
                 "scope": None, "lastSuccess": None,
                 "mode": self.connection.get("mode", "solo")}
 
-    def integrationIssueKey(self, username, permissions=None, lifetime_seconds=3600):
+    def _integration_admin_action(self, credentials, operation):
+        """Fresh operator password, short-lived LAN token; never implicit owner."""
+        token = self._integration_mailbox_verified_admin(credentials)
+        try:
+            return operation(token)
+        finally:
+            self.lan.sessions.pop(token, None)
+
+    def integrationIssueKey(self, username, permissions=None, lifetime_seconds=3600,
+                            adminCredentials=None):
         """Explicit administrator action on the local HTTPS LAN host only."""
         if (self.connection.get("mode") != "server" or not self.lan
                 or self.lan.integration_router is None):
@@ -1387,18 +1420,124 @@ class Bridge:
             permissions = ["read"]
         if not isinstance(permissions, list) or any(not isinstance(x, str) for x in permissions):
             raise ValueError("مجوزهای API نامعتبر است.")
-        return self.lan.integration_router.issue_key(
-            self.lan.authenticate_owner_token(), username,
-            permissions=permissions, lifetime_seconds=lifetime_seconds)
+        return self._integration_admin_action(adminCredentials, lambda token:
+            self.lan.integration_router.issue_key(
+                token, username, permissions=permissions,
+                lifetime_seconds=lifetime_seconds))
 
-    def integrationRevokeKey(self, key_id):
+    def integrationRevokeKey(self, key_id, adminCredentials=None):
         if (self.connection.get("mode") != "server" or not self.lan
                 or self.lan.integration_router is None):
             raise PermissionError("ابطال کلید API فقط روی میزبان HTTPS مجاز است.")
         if not isinstance(key_id, str):
             raise ValueError("شناسه کلید API نامعتبر است.")
-        return {"revoked": self.lan.integration_router.revoke_key(
-            self.lan.authenticate_owner_token(), key_id)}
+        return {"revoked": self._integration_admin_action(adminCredentials,
+            lambda token: self.lan.integration_router.revoke_key(token, key_id))}
+
+    def integrationStartPairing(self, username, product="TARAZ", permissions=None,
+                                adminCredentials=None):
+        """Admin-only, one-time pairing code for a known HTTPS host.
+
+        This does not grant access, run an integration client or post finance.
+        A remote product must redeem the code through the pinned HTTPS route.
+        """
+        if (self.connection.get("mode") != "server" or not self.lan
+                or self.lan.integration_router is None):
+            raise PermissionError("اتصال نرم‌افزارها فقط روی میزبان HTTPS در دسترس است.")
+        if (type(username) is not str or type(product) is not str
+                or type(permissions) not in (list, type(None))
+                or (permissions is not None and
+                    any(type(item) is not str for item in permissions))):
+            raise ValueError("مشخصات اتصال نرم‌افزار معتبر نیست.")
+        return self._integration_admin_action(adminCredentials, lambda token:
+            self.lan.integration_router.begin_pairing(
+                token, username, product=product,
+                permissions=["read"] if permissions is None else permissions))
+
+    def integrationConnections(self, adminCredentials=None):
+        """List stored nonsecret installation associations for host admin."""
+        if (self.connection.get("mode") != "server" or not self.lan
+                or self.lan.integration_router is None):
+            raise PermissionError("اتصال نرم‌افزارها فقط روی میزبان HTTPS در دسترس است.")
+        return self._integration_admin_action(adminCredentials,
+            lambda token: self.lan.integration_router.connected_installs(token))
+
+    def _integration_mailbox_verified_admin(self, credentials):
+        """Fresh password verification, never implicit host-owner token.
+
+        The UI supplies an operator username/password on each explicitly
+        initiated operation; the LAN identity registry, not renderer claims,
+        determines role. The ephemeral token is consumed in a finally block.
+        """
+        if (self.connection.get("mode") != "server" or not self.lan or
+                self.lan.integration_router is None):
+            raise PermissionError("جست‌وجوی مشتری تراز فقط روی میزبان HTTPS فعال مجاز است.")
+        if (type(credentials) is not dict or
+                set(credentials) != {"username", "password"} or
+                type(credentials["username"]) is not str or
+                type(credentials["password"]) is not str):
+            raise PermissionError("ورود دوباره مدیر میزبان لازم است.")
+        login = self.lan.authenticate(credentials["username"], credentials["password"])
+        token = login["token"]
+        if self.lan.account_for(token).get("role") != "admin":
+            self.lan.sessions.pop(token, None)
+            raise PermissionError("فقط مدیر میزبان به اطلاعات مجاز تراز دسترسی دارد.")
+        return token
+
+    def integrationMailboxConnections(self, credentials):
+        token = self._integration_mailbox_verified_admin(credentials)
+        try:
+            return self.lan.integration_router.connected_installs(token)
+        finally:
+            self.lan.sessions.pop(token, None)
+
+    def integrationMailboxApproveCompany(self, credentials, request):
+        """Independent admin-approved key→installation→company binding."""
+        if (type(request) is not dict or
+                set(request) != {"keyId", "companyId", "installationId", "manualConfirmation"}):
+            raise ValueError("مشخصات تأیید شرکت تراز معتبر نیست.")
+        token = self._integration_mailbox_verified_admin(credentials)
+        try:
+            from integration_mailbox_host_v1 import MadarMailboxHost
+            host = MadarMailboxHost(self.lan.integration_router)
+            return host.approve_company(token, key_id=request["keyId"],
+                company_id=request["companyId"],
+                installation_id=request["installationId"],
+                manual_confirmation=request["manualConfirmation"])
+        finally:
+            self.lan.sessions.pop(token, None)
+
+    def integrationMailboxEnqueue(self, credentials, request):
+        """Queue ONE bounded customer search; no remote business data writes."""
+        if (type(request) is not dict or set(request) != {
+                "companyId", "installationId", "requestId", "query", "kind", "limit", "cursor"}):
+            raise ValueError("درخواست جست‌وجوی مشتری معتبر نیست.")
+        token = self._integration_mailbox_verified_admin(credentials)
+        try:
+            from integration_mailbox_host_v1 import MadarMailboxHost
+            host = MadarMailboxHost(self.lan.integration_router)
+            return host.enqueue_search(token, company_id=request["companyId"],
+                installation_id=request["installationId"],
+                request_id=request["requestId"], query=request["query"],
+                kind=request["kind"], limit=request["limit"], cursor=request["cursor"])
+        finally:
+            self.lan.sessions.pop(token, None)
+
+    def integrationMailboxReconcile(self, credentials, request):
+        """Re-read a durable signed response, including after process restart."""
+        if (type(request) is not dict or set(request) != {
+                "companyId", "installationId", "requestId", "acknowledge"}):
+            raise ValueError("درخواست بازیابی پاسخ تراز معتبر نیست.")
+        token = self._integration_mailbox_verified_admin(credentials)
+        try:
+            from integration_mailbox_host_v1 import MadarMailboxHost
+            return MadarMailboxHost(self.lan.integration_router).reconcile(
+                token, company_id=request["companyId"],
+                installation_id=request["installationId"],
+                request_id=request["requestId"],
+                acknowledge=request["acknowledge"])
+        finally:
+            self.lan.sessions.pop(token, None)
 
     def calendarExportIcs(self):
         """Read-only ICS export of cards visible to the current LAN account."""
@@ -1666,12 +1805,86 @@ class Bridge:
 
     def tarazIntegrationStatus(self):
         from taraz_exchange import integration_status
-        return integration_status()
+        from mtr_taraz_installed_peer import local_peer_status
+        return {**integration_status(), "localPeer": local_peer_status()}
 
-    def tarazIntegrationQueue(self, taskId, expenseId=None):
+    def tarazIntegrationOpenLocal(self, manualAction=False):
+        """Manual same-user open of a reviewed Taraz EXE, not financial posting."""
+        from mtr_taraz_installed_peer import open_local_taraz
+        return open_local_taraz(manual_action=manualAction)
+
+    def _taraz_actor_scope(self):
+        """Derive a scoped journal name from the authenticated host identity."""
+        import hashlib
+        mode = self.connection.get("mode")
+        if mode == "client":
+            user = self.remote_user or {}
+            username = user.get("username")
+            if user.get("role") not in ("admin", "editor") or type(username) is not str or not username:
+                raise PermissionError("هویت کاربر شبکه برای درخواست تراز معتبر نیست.")
+            # A username is not globally unique across independent LAN hosts.
+            # A pinned certificate survives the host IP/DNS changing. Only
+            # a VERIFIED TLS certificate pin can identify a durable financial
+            # actor. Never downgrade to a URL/IP-based identity.
+            origin = self.connection.get("url")
+            fingerprint = self.connection.get("fingerprint", "")
+            try:
+                url = urlsplit(origin) if type(origin) is str else None
+            except ValueError:
+                url = None
+            if (url is None or url.scheme != "https" or not url.hostname
+                    or url.port is None or url.username is not None
+                    or url.password is not None or url.path not in ("", "/")
+                    or url.query or url.fragment or type(fingerprint) is not str
+                    or not re.fullmatch(r"[0-9a-fA-F]{64}", fingerprint)):
+                raise PermissionError("هویت HTTPS و اثرانگشت میزبان برای ارسال تراز الزامی است.")
+            peer = ["certificate", fingerprint.lower()]
+            scope = json.dumps([username, peer], ensure_ascii=False)
+            return "client:" + hashlib.sha256(scope.encode("utf-8")).hexdigest()[:32]
+        if mode == "solo":
+            return "solo:local"
+        if self.lan:
+            owner = self.lan.account_for(self.lan.authenticate_owner_token())
+            username = owner.get("username")
+            if owner.get("role") != "admin" or type(username) is not str or not username:
+                raise PermissionError("هویت مدیر میزبان معتبر نیست.")
+            return "host:" + hashlib.sha256(username.encode("utf-8")).hexdigest()[:32]
+        raise PermissionError("وضعیت اتصال برای درخواست تراز نامعتبر است.")
+
+    def tarazIntegrationPrepare(self, taskId, expenseId=None):
+        """Durably reserve a same-request retry ID before explicit manual send.
+
+        No file is delivered to Taraz by this call. A repeated prepare of the
+        unchanged task reuses the original ID, even after a lost UI response.
+        """
+        from mtr_e2_send_journal import prepare_manual_send
+        with self._lock:
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("آماده‌سازی درخواست تراز در حالت آفلاین مجاز نیست.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("آماده‌سازی درخواست برای این حساب مجاز نیست.")
+                matches = [t for t in state.get("tasks", [])
+                           if isinstance(t, dict) and t.get("id") == taskId
+                           and t.get("deleted") is not True]
+                grants = user.get("projects")
+                if (len(matches) != 1 or
+                        (grants is not None and matches[0].get("projectId") not in grants)):
+                    raise PermissionError("کارت انتخاب‌شده در محدوده دسترسی نیست.")
+            actor = self._taraz_actor_scope()
+            return prepare_manual_send(state, taskId, expenseId, actor_scope=actor)
+
+    def tarazIntegrationQueue(self, taskId, expenseId=None, requestId=None):
         """Explicit proposal from a currently saved task, never a ledger write."""
         from taraz_exchange import queue_saved_task
         with self._lock:
+            # A new manual submission must have an ID durably reserved BEFORE
+            # this call. Legacy retry IDs are accepted only when an actual
+            # same-ID local proposal is already present for validation.
+            if requestId is None:
+                raise PermissionError("ابتدا شناسه پایدار درخواست را آماده کنید.")
             # LAN clients must not queue a stale/offline task or another user's
             # inaccessible project into this Windows user's exchange inbox.
             state = self.getState()
@@ -1687,7 +1900,85 @@ class Bridge:
                 if (len(selected) != 1 or
                         (grants is not None and selected[0].get("projectId") not in grants)):
                     raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
-            return queue_saved_task(state, taskId, expenseId)
+            from mtr_e2_send_journal import assert_prepared_matches_if_present
+            journal = assert_prepared_matches_if_present(
+                state, taskId, expenseId,
+                actor_scope=self._taraz_actor_scope(), request_id=requestId
+            )
+            if not journal["hasPreparedIntent"]:
+                from taraz_exchange import _pending_dir, _assert_safe_path
+                root = _pending_dir().parent
+                candidates = (root / "pending" / (requestId + ".json"),
+                              root / "reviewed" / (requestId + ".json"))
+                for file in candidates:
+                    _assert_safe_path(file.parent)
+                    _assert_safe_path(file)
+                if not any(file.is_file() for file in candidates):
+                    raise PermissionError(
+                        "شناسه ناشناس است؛ درخواست جدید بدون ثبت قبلی مجاز نیست."
+                    )
+            return queue_saved_task(state, taskId, expenseId, request_id=requestId)
+
+    def tarazIntegrationHistory(self, taskId, optedIn=False):
+        """Scoped, consent-gated local file observations, never accounting truth."""
+        from taraz_review_status import local_task_reviews
+        if optedIn is not True:
+            return local_task_reviews("", "", opted_in=False)
+        with self._lock:
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("برای بررسی وضعیت تراز باید ارتباط میزبان برقرار باشد.")
+            tasks = [task for task in state.get("tasks", [])
+                     if isinstance(task, dict) and task.get("id") == taskId
+                     and task.get("deleted") is not True]
+            if len(tasks) != 1:
+                raise PermissionError("کارت موردنظر در محدوده دسترسی نیست.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("مشاهده وضعیت تبادل تراز مجاز نیست.")
+                grants = user.get("projects")
+                if grants is not None and tasks[0].get("projectId") not in grants:
+                    raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
+            return local_task_reviews(taskId, tasks[0].get("projectId"), opted_in=True)
+
+    def aiDraftSuggest(self, taskId, text, optedIn=False):
+        """Explicit local-only draft preview for an authorized persisted task."""
+        if optedIn is not True:
+            raise PermissionError("برای پیشنهاد هوشمند، اقدام آگاهانه کاربر ضروری است.")
+        from madar_ai_draft import generate_task_draft
+        with self._lock:
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("برای پیشنهاد این کارت ابتدا ارتباط میزبان را برقرار کنید.")
+            selected = [t for t in state.get("tasks", [])
+                        if isinstance(t, dict) and t.get("id") == taskId and
+                        t.get("deleted") is not True]
+            if len(selected) != 1:
+                raise PermissionError("کارت موردنظر قابل دسترسی نیست.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("پیشنهاد هوشمند برای این حساب مجاز نیست.")
+                grants = user.get("projects")
+                if grants is not None and selected[0].get("projectId") not in grants:
+                    raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
+                # Cached user profiles are insufficient for an AI grant:
+                # consult the host on every invocation so revocation applies.
+                grant = self._remote_request("/api/ai/authorize",
+                                             {"projectId": selected[0]["projectId"]})
+                if (type(grant) is not dict or grant.get("allowed") is not True
+                        or grant.get("provider") != "local_ollama"
+                        or grant.get("policyVersion") != 1):
+                    raise PermissionError("پاسخ مجوز هوش مصنوعی میزبان معتبر نیست.")
+            elif self.lan:
+                self.lan.authorize_ai(self.lan.authenticate_owner_token(),
+                                      {"projectId": selected[0]["projectId"]})
+            elif self.connection.get("mode") != "solo":
+                raise PermissionError("میزبان فعال برای تأیید مجوز AI در دسترس نیست.")
+        # No external client, persistence, finance API or data other than the
+        # user's explicitly submitted text crosses this bounded adapter.
+        return generate_task_draft(text, opt_in=True)
 
     def financeStatus(self):
         if self.connection.get("mode") == "client":
@@ -2245,6 +2536,144 @@ class Bridge:
         if self.lan:
             return self.lan.users, self.lan.authenticate_owner_token(), True
         return {"local": {"username": "local", "role": "admin", "projects": None}}, None, False
+
+    def mtrNoticeCommand(self, envelope):
+        """E6 opt-in client-only, pinned-HTTPS internal inbox bridge.
+
+        This is not a notice publisher, a finance API, or a LAN listener.
+        It returns a freshly constructed presentation-only response, never
+        a raw host notice, receipt, actor, status or request reference.
+        The authenticated host alone enforces notice/recipient/project ACLs.
+        """
+        if type(envelope) is not dict or set(envelope) != {
+                "schemaVersion", "action", "params"}:
+            raise ValueError("Invalid internal notice envelope.")
+        if type(envelope["schemaVersion"]) is not int or envelope["schemaVersion"] != 1:
+            raise ValueError("Unsupported internal notice version.")
+        action, params = envelope["action"], envelope["params"]
+        if type(action) is not str or type(params) is not dict:
+            raise ValueError("Invalid internal notice operation.")
+        project_id = None
+        if action == "list" and set(params) == {"projectId", "limit"}:
+            project_id = params["projectId"]
+            if (type(project_id) is not str or
+                    re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,179}", project_id) is None or
+                    type(params["limit"]) is not int or
+                    not 1 <= params["limit"] <= 100):
+                raise ValueError("Invalid bounded internal notice list.")
+            safe_params = {"projectId": project_id, "limit": params["limit"]}
+        elif action == "mark-read" and set(params) == {"noticeId", "manualAction"}:
+            if (type(params["noticeId"]) is not int or
+                    not 1 <= params["noticeId"] <= 2**63 - 1 or
+                    params["manualAction"] is not True):
+                raise ValueError("Explicit valid notice read action required.")
+            safe_params = {"noticeId": params["noticeId"], "manualAction": True}
+        else:
+            raise ValueError("Unsupported internal notice operation.")
+
+        config = self.connection
+        if type(config) is not dict or config.get("mode") != "client" or self.lan is not None:
+            raise PermissionError("Internal notices require a client connection.")
+        url, pin = config.get("url"), config.get("fingerprint")
+        parsed = _validate_lan_target(url)
+        if (parsed.scheme != "https" or type(pin) is not str or
+                re.fullmatch(r"[0-9a-fA-F]{64}", pin) is None or
+                type(url) is not str or url != url.rstrip("/")):
+            raise PermissionError("A pinned HTTPS host is required for internal notices.")
+        token = self.remote_token
+        if (type(token) is not str or not 8 <= len(token) <= 512 or
+                self._network_available is not True):
+            raise PermissionError("A currently connected authenticated session is required.")
+        user = self.remote_user
+        if (type(user) is not dict or
+                type(user.get("username")) is not str or
+                re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,179}",
+                             user["username"]) is None or
+                user.get("role") not in ("admin", "editor", "viewer") or
+                "projects" not in user):
+            raise PermissionError("Authenticated host account scope is unavailable.")
+        allowed = user["projects"]
+        if allowed is not None and (
+                type(allowed) is not list or len(allowed) > 5000 or
+                any(type(item) is not str or
+                    re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,179}", item) is None
+                    for item in allowed) or len(set(allowed)) != len(allowed)):
+            raise PermissionError("Host project grants are invalid.")
+        if project_id is not None and allowed is not None and project_id not in allowed:
+            raise PermissionError("Project is outside the authenticated account scope.")
+        username, role = user["username"], user["role"]
+        # Copy grants: comparing the same mutable list to itself after an
+        # in-place role/grant update would silently accept a stale response.
+        grants_at_send = None if allowed is None else tuple(allowed)
+        # The connection/session may be replaced while the request is awaiting
+        # its response. A stale response is never delivered across that switch.
+        try:
+            response = self._remote_request(
+                "/api/mtr-notices/v1/command",
+                {"schemaVersion": 1, "action": action, "params": safe_params})
+        except Exception:
+            # The generic LAN request helper can include server-supplied
+            # error bodies. Never surface those untrusted strings as E6
+            # presentation errors or financial/receipt information.
+            raise RuntimeError("Internal notice host operation unavailable.") from None
+        latest = self.connection
+        latest_user = self.remote_user
+        if (type(latest) is not dict or latest.get("mode") != "client" or
+                self.lan is not None or
+                latest.get("url") != url or latest.get("fingerprint") != pin or
+                self.remote_token != token or self._network_available is not True or
+                type(latest_user) is not dict or
+                latest_user.get("username") != username or
+                latest_user.get("role") != role or
+                (None if latest_user.get("projects") is None else
+                 tuple(latest_user.get("projects")) if
+                 type(latest_user.get("projects")) is list else
+                 "<invalid-grants>") != grants_at_send):
+            raise PermissionError("Internal notice connection or session changed.")
+        if (type(response) is not dict or set(response) != {"schemaVersion", "result"} or
+                type(response["schemaVersion"]) is not int or response["schemaVersion"] != 1):
+            raise ValueError("Invalid internal notice host response.")
+        raw = response["result"]
+        if action == "mark-read":
+            if (type(raw) is not dict or set(raw) != {
+                    "notice_id", "marked_read", "already_read"} or
+                    type(raw["notice_id"]) is not int or
+                    raw["notice_id"] != safe_params["noticeId"] or
+                    type(raw["marked_read"]) is not bool or
+                    type(raw["already_read"]) is not bool or
+                    raw["marked_read"] == raw["already_read"]):
+                raise ValueError("Invalid internal notice read acknowledgement.")
+            return {"schemaVersion": 1, "result": {
+                "notice_id": raw["notice_id"], "marked_read": raw["marked_read"],
+                "already_read": raw["already_read"]}}
+
+        if type(raw) is not list or len(raw) > safe_params["limit"]:
+            raise ValueError("Invalid bounded internal notice list response.")
+        safe, seen = [], set()
+        known_events = ("request_status_changed", "deficiency_assigned",
+                        "amendment_status_changed")
+        for row in raw:
+            if (type(row) is not dict or
+                    row.get("project_id") != project_id or
+                    row.get("recipient_id") != username or
+                    row.get("channel") != "internal_only" or
+                    type(row.get("notice_id")) is not int or
+                    not 1 <= row["notice_id"] <= 2**63 - 1 or
+                    row["notice_id"] in seen or
+                    type(row.get("event_kind")) is not str or
+                    row["event_kind"] not in known_events or
+                    type(row.get("is_read")) is not bool or
+                    (row.get("read_at") is not None and (
+                        type(row["read_at"]) is not str or
+                        not 1 <= len(row["read_at"]) <= 80)) or
+                    row["is_read"] != (row.get("read_at") is not None)):
+                raise ValueError("Invalid or foreign internal notice result.")
+            seen.add(row["notice_id"])
+            safe.append({
+                "notice_id": row["notice_id"], "project_id": project_id,
+                "channel": "internal_only", "event_kind": row["event_kind"],
+                "is_read": row["is_read"], "read_at": row.get("read_at")})
+        return {"schemaVersion": 1, "result": safe}
 
     def collabRead(self, kind, card_id=""):
         if kind not in ("comments", "project-comments", "notifications", "activity", "rules"):
@@ -2928,15 +3357,17 @@ window.madar = Object.fromEntries(
   'lanProfiles','lanMyProfile','lanChangePassword','lanResetPassword',
   'getPreferences','setPreferences','plannerRead','plannerWrite','openSharedFile','downloadSharedFile','chooseSharedFile','attachmentSave','releaseCheck','releaseDownload','releaseInstall','createLocalBackup','listLocalBackups','restoreLocalBackup','automaticBackupStatus',
   'syncStatus','chooseDriveFolder','driveFolderStatus','driveFolderBackup']
-  .concat(['collabRead','collabCommand','automationButtonsList',
+ .concat(['collabRead','collabCommand','mtrNoticeCommand','automationButtonsList',
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',
            'driveFolderList','driveFolderRestore',
            'cloudPeerStatus','cloudPeerConfigure','cloudPeerGenerate','cloudPeerForget',
-           'tarazIntegrationStatus','tarazIntegrationQueue',
+           'tarazIntegrationStatus','tarazIntegrationOpenLocal','tarazIntegrationPrepare','tarazIntegrationQueue','tarazIntegrationHistory','aiDraftSuggest',
            'runDueScheduler','attachmentList','attachmentPreview','attachmentRead',
            'attachmentUpload','attachmentDelete','attachmentBackup',
            'createUnifiedSqliteBackup','storageStatus','enableUnifiedStorage',
-           'integrationIssueKey','integrationRevokeKey',
+           'integrationIssueKey','integrationRevokeKey','integrationStartPairing','integrationConnections',
+           'integrationMailboxConnections','integrationMailboxApproveCompany',
+           'integrationMailboxEnqueue','integrationMailboxReconcile',
            'calendarExportIcs','calendarImportPreview',
            'automationEngineStatus','enableAutomationEngine'])
  .map(key => [key, (...args) => new Promise((resolve, reject) => {

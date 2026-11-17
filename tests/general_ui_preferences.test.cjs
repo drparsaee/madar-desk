@@ -59,5 +59,6 @@ test('Madar caller checks permission plus actual opt-in before reaching native q
   assert.match(app,/if\(!tarazEnabled\)\{setToast\('/);
   assert.match(app,/if\(!tarazStatus\?\.supported\|\|tarazStatus\?\.postingEnabled!==false\)/);
   assert.match(app,/tarazQueueAvailable=\{tarazEnabled&&tarazStatus\?\.supported===true/);
-  assert.match(app,/await api\.tarazIntegrationQueue\(taskId\)/);
+  assert.match(app,/await api\.tarazIntegrationPrepare\(taskId\)/);
+  assert.match(app,/await api\.tarazIntegrationQueue\(taskId,null,targetId\)/);
 });

@@ -72,7 +72,8 @@ class IntegrationHttpAcceptance(unittest.TestCase):
                                  timeout=5)
 
     def test_https_get_requires_key_and_hides_finance(self):
-        generated = self.bridge.integrationIssueKey("owner", ["read"])
+        generated = self.bridge.integrationIssueKey("owner", ["read"],
+            adminCredentials={"username":"owner","password":"very-secret-test-password"})
         self.assertEqual(len(generated["keyId"]), 27)
         response = self.call("GET", "/cards", generated["key"])
         self.assertIn("cards", response)
@@ -82,13 +83,15 @@ class IntegrationHttpAcceptance(unittest.TestCase):
         with self.assertRaises(HTTPError) as error:
             self.call("GET", "/cards", "bad-key")
         self.assertEqual(error.exception.code, 401)
-        self.assertEqual(self.bridge.integrationRevokeKey(generated["keyId"]), {"revoked": True})
+        self.assertEqual(self.bridge.integrationRevokeKey(generated["keyId"],
+            {"username":"owner","password":"very-secret-test-password"}), {"revoked": True})
         with self.assertRaises(HTTPError) as error:
             self.call("GET", "/cards", generated["key"])
         self.assertEqual(error.exception.code, 401)
 
     def test_http_patch_is_revision_guarded_and_idempotent(self):
-        generated = self.bridge.integrationIssueKey("owner", ["read", "write"])
+        generated = self.bridge.integrationIssueKey("owner", ["read", "write"],
+            adminCredentials={"username":"owner","password":"very-secret-test-password"})
         response = self.call("GET", "/cards", generated["key"])
         card = response["cards"][0]
         body = {"title": "Renamed through HTTPS API", "revision": response["revision"]}

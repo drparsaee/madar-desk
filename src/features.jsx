@@ -61,7 +61,7 @@ export function FinanceSummary({project,tasks,onChange,canManage=true,compact=fa
 
 export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalendarChange,canManage=true,
  theme='dark',themeMode=theme,onThemeChange=()=>{},generalUi={},onGeneralUiChange=()=>{},
- tarazStatus=null,tarazEnabled=false,onTarazEnabledChange=()=>{},onRefreshTaraz=()=>{},
+ tarazStatus=null,tarazEnabled=false,onTarazEnabledChange=()=>{},onRefreshTaraz=()=>{},onOpenLocalTaraz=()=>{},
  accountStatus=null,onOpenLanSignup=()=>{},onOpenUserManagement=()=>{},onOpenProfile=()=>{},
  updateApi=null,priorityUsedIds,boardId=null,onArchiveList,onRestoreList,onOpenBoardButtons}){
  const [page,setPage]=useState('general');
@@ -119,6 +119,7 @@ export function SettingsPanel({data,onChange,onClose,calendar='jalali',onCalenda
        <p>مدار فقط خلاصهٔ کارت ذخیره‌شده و شناسهٔ پروژه را، با درخواست شما، در صندوق پیشنهادهای محلی قرار می‌دهد. در صورت انتخاب هزینهٔ معتبر، فقط شناسه و مبلغ ریالی آن ارسال می‌شود. تراز باید جداگانه این پیشنهاد را بازبینی کند. هیچ سند یا پرداختی خودکار ثبت نمی‌شود.</p>
        <div className="settings-general-row"><span className="settings-general-label"><ShieldCheck size={18}/><span><strong>وضعیت صندوق تبادل</strong><small>{tarazStatus?.message||'وضعیت هنوز خوانده نشده است.'}</small></span></span><button type="button" className="settings-inline-action" onClick={onRefreshTaraz}><RefreshCw size={15}/> بازخوانی وضعیت</button></div>
        <p role="status" className="settings-inline-status">{tarazStatus?.supported?'صندوق محلی مدار آماده است؛ این به معنی اجرا یا نصب‌بودن تراز نیست.':'صندوق تبادل در این محیط قابل استفاده نیست.'} {tarazStatus?.supported&&Number.isSafeInteger(tarazStatus.pending)?'پیشنهادهای منتظر بررسی: '+tarazStatus.pending.toLocaleString('fa-IR'):''}</p>
+       <div className="settings-general-row"><span className="settings-general-label"><Link2 size={18}/><span><strong>برنامهٔ تراز روی این رایانه</strong><small>{tarazStatus?.localPeer?.approvedBuild===true?'نسخهٔ بررسی‌شدهٔ '+tarazStatus.localPeer.version+' شناسایی شد؛ این هنوز به معنی ورود به تراز یا ثبت سند مالی نیست.':'نسخهٔ محلی مورد تأیید شناسایی نشد. ارسال پیشنهاد به‌تنهایی به معنی اتصال تأییدشده نیست.'}</small></span></span><button type="button" className="settings-inline-action" disabled={tarazStatus?.localPeer?.canOpenManually!==true} onClick={onOpenLocalTaraz}>بازکردن تراز</button></div>
        <label className="setting-toggle settings-general-shared"><input type="checkbox" checked={tarazEnabled} disabled={!tarazStatus?.supported} onChange={e=>onTarazEnabledChange(e.target.checked)}/><span><strong>اجازهٔ ارسال دستی پیشنهاد از کارت به تراز</strong><small>پیش‌فرض خاموش است. فعال‌کردن این گزینه هیچ داده‌ای را خودکار ارسال نمی‌کند. ارسال فقط از دکمهٔ داخل کارت انجام می‌شود.</small></span></label>
      </section>
      <section hidden={page!=='account'} className="settings-special-page" aria-label="ثبت‌نام و حساب مدار">
@@ -251,6 +252,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  const [role,setRole]=useState('viewer');
  const [scope,setScope]=useState('all');
  const [selectedProjects,setSelectedProjects]=useState([]);
+ const [aiEnabled,setAiEnabled]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
@@ -327,14 +329,14 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
    setMode(s.mode);await onConnected();setNotice(httpsTarget?'با بررسی اثرانگشت گواهی به سرور HTTPS متصل شدی.':'ارتباط HTTP فقط در همین رایانه (loopback) مجاز است.');
  });
  const handleLeave=()=>run(async()=>{const s=await api.lanLeave();setMode(s.mode);await onConnected();setNotice('به حالت شخصی برگشتی.');});
- const resetUserForm=()=>{setEditingUsername('');setName('');setUserPassword('');setUserDisplayName('');setUserIcon('user');setUserColor(DEFAULT_AVATAR_COLOR);setUserPhoto('');setRole('viewer');setDisplayRole('employee');setCustomUserDisplay(false);setUserDisplayMode('basic');setUserDisplayFeatures([]);setScope('all');setSelectedProjects([]);};
+ const resetUserForm=()=>{setEditingUsername('');setName('');setUserPassword('');setUserDisplayName('');setUserIcon('user');setUserColor(DEFAULT_AVATAR_COLOR);setUserPhoto('');setRole('viewer');setAiEnabled(false);setDisplayRole('employee');setCustomUserDisplay(false);setUserDisplayMode('basic');setUserDisplayFeatures([]);setScope('all');setSelectedProjects([]);};
  const editUser=u=>{
    const id=lanDefaultDisplayRoleForUser(u);
    const template=displayRoles.find(item=>item.id===id);
    const chosenMode=u.displayMode||template?.displayMode||'basic';
    const available=lanAvailableUserFeatures(template,chosenMode);
    const chosenFeatures=Array.isArray(u.displayFeatures)?available.filter(key=>u.displayFeatures.includes(key)):available;
-   setEditingUsername(u.username);setName(u.username);setRole(u.role);setDisplayRole(id);
+   setEditingUsername(u.username);setName(u.username);setRole(u.role);setAiEnabled(u.aiEnabled===true);setDisplayRole(id);
    setUserDisplayMode(chosenMode);setUserDisplayFeatures(chosenFeatures);
    setCustomUserDisplay(chosenMode!==template?.displayMode||chosenFeatures.length!==available.length);
    setScope(u.projects===null?'all':'selected');setSelectedProjects(u.projects||[]);setUserPassword('');
@@ -353,6 +355,7 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
  const invalidDisplayRole=!lanCanAssignDisplayRole(displayRoles,displayRole,role);
  const saveUser=()=>run(async()=>{if(invalidDisplayRole)throw Error('قالب مدیرکل فقط با مجوز فنی مدیر میزبان مجاز است؛ مجوز مدیر نیز به انتخاب قالب مدیرکل نیاز دارد.');
    const payload={username:name.trim(),password:userPassword,role,displayRole,
+     aiEnabled:role!=='viewer'&&aiEnabled,
      projects:role==='admin'||scope==='all'?null:selectedProjects,displayName:userDisplayName,
      avatarIcon:userIcon,avatarColor:userColor,avatarPhoto:userPhoto};
    // A missing override means "use the role template" to the LAN host.
@@ -363,6 +366,12 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
    }
    await api.lanSaveUser(payload);
    setUsers(await api.lanUsers());resetUserForm();setNotice('حساب، قالب نمایش و مجوز فنی ذخیره شد.');});
+ const toggleUserAi=u=>run(async()=>{
+   if(u.role==='viewer'&&!u.aiEnabled)throw Error('ابتدا نقش کاربر را به ویرایشگر یا مدیر تغییر بده.');
+   await api.lanSaveUser({username:u.username,aiEnabled:!u.aiEnabled});
+   setUsers(await api.lanUsers());
+   setNotice('مجوز دستیار محلی برای '+(u.displayName||u.username)+' به‌روزرسانی شد.');
+ });
  const resetPassword=()=>run(async()=>{await api.lanResetPassword(name,userPassword);setUserPassword('');setNotice('رمز قبلی باطل و رمز جدید فعال شد؛ نشست‌های قبلی نیز لغو شدند.');});
  const deleteUser=u=>run(async()=>{await api.lanDeleteUser(u);setUsers(await api.lanUsers());setNotice('حساب حذف شد.');});
  const resetDisplayRoleForm=()=>{setEditingDisplayRole('');setDisplayRoleTitle('');setDisplayRoleMode('basic');setLimitRoleFeatures(false);setSelectedRoleFeatures([]);};
@@ -461,6 +470,18 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
     <div className="account-create-heading"><Users size={18}/> تعریف کاربر و تعیین سطح دسترسی</div>
     {busy&&<p className="lan-help" role="status">در حال دریافت فهرست کاربران و نقش‌ها…</p>}
     <p className="lan-help">مدیر قالب نمایش هر حساب را تعیین می‌کند. قالب فقط امکانات قابل مشاهده را مشخص می‌کند؛ مجوز فنی و دسترسی به داده‌ها جداگانه در میزبان کنترل می‌شود.</p>
+    <section className="setting-block" aria-label="داشبورد کنترل هوش مصنوعی کاربران">
+      <h3><ShieldCheck size={17}/> داشبورد کنترل AI کاربران</h3>
+      <p className="lan-help">{users.filter(u=>u.aiEnabled===true).length.toLocaleString('fa-IR')} حساب دارای مجوز از {users.length.toLocaleString('fa-IR')} حساب. هر درخواست از میزبان مجوز تازه می‌گیرد؛ صرف نمایش دکمه در کلاینت کافی نیست.</p>
+      <div className="users-list">{users.map(u=><div className="user-row" key={'ai-'+u.username}>
+        <span><strong>{u.displayName||u.username}</strong><small dir="ltr">{u.username}</small>
+          <small>{u.aiEnabled===true?'مجاز: مدل محلی Ollama':'دسترسی AI غیرفعال'}</small></span>
+        <button type="button" className="btn secondary" disabled={busy||(u.role==='viewer'&&!u.aiEnabled)}
+          aria-label={(u.aiEnabled?'غیرفعال کردن AI برای ':'فعال کردن AI برای ')+u.username}
+          onClick={()=>toggleUserAi(u)}>{u.aiEnabled?'قطع دسترسی':'فعال‌سازی'}</button>
+      </div>)}</div>
+      <p className="lan-help">فعلاً فقط مدل محلی پشتیبانی می‌شود. API آنلاین، سهمیه مصرف و گزارش هزینه هنوز پیاده‌سازی نشده‌اند؛ فعال‌کردن مجوز به معنی نصب یا اجرای موفق مدل نیست.</p>
+    </section>
     <div className="lan-density__workspace">
     <aside className="lan-density__directory" aria-label="حساب‌ها و قالب‌های موجود">
     <h3>کاربران شبکه</h3>
@@ -552,6 +573,11 @@ export function LanPanel({api,projects,onClose,status,onRefresh,onConnected,init
       :role==='editor'
         ?'ویرایشگر می‌تواند کارهای پروژه‌های مجاز را ثبت و ویرایش کند، اما اجازه مدیریت کاربران را ندارد.'
         :'مشاهده‌گر فقط اطلاعات پروژه‌های مجاز را می‌بیند و حق تغییر ندارد.'}</p>
+    <label className="setting-toggle"><input type="checkbox" checked={role!=='viewer'&&aiEnabled}
+      disabled={role==='viewer'} onChange={e=>setAiEnabled(e.target.checked)}/>
+      <span><strong>اجازه استفاده از دستیار AI محلی</strong>
+        <small>فقط مدیر شبکه تغییر می‌دهد؛ مشاهده‌گر مجاز نیست. رضایت خود کاربر برای هر درخواست همچنان الزامی است.</small>
+      </span></label>
     {invalidDisplayRole&&<p className="lan-error" role="alert">قالب معتبر انتخاب کن. قالب «مدیرکل» فقط با مجوز فنی «مدیر میزبان» سازگار است و این مجوز نیز به قالب «مدیرکل» نیاز دارد. هر دو را جداگانه انتخاب کن.</p>}
     {activeTemplate&&<div className="setting-block lan-user-display-options">
       <label className="setting-toggle"><input type="checkbox" checked={customUserDisplay} onChange={e=>{

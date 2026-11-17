@@ -33,8 +33,10 @@ test('interactive LAN account form saves default viewer/editor to the real host 
           if(status.mode==='solo'||status.user.role!=='admin')throw Error('Permission denied');
           if('displayMode' in payload&&payload.displayMode===null)throw Error('User display mode must be valid');
           if('displayFeatures' in payload&&payload.displayFeatures===null)throw Error('User display features must be a list');
-          saved.push({...payload});
-          return {...payload};
+          const index=saved.findIndex(user=>user.username===payload.username);
+          const next=index>=0?{...saved[index],...payload}:{...payload};
+          if(index>=0)saved[index]=next;else saved.push(next);
+          return next;
         },
       };
       return React.createElement(LanPanel,{
@@ -74,12 +76,22 @@ test('interactive LAN account form saves default viewer/editor to the real host 
     assert.equal(calls.every(x=>!('displayMode' in x)&&!('displayFeatures' in x)),true,
       'default template must inherit host role without invalid null overrides');
     assert.equal(calls[0].projects,null);
+    const aiPanel=dialog.getByRole('region',{name:'داشبورد کنترل هوش مصنوعی کاربران'});
+    assert.equal(await aiPanel.getByRole('button',{name:'فعال کردن AI برای worker-view'}).isDisabled(),true);
+    await aiPanel.getByRole('button',{name:'فعال کردن AI برای worker-edit'}).click();
+    await aiPanel.getByRole('button',{name:'غیرفعال کردن AI برای worker-edit'}).waitFor();
+    const grantCall=(await page.evaluate(()=>window.hostCalls))[2];
+    assert.deepEqual(grantCall,{username:'worker-edit',aiEnabled:true});
+    await aiPanel.getByRole('button',{name:'غیرفعال کردن AI برای worker-edit'}).click();
+    await aiPanel.getByRole('button',{name:'فعال کردن AI برای worker-edit'}).waitFor();
+    assert.deepEqual((await page.evaluate(()=>window.hostCalls))[3],
+      {username:'worker-edit',aiEnabled:false});
     await page.evaluate(()=>window.changeSession('server','viewer'));
     await dialog.getByText('ساخت حساب جدید').waitFor({state:'hidden'});
     await page.evaluate(()=>window.changeSession('solo','admin'));
     await dialog.getByText('تعریف کاربران و تعیین دسترسی پس از راه‌اندازی میزبان').waitFor();
     assert.equal(await dialog.getByRole('button',{name:'ایجاد حساب کاربر'}).count(),0);
-    assert.equal((await page.evaluate(()=>window.hostCalls)).length,2);
+    assert.equal((await page.evaluate(()=>window.hostCalls)).length,4);
     assert.deepEqual(pageErrors,[]);
   }finally{
     await browser.close();

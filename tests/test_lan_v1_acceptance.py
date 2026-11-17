@@ -146,7 +146,9 @@ class TwoHostLanV1Acceptance(unittest.TestCase):
         self.require_status(405, lambda: self.call(self.a_base, "/api/login"))
         self.require_status(404, lambda: self.call(self.a_base, "/users.json"))
         self.require_status(404, lambda: self.call(self.a_base, "/api/unknown"))
-        self.require_status(403, lambda: self.call(self.a_base, "/api/finance-overview",
+        # Standalone finance was retired; the route must be absent even for
+        # a forged or correctly authenticated account (404, not 403).
+        self.require_status(404, lambda: self.call(self.a_base, "/api/finance-overview",
                                                    token=self.create("viewer2", "viewer")))
         self.assertNotIn("passwordHash", self.call(self.a_base, "/api/users",
                                                    token=self.owner_a)["users"][0])

@@ -38,6 +38,15 @@ import finance
 
 ROLES = {"admin", "editor", "viewer"}
 
+# Internal-only notice visibility. These are *maximum* fields per LAN role;
+# a per-user override can narrow but never grant a higher role's fields.
+# Keep in parity with mtr_lan_notification_adapter._FIELDS via regression.
+_INTERNAL_NOTICE_ROLE_FIELDS = {
+    "admin": frozenset(("status", "actor_id", "amendment_id", "deficiency_summary")),
+    "editor": frozenset(("status", "actor_id", "amendment_id")),
+    "viewer": frozenset(("status",)),
+}
+
 
 def standalone_finance_access(actor, accounts, *, mutation=False):
     """Only trusted server-side account grants, independent of project ACL."""
@@ -168,8 +177,12 @@ def make_account(username, password, role="viewer", projects=None):
     if projects is not None and (not isinstance(projects, list) or
                                  not all(isinstance(p, str) for p in projects)):
         raise ValueError("محدوده پروژه‌ها معتبر نیست.")
+    # One private immutable actor generation per LAN account. A deleted user
+    # re-created with the same username must NOT inherit previous E2 requests.
+    from mtr_account_lineage import new_account_lineage
     return {"username": username, "passwordHash": password_hash(password),
-            "role": role, "projects": projects, **clean_profile({})}
+            "role": role, "projects": projects,
+            "accountLineage": new_account_lineage(), **clean_profile({})}
 
 
 def public_user(account, display_roles=None):
@@ -323,6 +336,64 @@ class LanService:
         self.server = None
         self.thread = None
         self.integration_router = None
+        # Explicit opt-in metadata-only pilot. Not mounted in installed hosts.
+        self.mtr_finance_adapter = None
+        self.radar_crm_adapter = None
+        self.mtr_notice_adapter = None
+        self.ai_usage_adapter = None
+
+    def mount_ai_usage_pilot(self, store, *, org_id, identity_key):
+        """Explicit host-operator E1 AI-budget mount; NO provider transport."""
+        with self.lock:
+            if (self.server is None or not isinstance(self.server.socket, ssl.SSLSocket)
+                    or not self.certfile or not self.keyfile):
+                raise PermissionError("AI usage pilot requires active TLS host")
+            if self.ai_usage_adapter is not None:
+                raise RuntimeError("AI usage pilot already mounted")
+            from madar_ai_usage_host_adapter import MadarAiUsageHostAdapter
+            self.ai_usage_adapter = MadarAiUsageHostAdapter(
+                self, store, org_id=org_id, identity_key=identity_key,
+            )
+
+    def mount_mtr_notice_pilot(self, store, *, org_id, trusted_event_source):
+        """Trusted host-only E6 inbox mount; event source is never client-set."""
+        with self.lock:
+            if (self.server is None or not isinstance(self.server.socket, ssl.SSLSocket)
+                    or not self.certfile or not self.keyfile):
+                raise PermissionError("MTR notice pilot requires active TLS host")
+            if self.mtr_notice_adapter is not None:
+                raise RuntimeError("MTR notice pilot already mounted")
+            from mtr_lan_notification_adapter import MtrLanNotificationAdapter
+            self.mtr_notice_adapter = MtrLanNotificationAdapter(
+                self, store, org_id=org_id,
+                trusted_event_source=trusted_event_source,
+            )
+
+    def mount_radar_crm_pilot(self, store, *, org_id):
+        """Trusted local host opt-in for E1 CRM; no installation side effects."""
+        with self.lock:
+            if (self.server is None or not isinstance(self.server.socket, ssl.SSLSocket)
+                    or not self.certfile or not self.keyfile):
+                raise PermissionError("Radar CRM pilot requires active TLS host")
+            if self.radar_crm_adapter is not None:
+                raise RuntimeError("Radar CRM pilot already mounted")
+            from radar_host_adapter import RadarHostAdapter
+            self.radar_crm_adapter = RadarHostAdapter(self, store, org_id=org_id)
+
+    def mount_mtr_finance_pilot(self, store, *, org_id):
+        """Trusted Python-side operation; NEVER available as a LAN endpoint.
+
+        The organization and SQLite path are host-operator configuration, not
+        browser parameters. Require the existing TLS listener before mounting.
+        """
+        with self.lock:
+            if (self.server is None or not isinstance(self.server.socket, ssl.SSLSocket)
+                    or not self.certfile or not self.keyfile):
+                raise PermissionError("MTR finance pilot requires active TLS host")
+            if self.mtr_finance_adapter is not None:
+                raise RuntimeError("MTR finance pilot already mounted")
+            from mtr_lan_finance_adapter import MtrLanFinanceAdapter
+            self.mtr_finance_adapter = MtrLanFinanceAdapter(self, store, org_id=org_id)
 
     def _commit_domain(self, domain, state, *, expected_finance_sha256=None):
         """Use the unified store when available, or the legacy JSON bridge."""
@@ -602,6 +673,16 @@ class LanService:
             account = self.users.get(record[0])
             if not account:
                 raise PermissionError("حساب کاربری پیدا نشد.")
+            # A corrupted/private-registry collision would make distinct
+            # usernames the SAME immutable actor in E2. Deny the session
+            # rather than allow either account to recover another's request.
+            lineage = account.get("accountLineage")
+            if lineage is not None and any(
+                name != record[0] and type(other) is dict and
+                other.get("accountLineage") == lineage
+                for name, other in self.users.items()
+            ):
+                raise PermissionError("Duplicate private account identity; host recovery required")
             return account
 
     def list_users(self, token):
@@ -609,7 +690,36 @@ class LanService:
             who = self.account_for(token)
             if who["role"] != "admin":
                 raise PermissionError("فقط مدیر به کاربران دسترسی دارد.")
-            return [self._public_user(u) for u in self.users.values()]
+            return [{**self._public_user(u),
+                     "aiEnabled": u.get("aiEnabled") is True,
+                     "internalNotificationsEnabled": u.get(
+                         "internalNotificationsEnabled") is True,
+                     "internalNotificationFields": u.get("internalNotificationFields")}
+                    for u in self.users.values()]
+
+    def authorize_ai(self, token, payload):
+        """Fresh host-side entitlement for a single local AI request.
+
+        No prompt, model key or task contents cross this route. A positive
+        reply never grants access to any other project or finance operation.
+        """
+        if (type(payload) is not dict or set(payload) != {"projectId"}
+                or type(payload["projectId"]) is not str
+                or not 1 <= len(payload["projectId"]) <= 180):
+            raise ValueError("شناسه پروژه برای درخواست AI معتبر نیست.")
+        with self.lock, self.bridge._lock:
+            who = self.account_for(token)
+            if who.get("role") not in ("admin", "editor") or who.get("aiEnabled") is not True:
+                raise PermissionError("مدیر دسترسی AI را برای این حساب فعال نکرده است.")
+            project_id = payload["projectId"]
+            grants = who.get("projects")
+            if grants is not None and project_id not in grants:
+                raise PermissionError("AI برای این پروژه مجاز نیست.")
+            state = self.bridge.getState()
+            if not any(isinstance(p, dict) and p.get("id") == project_id
+                       for p in state.get("projects", [])):
+                raise PermissionError("پروژه مجاز پیدا نشد.")
+            return {"allowed": True, "provider": "local_ollama", "policyVersion": 1}
 
     def list_profiles(self, token):
         with self.lock:
@@ -705,6 +815,10 @@ class LanService:
             raise PermissionError("فقط مدیر می‌تواند کاربران را تغییر دهد.")
         if not isinstance(payload, dict):
             raise ValueError("اطلاعات حساب معتبر نیست.")
+        if "accountLineage" in payload:
+            # A browser/admin command is never the identity issuer. Even an
+            # administrator cannot copy another deleted account's generation.
+            raise ValueError("account lineage is issued only by the host")
         username, password = payload.get("username"), payload.get("password")
         if (not isinstance(username, str) or
                 not 3 <= len(username) <= 40 or
@@ -714,6 +828,19 @@ class LanService:
         for grant in ("financeView", "financeEdit"):
             if grant in payload and type(payload[grant]) is not bool:
                 raise ValueError("مجوز مالی باید مقدار درست یا نادرست داشته باشد.")
+        if "aiEnabled" in payload and type(payload["aiEnabled"]) is not bool:
+            raise ValueError("مجوز هوش مصنوعی باید مقدار درست یا نادرست داشته باشد.")
+        if ("internalNotificationsEnabled" in payload and
+                type(payload["internalNotificationsEnabled"]) is not bool):
+            raise ValueError("تنظیم اعلان داخلی باید مقدار درست یا نادرست داشته باشد.")
+        if "internalNotificationFields" in payload:
+            requested_notice_fields = payload["internalNotificationFields"]
+            if (requested_notice_fields is not None and
+                    (type(requested_notice_fields) is not list or
+                     len(requested_notice_fields) > 4 or
+                     any(type(field) is not str for field in requested_notice_fields) or
+                     len(set(requested_notice_fields)) != len(requested_notice_fields))):
+                raise ValueError("فیلدهای اعلان داخلی باید فهرست یکتا و محدود باشند.")
         profile_fields = {key: payload[key] for key in
                           ("displayName", "avatarIcon", "avatarPhoto", "avatarColor")
                           if key in payload}
@@ -761,6 +888,13 @@ class LanService:
                 account = make_account(username, password, role, scope)
                 if old:
                     account.update(clean_profile({}, old))
+                    if "accountLineage" in old:
+                        account["accountLineage"] = old["accountLineage"]
+                    else:
+                        # Existing legacy account: password rotation cannot
+                        # silently mint a lineage and revive historical MTR
+                        # requests. A separately audited migration is needed.
+                        account.pop("accountLineage", None)
             else:
                 account = {**old, "role": role, "projects": scope}
             account["displayRole"] = display_role
@@ -821,6 +955,38 @@ class LanService:
             account["financeEdit"] = (payload.get(
                 "financeEdit", old.get("financeEdit", False) if old else False)
                 if role == "editor" else role == "admin")
+            # A role downgrade must never retain an AI grant.
+            account["aiEnabled"] = (payload.get(
+                "aiEnabled", old.get("aiEnabled", False) if old else False)
+                if role in ("admin", "editor") else False)
+            if role == "viewer" and payload.get("aiEnabled") is True:
+                raise ValueError("مشاهده‌گر اجازه فعال‌سازی AI ندارد.")
+            # Default OFF for every new account. This is an internal inbox
+            # only, with no customer email/SMS or automatic Taraz action.
+            account["internalNotificationsEnabled"] = payload.get(
+                "internalNotificationsEnabled",
+                old.get("internalNotificationsEnabled", False) if old else False,
+            )
+            notice_ceiling = _INTERNAL_NOTICE_ROLE_FIELDS[role]
+            notice_fields = payload.get(
+                "internalNotificationFields",
+                old.get("internalNotificationFields") if old else None,
+            )
+            if notice_fields is not None:
+                if (type(notice_fields) is not list or
+                        len(notice_fields) > 4 or
+                        any(type(field) is not str for field in notice_fields) or
+                        len(notice_fields) != len(set(notice_fields))):
+                    raise ValueError("فهرست دسترسی به فیلدهای اعلان معتبر نیست.")
+                if not set(notice_fields) <= notice_ceiling:
+                    if "internalNotificationFields" in payload or not old or old["role"] == role:
+                        raise PermissionError("حق مشاهده فیلد خصوصی اعلان از نقش فراتر است.")
+                    # Explicit role downgrade immediately attenuates inherited
+                    # private-field access. Never silently expand it.
+                    notice_fields = [field for field in notice_fields if field in notice_ceiling]
+                if len(notice_fields) > len(notice_ceiling):
+                    raise ValueError("فهرست اعلان داخلی از سقف نقش فراتر است.")
+            account["internalNotificationFields"] = notice_fields
             if profile_fields:
                 account.update(clean_profile(profile_fields, account))
             with self.bridge._lock:
@@ -1432,6 +1598,41 @@ class LanService:
                         # Do not leave a body unread on an authenticated GET.
                         # Integration routes already enforced this contract.
                         return self.reply(400, {"error": "GET نباید داده داشته باشد."})
+                if endpoint.startswith("/api/mtr/v2/"):
+                    # Incomplete E2: only host-side request metadata, no peer IO.
+                    # Default OFF, and never exposed on a plaintext listener.
+                    if (service.mtr_finance_adapter is None or
+                            not isinstance(service.server.socket, ssl.SSLSocket)):
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if endpoint not in ("/api/mtr/v2/prepare", "/api/mtr/v2/manual-send",
+                                        "/api/mtr/v2/status"):
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if self.command != "POST":
+                        return self.reply(405, {"error": "روش درخواست معتبر نیست."})
+                if endpoint.startswith("/api/radar/v1/"):
+                    if (service.radar_crm_adapter is None or
+                            not isinstance(service.server.socket, ssl.SSLSocket)):
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if endpoint != "/api/radar/v1/command":
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if self.command != "POST":
+                        return self.reply(405, {"error": "روش درخواست معتبر نیست."})
+                if endpoint.startswith("/api/mtr-notices/v1/"):
+                    if (service.mtr_notice_adapter is None or
+                            not isinstance(service.server.socket, ssl.SSLSocket)):
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if endpoint != "/api/mtr-notices/v1/command":
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if self.command != "POST":
+                        return self.reply(405, {"error": "روش درخواست معتبر نیست."})
+                if endpoint.startswith("/api/ai-usage/v1/"):
+                    if (service.ai_usage_adapter is None or
+                            not isinstance(service.server.socket, ssl.SSLSocket)):
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if endpoint != "/api/ai-usage/v1/command":
+                        return self.reply(404, {"error": "مسیر پیدا نشد."})
+                    if self.command != "POST":
+                        return self.reply(405, {"error": "روش درخواست معتبر نیست."})
                 if endpoint.startswith("/integrations/v1/"):
                     # Never expose integration credentials over the plaintext
                     # LAN handler. The router rechecks TLS and current ACL.
@@ -1442,7 +1643,9 @@ class LanService:
                         length = int(self.headers.get("Content-Length", "0"))
                     except (ValueError, TypeError):
                         return self.reply(400, {"error": "طول درخواست نامعتبر است."})
-                    if length < 0 or length > 8192:
+                    max_integration_body = (32768 if endpoint ==
+                                            "/integrations/v1/mailbox/reply" else 8192)
+                    if length < 0 or length > max_integration_body:
                         return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
                     if self.command == "GET" and length:
                         return self.reply(400, {"error": "GET نباید داده داشته باشد."})
@@ -1457,6 +1660,11 @@ class LanService:
                     self.wfile.write(outcome.body)
                     return
                 if endpoint not in ("/api/login", "/api/state", "/api/me", "/api/display-roles", "/api/users", "/api/user",
+                                    "/api/ai/authorize",
+                                    "/api/mtr/v2/prepare", "/api/mtr/v2/manual-send", "/api/mtr/v2/status",
+                                    "/api/radar/v1/command",
+                                    "/api/mtr-notices/v1/command",
+                                    "/api/ai-usage/v1/command",
                                     "/api/gantt/shift/preview",
                                     "/api/profiles", "/api/profile", "/api/password",
                                     "/api/reset-password", "/api/comments", "/api/project-comments", "/api/notifications",
@@ -1487,6 +1695,18 @@ class LanService:
                         return self.reply(413, {"error": "حجم درخواست نامعتبر است."})
                     if endpoint == "/api/login" and length > MAX_LAN_LOGIN_BODY_BYTES:
                         return self.reply(413, {"error": "حجم درخواست ورود بیش از حد مجاز است."})
+                    if endpoint.startswith("/api/mtr/v2/") and length > 4096:
+                        self.close_connection = True
+                        return self.reply(413, {"error": "حجم درخواست مالی آزمایشی نامعتبر است."})
+                    if endpoint == "/api/radar/v1/command" and length > 8192:
+                        self.close_connection = True
+                        return self.reply(413, {"error": "حجم درخواست CRM آزمایشی نامعتبر است."})
+                    if endpoint == "/api/mtr-notices/v1/command" and length > 4096:
+                        self.close_connection = True
+                        return self.reply(413, {"error": "حجم درخواست اعلان داخلی نامعتبر است."})
+                    if endpoint == "/api/ai-usage/v1/command" and length > 4096:
+                        self.close_connection = True
+                        return self.reply(413, {"error": "حجم درخواست سهمیه AI نامعتبر است."})
                     content_type = self.headers.get("Content-Type", "")
                     if content_type.split(";", 1)[0].strip().lower() != "application/json":
                         # Read only an already bounded declared body so HTTP
@@ -1495,12 +1715,105 @@ class LanService:
                         self.rfile.read(length)
                         return self.reply(415, {"error": "درخواست باید JSON باشد."})
                     try:
-                        payload = json.loads(self.rfile.read(length))
+                        raw_body = self.rfile.read(length)
+                        if (endpoint.startswith("/api/mtr/v2/") or
+                                endpoint == "/api/mtr-notices/v1/command"):
+                            def unique_pairs(pairs):
+                                obj = {}
+                                for name, value in pairs:
+                                    if name in obj:
+                                        raise ValueError("Duplicate finance metadata JSON property")
+                                    obj[name] = value
+                                return obj
+                            def reject_constant(_):
+                                raise ValueError("Non-finite finance metadata JSON number")
+                            payload = json.loads(raw_body, object_pairs_hook=unique_pairs,
+                                                 parse_constant=reject_constant)
+                        else:
+                            payload = json.loads(raw_body)
                         if not isinstance(payload, dict):
                             raise ValueError()
                     except (TypeError, ValueError, json.JSONDecodeError):
                         return self.reply(400, {"error": "ساختار JSON نامعتبر است."})
                 try:
+                    if self.command == "POST" and endpoint == "/api/ai-usage/v1/command":
+                        from madar_ai_usage_store import AiUsageError
+                        from madar_ai_usage_host_adapter import AiUsageHostError
+                        if urlparse(self.path).query:
+                            raise ValueError("AI usage pilot does not accept query parameters")
+                        try:
+                            return self.reply(200, service.ai_usage_adapter.handle(
+                                token, raw_body))
+                        except (AiUsageError, AiUsageHostError) as exc:
+                            code = exc.code
+                            status = (409 if code in (
+                                "event_conflict", "version_conflict",
+                                "stale_version", "request_conflict") else
+                                403 if code in (
+                                "authentication_required", "permission_denied",
+                                "scope_denied", "target_denied", "ai_disabled",
+                                "consent_required", "grant_disabled", "budget_exceeded",
+                            ) else 400)
+                            return self.reply(status, {"error": code})
+                    if self.command == "POST" and endpoint == "/api/mtr-notices/v1/command":
+                        from mtr_internal_notification_store import (NoticeConflictError,
+                                                                    NoticeContractError)
+                        if urlparse(self.path).query:
+                            raise ValueError("Notice pilot does not accept query parameters")
+                        if set(payload) != {"schemaVersion", "action", "params"} or (
+                                type(payload["schemaVersion"]) is not int or
+                                payload["schemaVersion"] != 1 or
+                                type(payload["params"]) is not dict):
+                            raise ValueError("Invalid internal notice command")
+                        action = payload["action"]
+                        params = payload["params"]
+                        try:
+                            if action == "publish" and set(params) == {"eventKey", "manualAction"}:
+                                if params["manualAction"] is not True:
+                                    raise PermissionError("Manual notice publish required")
+                                result = service.mtr_notice_adapter.publish(token, params["eventKey"])
+                            elif action == "list" and set(params) <= {"projectId", "limit"}:
+                                result = service.mtr_notice_adapter.list_notifications(
+                                    token, project_id=params.get("projectId"),
+                                    limit=params.get("limit", 100),
+                                )
+                            elif action == "mark-read" and set(params) == {"noticeId", "manualAction"}:
+                                if params["manualAction"] is not True:
+                                    raise PermissionError("Manual notice read required")
+                                result = service.mtr_notice_adapter.mark_read(token, params["noticeId"])
+                            else:
+                                raise ValueError("Unsupported notice operation/parameters")
+                            return self.reply(200, {"schemaVersion": 1, "result": result})
+                        except NoticeConflictError:
+                            return self.reply(409, {"error": "notice_event_conflict"})
+                        except NoticeContractError:
+                            return self.reply(400, {"error": "invalid_notice_data"})
+                    if self.command == "POST" and endpoint == "/api/radar/v1/command":
+                        from radar_crm_store import CrmError
+                        from radar_host_adapter import RadarHostAdapterError
+                        if urlparse(self.path).query:
+                            raise ValueError("Radar pilot does not accept query parameters")
+                        try:
+                            return self.reply(200, service.radar_crm_adapter.handle(
+                                token, raw_body))
+                        except (CrmError, RadarHostAdapterError) as exc:
+                            code = exc.code
+                            status = (409 if code in ("version_conflict", "event_conflict") else
+                                      403 if code in ("authentication_required", "permission_denied",
+                                                     "scope_denied", "assignment_denied") else 400)
+                            return self.reply(status, {"error": code})
+                    if self.command == "POST" and endpoint.startswith("/api/mtr/v2/"):
+                        # Optional pilot dependency is imported only after an
+                        # explicit TLS mount; ordinary LAN hosts stay decoupled.
+                        from mtr_host_request_store import StoreConflict
+                        action = endpoint.removeprefix("/api/mtr/v2/")
+                        if urlparse(self.path).query:
+                            raise ValueError("Finance pilot does not accept query parameters")
+                        try:
+                            return self.reply(200, service.mtr_finance_adapter.handle(
+                                action, token, payload))
+                        except StoreConflict:
+                            return self.reply(409, {"error": "finance_metadata_conflict"})
                     if self.command == "POST" and endpoint == "/api/login":
                         return self.reply(200, service.authenticate(payload.get("username"),
                                                                      payload.get("password"), self.client_address[0]))
@@ -1508,6 +1821,8 @@ class LanService:
                         return self.reply(200, service.read_state(token))
                     if self.command == "GET" and endpoint == "/api/me":
                         return self.reply(200, {"user": service.current_user(token)})
+                    if self.command == "POST" and endpoint == "/api/ai/authorize":
+                        return self.reply(200, service.authorize_ai(token, payload))
                     if self.command == "POST" and endpoint == "/api/state":
                         return self.reply(200, service.write_state(token, payload.get("state"),
                                                                     payload.get("revision")))
@@ -1615,6 +1930,8 @@ class LanService:
                     if self.command == "POST" and endpoint == "/api/users":
                         return self.reply(200, {"ok": service.delete_user(token, payload.get("username"))})
                     return self.reply(405, {"error": "روش درخواست معتبر نیست."})
+                except KeyError:
+                    return self.reply(404, {"error": "درخواست پیدا نشد."})
                 except PermissionError as e:
                     return self.reply(403, {"error": str(e)})
                 except ValueError as e:
@@ -1660,3 +1977,7 @@ class LanService:
             self.thread.join(timeout=3)
             self.server = None
             self.integration_router = None
+            self.mtr_finance_adapter = None
+            self.radar_crm_adapter = None
+            self.mtr_notice_adapter = None
+            self.ai_usage_adapter = None

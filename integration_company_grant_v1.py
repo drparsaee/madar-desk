@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import re
 import ssl
 import time
@@ -166,6 +167,56 @@ class IntegrationCompanyGrant:
                 return bool(account and hmac.compare_digest(
                     hashlib.sha256(account["passwordHash"].encode("utf-8")).digest(),
                     record[1]))
+
+    def resolve_active(self, *, company_id, installation_id):
+        """Resolve ONE active, explicitly approved Taraz peer; never guess by name.
+
+        Only the trusted host may call this. Returns a key ID, not its bearer
+        secret, and rechecks revocation, expiration, pairing and account revision.
+        Missing, ambiguous and revoked bindings all fail closed.
+        """
+        if (type(company_id) is not str or not _HEX32.fullmatch(company_id) or
+                type(installation_id) is not str or not _HEX32.fullmatch(installation_id)):
+            raise ValueError("Invalid company or installation identity")
+        with self.service.lock:
+            self._require_host()
+            with self.registry._connect(writable=False) as db:
+                if db is None:
+                    return None
+                for table in ("paired_company_grants", "paired_installs", "registry_identity"):
+                    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                                  (table,)).fetchone() is None:
+                        return None
+                workspace = db.execute("SELECT value FROM registry_identity WHERE name='workspace'").fetchone()
+                if (workspace is None or type(workspace[0]) is not str or
+                        not _HEX32.fullmatch(workspace[0])):
+                    return None
+                rows = db.execute("""SELECT g.peer_key_id,k.username,
+                        k.password_revision,k.permissions
+                    FROM paired_company_grants g
+                    JOIN integration_keys k ON k.key_id=g.peer_key_id
+                    JOIN paired_installs p ON p.key_id=k.key_id
+                    WHERE g.company_id=? AND g.installation_id=?
+                      AND g.revoked_at IS NULL AND k.revoked_at IS NULL
+                      AND k.expires_at>? AND p.product='TARAZ'
+                      AND p.installation_id=? LIMIT 2""",
+                    (company_id, installation_id, time.time(), installation_id)).fetchall()
+                if len(rows) != 1:
+                    return None
+                key_id, username, revision, permissions = rows[0]
+                account = self.service.users.get(username)
+                try:
+                    scopes = json.loads(permissions)
+                except (ValueError, TypeError):
+                    return None
+                if (not account or type(scopes) is not list or "read" not in scopes or
+                        type(key_id) is not str or not _KEY_ID.fullmatch(key_id) or
+                        not hmac.compare_digest(
+                            hashlib.sha256(account["passwordHash"].encode("utf-8")).digest(),
+                            revision)):
+                    return None
+                return {"keyId": key_id, "workspaceId": workspace[0],
+                        "username": username}
 
 
 __all__ = ["CompanyGrantDenied", "IntegrationCompanyGrant"]

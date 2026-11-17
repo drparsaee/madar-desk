@@ -114,11 +114,15 @@ class ProviderCsvBridgeTests(unittest.TestCase):
                 api.standaloneAccountingCsvPreview(self.request)
         self.assertFalse(root.exists())
 
-    def test_main_bridge_accounting_wrapper_exports_only_expected_methods(self):
-        from native_app import ACCOUNTING_JS_BRIDGE
-        self.assertIn('standaloneAccountingCsvChooseFile',ACCOUNTING_JS_BRIDGE)
-        self.assertIn('standaloneAccountingCsvPreview',ACCOUNTING_JS_BRIDGE)
-        self.assertNotIn("'saveState'",ACCOUNTING_JS_BRIDGE)
+    def test_retired_main_bridge_cannot_expose_accounting_csv_operations(self):
+        import native_app
+        self.assertFalse(hasattr(native_app, 'ACCOUNTING_JS_BRIDGE'))
+        self.assertNotIn('standaloneAccountingCsvChooseFile', native_app.JS_BRIDGE)
+        self.assertNotIn('standaloneAccountingCsvPreview', native_app.JS_BRIDGE)
+        # The separate accounting desktop remains tested above; CSV preview
+        # must not be reintroduced into Madar merely for a legacy test.
+        self.assertIn('standaloneAccountingCsvChooseFile', JS_BRIDGE)
+        self.assertIn('standaloneAccountingCsvPreview', JS_BRIDGE)
 
 
 if __name__=='__main__':

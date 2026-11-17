@@ -40,7 +40,9 @@ class StandaloneAccountingAcceptanceTests(unittest.TestCase):
         self.assertNotIn('projects=', main)
         self.assertNotIn('api.accountingCommand(', ui)
         self.assertNotIn('api.accountingRead(', ui)
-        self.assertIn("window.location.assign('./accounting.html')", app)
+        # Accounting retains its independent desktop/page and must no longer
+        # be reachable through a shortcut inside the Madar task application.
+        self.assertNotIn("window.location.assign('./accounting.html')", app)
 
     def test_solo_desktop_bridge_exports_only_accounting_commands(self):
         self.assertIn('standaloneAccountingRead', JS_BRIDGE)
@@ -142,24 +144,22 @@ class StandaloneAccountingAcceptanceTests(unittest.TestCase):
             finally:
                 server.shutdown(); server.server_close(); worker.join(timeout=5)
 
-    def test_main_app_accounting_javascript_wrapper_is_page_scoped(self):
-        """The accounting HTML gets a restricted facade, NOT task facade."""
-        from native_app import JS_BRIDGE as MAIN_BRIDGE, ACCOUNTING_JS_BRIDGE
-        self.assertIn("'getState'", MAIN_BRIDGE)  # index.html keeps the old API
-        self.assertIn("'standaloneAccountingRead'", ACCOUNTING_JS_BRIDGE)
-        self.assertIn("'standaloneAccountingCommand'", ACCOUNTING_JS_BRIDGE)
-        self.assertIn("'standaloneAccountingCsvChooseFile'", ACCOUNTING_JS_BRIDGE)
-        self.assertIn("'standaloneAccountingCsvPreview'", ACCOUNTING_JS_BRIDGE)
-        for forbidden in ("'getState'", "'saveState'", "'financeCommand'",
-                          "'accountingRead'", "'accountingCommand'"):
-            self.assertNotIn(forbidden, ACCOUNTING_JS_BRIDGE)
-        native_source = (ROOT / 'native_app.py').read_text(encoding='utf8')
-        self.assertIn(
-            'bridge_js = ACCOUNTING_JS_BRIDGE if filename == "accounting.html" else JS_BRIDGE',
-            native_source,
-        )
-        # This verifies wrapper surface only; lower-level window.pywebview.api
-        # still references the same Bridge instance at create_window(js_api=api).
+    def test_main_app_exports_task_bridge_only_and_accounting_is_independent(self):
+        """Madar task window must not expose the retired accounting facade."""
+        import native_app
+        main_bridge = native_app.JS_BRIDGE
+        self.assertIn("'getState'", main_bridge)
+        self.assertFalse(hasattr(native_app, 'ACCOUNTING_JS_BRIDGE'))
+        for forbidden in ("'standaloneAccountingRead'",
+                          "'standaloneAccountingCommand'",
+                          "'standaloneAccountingCsvChooseFile'",
+                          "'standaloneAccountingCsvPreview'",
+                          "'financeCommand'", "'accountingCommand'"):
+            self.assertNotIn(forbidden, main_bridge)
+        # The standalone binary's own wrapper is still independently tested
+        # above; removing the main-app bridge must not erase that coverage.
+        self.assertIn("'standaloneAccountingRead'", JS_BRIDGE)
+        self.assertIn("'standaloneAccountingCommand'", JS_BRIDGE)
 
     @staticmethod
     def _get(port, raw_path):

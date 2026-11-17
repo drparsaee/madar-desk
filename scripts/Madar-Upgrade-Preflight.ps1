@@ -43,8 +43,19 @@ function AssertNoLinks([string]$Path) {
 }
 $DataRoot=Resolve-PathSafely $DataRoot
 $BackupRoot=Resolve-PathSafely $BackupRoot
-if ($IsolatedQA -and $DataRoot -notmatch '[\\/]\.qa-inno-v[0-9]+-[^\\/]+[\\/]Roaming[\\/]MadarDesk$') {
-    throw 'Isolated QA mode is restricted to the dedicated disposable QA profile.'
+if ($IsolatedQA) {
+    if ($DataRoot -notmatch '[\\/]\.qa-inno-v[0-9]+-[^\\/]+[\\/]Roaming[\\/]MadarDesk$') {
+        throw 'Isolated QA mode is restricted to the dedicated disposable QA profile.'
+    }
+    # The actual QA Inno recipe has exactly one backup destination:
+    # {QA_ROOT}\Snapshots. A merely non-overlapping arbitrary -BackupRoot
+    # could write even outside the disposable QA profile.
+    $qaRoaming=[IO.Path]::GetDirectoryName($DataRoot)
+    $qaRoot=[IO.Path]::GetDirectoryName($qaRoaming)
+    $qaSnapshots=[IO.Path]::GetFullPath((Join-Path $qaRoot 'Snapshots'))
+    if (-not $BackupRoot.Equals($qaSnapshots,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Isolated QA backup must use the dedicated QA Snapshots directory.'
+    }
 }
 if (IsInside $DataRoot $BackupRoot) {throw 'Backup path overlaps user data.'}
 if (IsInside $BackupRoot $DataRoot) {throw 'Backup path overlaps user data.'}

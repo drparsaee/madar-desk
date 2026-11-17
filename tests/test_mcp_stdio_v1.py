@@ -61,7 +61,9 @@ class MCPStdioV1Tests(unittest.TestCase):
         self.owner_token = self.service.authenticate("owner", "test-password-for-mcp")["token"]
         self.service.upsert_user(self.owner_token, {"username": "viewer", "password": "mcp-viewer-password",
                                                      "role": "viewer", "projects": ["p-sample"]})
-        self.key = self.bridge.integrationIssueKey("viewer", ["read"], lifetime_seconds=600)["key"]
+        self.key = self.bridge.integrationIssueKey("viewer", ["read"],
+            lifetime_seconds=600, adminCredentials={
+                "username": "owner", "password": "test-password-for-mcp"})["key"]
         self.pin = certificate_fingerprint(self.cert)
         self.url = f"https://127.0.0.1:{self.service.port}"
 
@@ -128,8 +130,10 @@ class MCPStdioV1Tests(unittest.TestCase):
         self.assertTrue(responses[1]["result"]["isError"])
 
     def test_revoked_key_cannot_read_and_does_not_echo_secret(self):
-        issued = self.bridge.integrationIssueKey("viewer", ["read"])
-        self.assertEqual(self.bridge.integrationRevokeKey(issued["keyId"]), {"revoked": True})
+        issued = self.bridge.integrationIssueKey("viewer", ["read"],
+            adminCredentials={"username":"owner","password":"test-password-for-mcp"})
+        self.assertEqual(self.bridge.integrationRevokeKey(issued["keyId"],
+            {"username":"owner","password":"test-password-for-mcp"}), {"revoked": True})
         process, responses = self.subprocess(handshake() + [call(
             2, "tools/call", {"name": "madar_list_projects", "arguments": {}})], key=issued["key"])
         self.assertEqual(process.returncode, 0)

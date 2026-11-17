@@ -74,7 +74,18 @@ class DisplayRolesTest(unittest.TestCase):
         source = (Path(__file__).resolve().parent.parent / "src" / "interface_mode.js").read_text(encoding="utf8")
         config = source[source.index("INTERFACE_FEATURE_TIERS"):source.index("ADMIN_ONLY_FEATURES")]
         client = dict(re.findall(r"([A-Za-z][A-Za-z0-9]*):\s*'(basic|operations|finance)'", config))
-        self.assertEqual(DISPLAY_FEATURE_TIERS, client)
+        # The host still recognizes these historical display-role identifiers
+        # for existing profiles. The current client deliberately does NOT
+        # render standalone-accounting UI: financial authority moved to Taraz.
+        # Test active keys exactly, and constrain the intentional difference
+        # instead of adding retired financial screens back to the client.
+        legacy_hidden = {"accountingDashboard", "financeHub", "projectFinance",
+                         "profitPeek", "taskCostControls", "checklistCostControls",
+                         "projectPricing"}
+        self.assertEqual(set(DISPLAY_FEATURE_TIERS) - set(client), legacy_hidden)
+        self.assertEqual({name: DISPLAY_FEATURE_TIERS[name] for name in client}, client)
+        self.assertTrue(all(DISPLAY_FEATURE_TIERS[name] == "finance"
+                            for name in legacy_hidden))
         self.assertEqual(DISPLAY_FEATURE_TIERS["accountingDashboard"], "finance")
 
     def test_builtin_catalog_is_restored_on_reload_after_feature_updates(self):
@@ -173,7 +184,8 @@ class DisplayRolesTest(unittest.TestCase):
                                 displayFeatures=["cards", "projectFinance"])
         self.assertIn("projectFinance", account["displayFeatures"])
         viewer_token = self.login("reader")["token"]
-        self.assert_status(403, lambda: self.request("/api/finance-overview", token=viewer_token))
+        # The standalone finance route is absent, regardless of custom display role.
+        self.assert_status(404, lambda: self.request("/api/finance-overview", token=viewer_token))
         self.request("/api/display-roles", {**custom, "displayMode": "basic",
                                              "features": ["cards"]}, self.admin)
         updated = self.request("/api/me", token=viewer_token)["user"]

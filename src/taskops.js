@@ -15,6 +15,10 @@ export function duplicateCard(source, newId, timestamp, idFactory){
  copy.cost=0;copy.costEnabled=null;
  copy.costCategory='';copy.costDate='';
  copy.saleUnitPrice=0;copy.salePartyId='';
+ // A new card cannot silently inherit the previous card's verified
+ // external-company customer association.
+ delete copy.tarazCustomerRef;
+ delete copy.tarazCustomerRequest;
  // A copied work template may not reuse an existing invoice or ledger source.
  for(const key of ['invoiceId','linkedFinanceIds','linkedPurchaseIds','financeSourceId',
    'purchaseId','saleId','purchaseSourceId','accountingEntryId'])delete copy[key];
