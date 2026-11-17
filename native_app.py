@@ -1666,12 +1666,78 @@ class Bridge:
 
     def tarazIntegrationStatus(self):
         from taraz_exchange import integration_status
-        return integration_status()
+        from mtr_taraz_installed_peer import local_peer_status
+        return {**integration_status(), "localPeer": local_peer_status()}
 
-    def tarazIntegrationQueue(self, taskId, expenseId=None):
+    def tarazIntegrationOpenLocal(self, manualAction=False):
+        """Manual same-user open of a reviewed Taraz EXE, not financial posting."""
+        from mtr_taraz_installed_peer import open_local_taraz
+        return open_local_taraz(manual_action=manualAction)
+
+    def _taraz_actor_scope(self):
+        """Derive a scoped journal name from the current desktop/LAN identity."""
+        import hashlib
+        mode = self.connection.get("mode")
+        if mode == "client":
+            user = self.remote_user or {}
+            username = user.get("username")
+            if user.get("role") not in ("admin", "editor") or type(username) is not str or not username:
+                raise PermissionError("هویت کاربر شبکه برای درخواست تراز معتبر نیست.")
+            origin = self.connection.get("url")
+            fingerprint = self.connection.get("fingerprint", "")
+            # A host URL by itself is not an authenticated identity. Refuse
+            # unpinned or HTTP client sessions rather than minting a durable
+            # financial-proposal actor scope from an unauthenticated endpoint.
+            url = urlsplit(origin) if type(origin) is str else None
+            if (url is None or url.scheme != "https" or not url.hostname
+                    or url.port is None or url.username is not None
+                    or url.password is not None or url.path not in ("", "/")
+                    or url.query or url.fragment or type(fingerprint) is not str
+                    or not re.fullmatch(r"[0-9a-fA-F]{64}", fingerprint)):
+                raise PermissionError("هویت HTTPS و اثرانگشت میزبان برای ارسال تراز الزامی است.")
+            peer = ["certificate", fingerprint.lower()]
+            scope = json.dumps([username, peer], ensure_ascii=False)
+            return "client:" + hashlib.sha256(scope.encode("utf-8")).hexdigest()[:32]
+        if mode == "solo":
+            return "solo:local"
+        if self.lan:
+            owner = self.lan.account_for(self.lan.authenticate_owner_token())
+            username = owner.get("username")
+            if owner.get("role") != "admin" or type(username) is not str or not username:
+                raise PermissionError("هویت مدیر میزبان معتبر نیست.")
+            return "host:" + hashlib.sha256(username.encode("utf-8")).hexdigest()[:32]
+        raise PermissionError("وضعیت اتصال برای درخواست تراز نامعتبر است.")
+
+    def tarazIntegrationPrepare(self, taskId, expenseId=None):
+        """Reserve an immutable local proposal ID before explicit manual send."""
+        from mtr_e2_send_journal import prepare_manual_send
+        with self._lock:
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("آماده‌سازی درخواست تراز در حالت آفلاین مجاز نیست.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("آماده‌سازی درخواست برای این حساب مجاز نیست.")
+                matches = [t for t in state.get("tasks", [])
+                           if isinstance(t, dict) and t.get("id") == taskId
+                           and t.get("deleted") is not True]
+                grants = user.get("projects")
+                if (len(matches) != 1 or
+                        (grants is not None and matches[0].get("projectId") not in grants)):
+                    raise PermissionError("کارت انتخاب‌شده در محدوده دسترسی نیست.")
+            return prepare_manual_send(
+                state, taskId, expenseId, actor_scope=self._taraz_actor_scope()
+            )
+
+    def tarazIntegrationQueue(self, taskId, expenseId=None, requestId=None):
         """Explicit proposal from a currently saved task, never a ledger write."""
         from taraz_exchange import queue_saved_task
         with self._lock:
+            # A first send requires a previously durable ID; unknown IDs may
+            # only be read back, never silently published as new requests.
+            if requestId is None:
+                raise PermissionError("ابتدا شناسه پایدار درخواست را آماده کنید.")
             # LAN clients must not queue a stale/offline task or another user's
             # inaccessible project into this Windows user's exchange inbox.
             state = self.getState()
@@ -1687,7 +1753,49 @@ class Bridge:
                 if (len(selected) != 1 or
                         (grants is not None and selected[0].get("projectId") not in grants)):
                     raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
-            return queue_saved_task(state, taskId, expenseId)
+            from mtr_e2_send_journal import assert_prepared_matches_if_present
+            journal = assert_prepared_matches_if_present(
+                state, taskId, expenseId,
+                actor_scope=self._taraz_actor_scope(), request_id=requestId
+            )
+            if not journal["hasPreparedIntent"]:
+                from taraz_exchange import _pending_dir, _assert_safe_path
+                root = _pending_dir().parent
+                candidates = (root / "pending" / (requestId + ".json"),
+                              root / "reviewed" / (requestId + ".json"))
+                for file in candidates:
+                    _assert_safe_path(file.parent)
+                    _assert_safe_path(file)
+                if not any(file.is_file() for file in candidates):
+                    raise PermissionError(
+                        "شناسه ناشناس است؛ درخواست جدید بدون ثبت قبلی مجاز نیست."
+                    )
+            return queue_saved_task(state, taskId, expenseId, request_id=requestId)
+
+    def tarazIntegrationHistory(self, taskId, optedIn=False):
+        """Read only task-scoped local observations, not authenticated Taraz truth."""
+        from taraz_review_status import local_task_reviews
+        if optedIn is not True:
+            return local_task_reviews("", "", opted_in=False)
+        with self._lock:
+            state = self.getState()
+            if state.get("__offline"):
+                raise RuntimeError("برای بررسی وضعیت تراز باید ارتباط میزبان برقرار باشد.")
+            tasks = [task for task in state.get("tasks", [])
+                     if isinstance(task, dict) and task.get("id") == taskId
+                     and task.get("deleted") is not True]
+            if len(tasks) != 1:
+                raise PermissionError("کارت موردنظر در محدوده دسترسی نیست.")
+            if self.connection.get("mode") == "client":
+                user = self.remote_user or {}
+                if user.get("role") not in ("admin", "editor"):
+                    raise PermissionError("مشاهده وضعیت تبادل تراز مجاز نیست.")
+                grants = user.get("projects")
+                if grants is not None and tasks[0].get("projectId") not in grants:
+                    raise PermissionError("کارت در محدوده دسترسی حساب نیست.")
+            return local_task_reviews(
+                taskId, tasks[0].get("projectId"), opted_in=True
+            )
 
     def financeStatus(self):
         if self.connection.get("mode") == "client":
@@ -2932,7 +3040,7 @@ window.madar = Object.fromEntries(
            'automationButtonsSave','automationButtonsDelete','automationButtonRun',
            'driveFolderList','driveFolderRestore',
            'cloudPeerStatus','cloudPeerConfigure','cloudPeerGenerate','cloudPeerForget',
-           'tarazIntegrationStatus','tarazIntegrationQueue',
+           'tarazIntegrationStatus','tarazIntegrationOpenLocal','tarazIntegrationPrepare','tarazIntegrationQueue','tarazIntegrationHistory',
            'runDueScheduler','attachmentList','attachmentPreview','attachmentRead',
            'attachmentUpload','attachmentDelete','attachmentBackup',
            'createUnifiedSqliteBackup','storageStatus','enableUnifiedStorage',

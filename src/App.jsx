@@ -68,6 +68,8 @@ import {WebPwaBanner} from './web_pwa.jsx';
 import {MadarWebApiClient} from './web_api_client.mjs';
 import {syncWebState} from './web_sync_engine.mjs';
 import {WebSyncDialog} from './web_sync_dialog.jsx';
+import {MadarSileoFeedback} from './mtr_sileo_feedback.jsx';
+import {MadarContextHelp} from './mtr_context_help.jsx';
 import './web_sync_dialog.css';
 import './interface_mode.css';
 import './boardplus.css';
@@ -142,7 +144,10 @@ const mockBridge={
   cloudPeerGenerate:async()=>{throw Error('این قابلیت فقط در برنامه ویندوز فعال است.');},
   cloudPeerForget:async()=>({paired:false,enabled:false,cloudVerified:false}),
   tarazIntegrationStatus:async()=>({supported:false,postingEnabled:false,message:'صندوق تبادل تراز در نسخه نصب‌شده ویندوز در دسترس است.'}),
+  tarazIntegrationOpenLocal:async()=>{throw Error('بازکردن تراز فقط با اقدام دستی در برنامه ویندوز ممکن است.');},
+  tarazIntegrationPrepare:async()=>{throw Error('آماده‌سازی درخواست تراز فقط در برنامه ویندوز فعال است.');},
   tarazIntegrationQueue:async()=>{throw Error('ارسال پیشنهاد تراز فقط در برنامه ویندوز فعال است.');},
+  tarazIntegrationHistory:async()=>({supported:false,state:'unavailable',items:[],peerVerified:false,postingEnabled:false}),
   getPreferences:async()=>JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}'),
   setPreferences:async p=>{const old=JSON.parse(localStorage.getItem('madar-preferences')||'{"calendar":"jalali"}');const widgetSettings=normalizeWidgetSettings(p.widgetSettings||old.widgetSettings||p.clockWidget||old.clockWidget);const next={...old,...p,widgetSettings,clockWidget:widgetSettings.mode};localStorage.setItem('madar-preferences',JSON.stringify(next));return next;},
   openSharedFile:async()=>{throw Error('بازکردن فایل از File Explorer فقط در EXE ویندوز فعال است.');},
@@ -298,6 +303,21 @@ function SyncIndicator({status,lastSync,showDetails,conflict=false,saving=false,
 
 function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,username,calendar,api,priorities,labelLibrary=[],onLabelToggle,onLabelCreate,onLabelEdit,onLabelDelete,onUpdate,onBoardChange,onClose,onDelete,onArchive,onDuplicate,onSendToTaraz,tarazQueueAvailable=false,onUndo,onRedo,canUndo=false,canRedo=false,initialSection=null,canEdit=true,canManage=false,showCosts=false,showOperations=true,chatAvailable=true}){
   const [newStep,setNewStep]=useState('');
+  const [tarazHistory,setTarazHistory]=useState(null);
+  const [tarazHistoryBusy,setTarazHistoryBusy]=useState(false);
+  const loadTarazHistory=async()=>{
+    if(!tarazQueueAvailable||tarazHistoryBusy)return;
+    setTarazHistoryBusy(true);
+    try{setTarazHistory(await api.tarazIntegrationHistory(task.id,true));}
+    catch(error){setTarazHistory({supported:false,state:'unavailable',items:[],peerVerified:false,message:String(error?.message||error)});}
+    finally{setTarazHistoryBusy(false);}
+  };
+  const retryTarazProposal=async item=>{
+    if(!canEdit||!tarazQueueAvailable||tarazHistoryBusy||item?.state!=='pending'||!/^[0-9a-f]{32}$/.test(item.id))return;
+    if(!window.confirm('همان درخواست قبلی با همان شناسه دوباره بررسی شود؟ درخواست جدیدی ساخته نخواهد شد.'))return;
+    await onSendToTaraz(task.id,item.id);
+    await loadTarazHistory();
+  };
   const [newChecklistName,setNewChecklistName]=useState('');
   const [quickError,setQuickError]=useState('');
   const [quickMenu,setQuickMenu]=useState(null);
@@ -451,6 +471,7 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
         <button type="button" onClick={()=>toggleQuickMenu('checklist')} aria-expanded={quickMenu==='checklist'}><ListChecks size={15}/> چک‌لیست</button>
         <button type="button" onClick={()=>jumpToSection('attachments')} aria-controls="task-section-attachments"><Paperclip size={15}/> فایل</button>
         {canEdit&&<button type="button" onClick={()=>onSendToTaraz(task.id)} disabled={!tarazQueueAvailable} title={tarazQueueAvailable?'ارسال دستی خلاصهٔ کارت برای بررسی در برنامه مستقل تراز':'ابتدا در تنظیمات، اتصال تراز و اجازهٔ ارسال دستی را فعال کنید'}><FileText size={15}/> ارسال به تراز</button>}
+        {canEdit&&<button type="button" onClick={loadTarazHistory} disabled={!tarazQueueAvailable||tarazHistoryBusy} title="فقط مشاهدهٔ محلی؛ بدون تأیید هویت برنامهٔ مقابل یا سند حسابداری">{tarazHistoryBusy?'در حال بررسی':'وضعیت محلی تراز'}</button>}
         <button type="button" className="task-quick-actions__more" aria-expanded={quickMenu==='more'} onClick={()=>toggleQuickMenu('more')}><MoreHorizontal size={15}/> بیشتر</button>
         {quickMenu&&<div className="task-quick-popover" role="group" aria-label={'ویرایش سریع '+({date:'تاریخ',members:'اعضا',labels:'برچسب‌ها',checklist:'چک‌لیست',more:'گزینه‌های تکمیلی'}[quickMenu]||'کارت')} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setQuickMenu(null);quickNavRef.current?.querySelector('[aria-expanded="true"]')?.focus();}}}>
           <div className="task-quick-popover__heading"><strong>{({date:'تاریخ انجام',members:'اعضای کارت',labels:'برچسب‌های کارت',checklist:'افزودن مرحله',more:'گزینه‌های تکمیلی'}[quickMenu])}</strong><button type="button" className="task-quick-popover__close" aria-label="بستن منوی سریع" onClick={()=>setQuickMenu(null)}><X size={16}/></button></div>
@@ -466,6 +487,17 @@ function TaskEditor({task,projects,boards,stages,allTasks,allTemplates=[],users,
           </div>}
         </div>}
       </nav>
+      {tarazHistory&&<section className="task-primary-section" aria-label="وضعیت محلی تبادل تراز" aria-live="polite">
+        <h3>سابقهٔ محلی درخواست‌های همین کارت</h3>
+        <small>این داده‌ها فقط مشاهدهٔ فایل هستند. هویت تراز، دریافت رسمی و ثبت حسابداری تأیید نشده است.</small>
+        {!tarazHistory.supported?<p role="status">خواندن سابقهٔ محلی ممکن نیست.</p>:
+          !tarazHistory.items?.length?<p>درخواست قابل نمایش برای این کارت پیدا نشد.</p>:
+          <ul>{tarazHistory.items.map(item=><li key={item.id}>
+            {item.state==='pending'?'در پوشهٔ محلی انتظار (دریافت تأیید نشده)':item.state==='unknown'?'وضعیت نامعلوم':'علامت محلی بررسی، هویت تأیید نشده'} | {item.id.slice(0,8)}
+            {canEdit&&item.state==='pending'&&<button type="button" disabled={tarazHistoryBusy} onClick={()=>retryTarazProposal(item)}>بررسی مجدد همان شناسه</button>}
+          </li>)}</ul>}
+        {tarazHistory.scanTruncated&&<small>این فهرست ناقص است.</small>}
+      </section>}
       {!!task.labels?.length&&<div className="task-editor-labels" aria-label="برچسب‌های کارت">{task.labels.map((label,index)=><LabelChip key={index} label={{name:label,color:sharedLabelColor(labelLibrary,label,task.labelColors)}}/>)}<button type="button" disabled={!canEdit} onClick={()=>toggleQuickMenu('labels')}><Plus size={14}/> انتخاب برچسب‌ها</button></div>}
       <section className="task-primary-section" id="task-section-description" tabIndex={-1} aria-label="توضیحات کارت">
         <h3><FileText size={17}/> توضیحات</h3>
@@ -942,7 +974,8 @@ export default function App(){
           });
           if(mounted){
             setUpdateDownloaded(result.downloaded);
-            if(result.downloaded)setToast('نسخهٔ '+result.info.latest+' به‌صورت خودکار با تأیید SHA-256 دانلود شد. نصب فقط با تأیید شما انجام می‌شود.');
+            // Passive startup checks update the existing update indicator;
+            // never show a toast merely because the application mounted.
           }
         }else{
           const info=await api.releaseCheck();
@@ -954,7 +987,7 @@ export default function App(){
       }catch(error){
         if(autoDownload&&mounted){
           setUpdateDownloaded(false);
-          setToast('دانلود خودکار به‌روزرسانی ناموفق بود؛ دریافت دستی همچنان در دسترس است: '+(error?.message||String(error)));
+          // Manual update controls remain available. Startup must stay quiet.
         }
       }finally{
         if(autoDownload&&mounted)setUpdateBusy(false);
@@ -968,8 +1001,16 @@ export default function App(){
     if(updateBusy)return;
     setUpdateBusy(true);
     try{
-      if(!updateDownloaded){await api.releaseDownload();setUpdateDownloaded(true);setToast('نسخه جدید با بررسی SHA-256 دانلود شد.');}
-      else {await api.releaseInstall();setToast('آپدیت پس از خروج کامل از مدار نصب می‌شود. برنامه را ببندید.');}
+      if(!updateDownloaded){
+        const outcome=await api.releaseDownload();
+        if(outcome?.verified!==true)throw Error('دریافت و بررسی نسخه جدید تأیید نشد.');
+        setUpdateDownloaded(true);
+        setToast({type:'info',title:'دریافت نسخه جدید از مسیر تأییدشده انجام شد؛ نصب نیاز به تأیید جداگانه دارد.'});
+      }else{
+        const outcome=await api.releaseInstall();
+        if(outcome?.scheduledAfterExit!==true)throw Error('زمان‌بندی نصب تأیید نشد.');
+        setToast({type:'warning',title:'درخواست نصب پس از خروج از مدار ارسال شد؛ نصب کامل هنوز تأیید نشده است.'});
+      }
     }catch(error){setToast('خطای آپدیت: '+(error?.message||String(error)));}
     finally{setUpdateBusy(false);}
   };
@@ -1100,6 +1141,10 @@ export default function App(){
       dirty.current=false;
       try{
         const result=await api.saveState(snapshot);
+        if(result===false||result?.ok===false||result?.success===false||
+           result?.accepted===false||result?.rejected===true||
+           result?.error||['rejected','error','conflict'].includes(result?.status))
+          throw Error('میزبان ذخیرهٔ این تغییرات را تأیید نکرد.');
         lastSaved.current=JSON.stringify(snapshot);
         const quick=quickCardAttempt.current;
         if(quick&&snapshot.tasks.some(task=>task.id===quick.id)){
@@ -1110,8 +1155,10 @@ export default function App(){
           setAdding(null);
           setDraftTitle('');
           setToast(result?.offline===true
-            ?'کارت در صف آفلاین ثبت شد؛ تأیید میزبان هنوز دریافت نشده است.'
-            :'کارت ذخیره شد؛ برای تکمیل جزئیات روی آن کلیک کنید.');
+            ?{type:'warning',title:'کارت در صف آفلاین ثبت شد؛ تأیید میزبان هنوز دریافت نشده است.'}
+            :result===undefined||result===null
+              ?{type:'warning',title:'درخواست ذخیرهٔ کارت ارسال شد؛ تأیید نهایی دریافت نشده است.'}
+              :{type:'success',title:'کارت ذخیره شد؛ برای تکمیل جزئیات روی آن کلیک کنید.'});
         }
         if(result?.revision||result?.localRevision){
           setData(current=>({...current,...(result.revision?{__remoteRevision:result.revision}:{}),...(result.localRevision?{__localRevision:result.localRevision}:{})}));
@@ -1193,6 +1240,18 @@ export default function App(){
   const refreshTarazStatus=async()=>{
     try{setTarazStatus(await api.tarazIntegrationStatus());}
     catch(error){setTarazStatus({supported:false,postingEnabled:false,message:String(error?.message||error)});}
+  };
+  const openLocalTaraz=async()=>{
+    if(tarazStatus?.localPeer?.approvedBuild!==true||
+       tarazStatus?.localPeer?.canOpenManually!==true){
+      setToast('نسخهٔ نصب‌شدهٔ تراز برای بازکردن محلی تأیید نشده است.');return;
+    }
+    try{
+      const result=await api.tarazIntegrationOpenLocal(true);
+      if(result?.launchRequested!==true||result?.financialEventCreated!==false)
+        throw Error('پاسخ بازکردن تراز معتبر نیست.');
+      setToast('درخواست بازکردن تراز ثبت شد. ورود و بررسی فقط در برنامه تراز انجام می‌شود.');
+    }catch(error){setToast('تراز باز نشد: '+String(error?.message||error));}
   };
   const sharedThemeEnabled=data?.settings?.themeForAllUsers===true;
   const generalUi=generalUiChoice?.scope===appearanceScope?generalUiChoice.value:
@@ -1347,6 +1406,8 @@ export default function App(){
     try{
       let syncResult=null;
       if(isWebApp&&lanStatus.mode==='client')syncResult=await api.webSyncNow(false);
+      if(syncResult?.kind==='error'||syncResult?.kind==='denied'||syncResult?.kind==='rejected')
+        throw Error('سرور درخواست همگام‌سازی را نپذیرفت.');
       await Promise.all([refresh(),refreshLan(),refreshUsers(),refreshSyncStatus()]);
       if(syncResult?.kind==='bootstrap_required')
         setToast('سرور هنوز فضای کاری ندارد؛ اتصال اولیه را از پنل همگام‌سازی تأیید کنید.');
@@ -1976,17 +2037,23 @@ export default function App(){
   };
   const createProject=()=>{
     if(!projectName.trim())return;
+    if(!canManage||blocked.current||nativeClosePending.current){
+      setToast({type:'warning',title:'ابتدا دسترسی یا خطای ذخیره را بررسی کنید؛ پروژه‌ای افزوده نشد.'});return;
+    }
     const p={id:uid(),name:projectName.trim(),color:['#5672ca','#3d977e','#b27cc2','#d39558'][projects.length%4],price:0,costEnabled:!!data.settings.costDefault,fileLinks:[]};
     const b=makeBoard(p,activeWorkspaceId||'workspace-legacy',stages);
     change(s=>({...s,projects:[...s.projects,p],boards:[...(s.boards||[]),b]}));
-    setSelected(p.id);setBoardId(b.id);setProjectModal(false);setProjectName('');setToast('پروژه ساخته شد.');
+    setSelected(p.id);setBoardId(b.id);setProjectModal(false);setProjectName('');setToast({type:'info',title:'پروژه به تغییرات در حال ذخیره اضافه شد.'});
   };
   const createBoard=()=>{
     if(!boardName.trim()||!selectedProject)return;
+    if(!canManage||blocked.current||nativeClosePending.current){
+      setToast({type:'warning',title:'ابتدا دسترسی یا خطای ذخیره را بررسی کنید؛ بردی افزوده نشد.'});return;
+    }
     const board=makeBoard({...selectedProject,name:boardName.trim()},
        activeWorkspaceId||'workspace-legacy',viewStages);
     changeAdmin(s=>({...s,boards:[...(s.boards||[]),board]}));
-    setBoardId(board.id);setBoardName('');setBoardModal(false);setToast('برد جدید در پروژه ساخته شد.');
+    setBoardId(board.id);setBoardName('');setBoardModal(false);setToast({type:'info',title:'برد به تغییرات در حال ذخیره اضافه شد.'});
   };
   const renameBoard=()=>{
     if(!renameBoardId||!boardName.trim())return;
@@ -2168,7 +2235,7 @@ export default function App(){
     catch(e){blocked.current=true;setPendingRecovery(true);setSavingError(e.message);}
     finally{recoveryReload.current=false;setSyncing(false);}
   };
-  const sendToTaraz=async taskId=>{
+  const sendToTaraz=async(taskId,requestId=null)=>{
     if(!tarazEnabled){setToast('ارسال دستی به تراز خاموش است؛ ابتدا از تنظیمات، اتصال تراز آن را فعال کنید.');return;}
     if(!tarazStatus?.supported||tarazStatus?.postingEnabled!==false){
       setToast('صندوق پیشنهادهای تراز در این محیط آماده یا امن نیست.');return;
@@ -2178,15 +2245,76 @@ export default function App(){
       setToast('برای ارسال به تراز، ابتدا ذخیره کارت باید کامل شود.');return;
     }
     try{
-      const result=await api.tarazIntegrationQueue(taskId);
-      if(!result?.queued||result?.postingPerformed!==false)
+      // Durably reserve the same request ID before the first local publication.
+      // A retry retains its original ID and never generates a replacement.
+      const prepared=requestId===null?await api.tarazIntegrationPrepare(taskId):null;
+      if(prepared&&(prepared.prepared!==true||prepared.postingPerformed!==false||
+          !/^[0-9a-f]{32}$/.test(prepared.id)))
+        throw Error('شناسه پایدار درخواست معتبر نیست.');
+      const targetId=requestId===null?prepared.id:requestId;
+      const result=await api.tarazIntegrationQueue(taskId,null,targetId);
+      if(result?.postingPerformed!==false||
+          result?.id!==targetId||(result?.queued!==true&&result?.replayed!==true))
         throw Error('پاسخ صندوق تبادل معتبر نیست.');
-      setToast('خلاصه کارت در صندوق تراز قرار گرفت. بازبینی و ثبت در برنامه مستقل تراز انجام می‌شود.');
+      setToast(result.replayed?'همان درخواست محلی پیدا شد؛ درخواست جدید ایجاد نشد.':
+        'خلاصهٔ کارت در صندوق محلی قرار گرفت. دریافت رسمی و ثبت حسابداری تأیید نشده است.');
       await refreshTarazStatus();
     }catch(err){setToast('ارسال پیشنهاد به تراز ناموفق: '+String(err?.message||err));}
   };
+  // Context-sensitive, opt-in guidance only. Do not expose unavailable tools
+  // to viewers or silently execute any host command from the help surface.
+  const helpAvailableSections=[
+    'overview','board','list','table','cards','card-checklist','card-fields',
+    'card-reports','card-files','projects','workspace','search','filters',
+    'labels','notifications','lan','sync','backup','settings','profile','theme',
+    'archive','trash',
+    ...(selectedProject?['project-chat','project-files']:[]),
+    ...(show('timelineView')?['gantt']:[]),
+    ...(show('taskTime')?['time']:[]),
+    ...(show('planner')?['planner']:[]),
+    ...(show('reporting')?['reporting']:[]),
+    ...(show('activity')?['activity']:[]),
+    ...(canManage&&show('automationRules')?['automation']:[]),
+    ...(canManage&&show('automationButtons')?['automation-buttons']:[]),
+    ...(canManage?['project-settings']:[]),
+    ...(show('trelloImport')?['import','export']:[]),
+    ...(show('calendarInterop')?['calendar']:[]),
+    ...(isWebApp?['web-sync']:['updates','taraz-exchange',...(canManage?['lan-users']:[])]),
+    ...(canManage&&show('secureApiKeys')&&lanStatus.mode==='server'&&
+      lanStatus.transport==='https'?['api-keys']:[]),
+  ];
+  const helpCurrentSection=
+    notificationsOpen?'notifications':
+    lanOpen?(lanInitialView==='users'?'lan-users':'lan'):
+    webSyncOpen?'web-sync':
+    cloudOpen?'backup':
+    settingsOpen?'settings':
+    profileOpen?'profile':
+    integrationOpen?'api-keys':
+    calendarInteropOpen?'calendar':
+    trelloImportOpen?'import':
+    portableExportOpen?'export':
+    plannerOpen?'planner':
+    reportingOpen?'reporting':
+    activityOpen?'activity':
+    rulesOpen?'automation':
+    automationButtonsScope?'automation-buttons':
+    projectChatOpen?'project-chat':
+    workspaceOpen?'workspace':
+    projectSettings?'project-settings':
+    projectModal||boardModal||renameBoardId?'projects':
+    cardArchiveOpen?'archive':
+    trashOpen?'trash':
+    labelManager?'labels':
+    editorId?'cards':
+    search.trim()?'search':
+    mode==='board'&&selected==='all'?'overview':mode;
   if(!data)return <div className="loading"><span className="logo-symbol"><img src="./madar-icon.svg" alt="" /></span><strong>مدار</strong><small>در حال آماده‌سازی فضای کار...</small>{savingError&&<span>{savingError}</span>}</div>;
   return <div className="app-shell vitrea-layout">
+    <MadarSileoFeedback message={toast} errorMessage={savingError} theme={uiTheme==='dark'?'dark':'light'}/>
+    <div className="mtr-context-help-anchor" style={{position:'fixed',top:12,right:12,zIndex:2500}}>
+      <MadarContextHelp currentSection={helpCurrentSection} availableSections={helpAvailableSections}/>
+    </div>
     {mobileNavOpen&&<button type="button" className="mobile-nav-backdrop" aria-label="بستن فهرست پیمایش" onClick={()=>setMobileNavOpen(false)}/>}
     {desktopNavOpen&&<button type="button" className="vitrea-nav-backdrop" aria-label="بستن منوی کامل مدار" onClick={()=>{setDesktopNavOpen(false);quickDockTrigger.current?.focus();}}/>}
     <nav className="vitrea-quickdock" aria-label="میان‌برهای مدار">
@@ -2262,6 +2390,8 @@ export default function App(){
           <p>{tarazStatus?.message||'در حال بررسی صندوق تبادل تراز…'}</p>
           {tarazStatus?.supported&&<p>پیشنهادهای منتظر بررسی: {Number(tarazStatus.pending||0).toLocaleString('fa-IR')}</p>}
           <p>{tarazEnabled?'ارسال دستی در همین رایانه مجاز شده است.':'ارسال دستی خاموش است؛ برای فعال‌سازی به تنظیمات ← اتصال تراز بروید.'}</p>
+          {tarazStatus?.localPeer?.canOpenManually===true&&<button type="button" onClick={openLocalTaraz}>بازکردن تراز با اقدام دستی</button>}
+          <p>هویت طرف مقابل و رسید مالی با مشاهدهٔ فایل‌های محلی قابل تأیید نیست.</p>
           <p>ارسال خلاصه از دکمه «ارسال به تراز» داخل هر کارت انجام می‌شود. تراز را به‌عنوان برنامه جداگانه اجرا کنید.</p>
         </div>
       </details>
@@ -2499,7 +2629,7 @@ export default function App(){
       </div>
     </Modal>}
     {show('workspaceManagement')&&workspaceOpen&&<Modal title="مدیریت فضاهای کاری" width={800} onClose={()=>setWorkspaceOpen(false)}><WorkspaceManager data={data} currentWorkspaceId={activeWorkspaceId} canManage={canManage} onChange={changeAdmin} onSelect={selectWorkspace}/></Modal>}
-    {show('trelloImport')&&trelloImportOpen&&<TrelloImportPanel onClose={()=>setTrelloImportOpen(false)} onImport={changeAdmin}/>}
+    {show('trelloImport')&&trelloImportOpen&&<TrelloImportPanel onClose={()=>setTrelloImportOpen(false)} onImport={next=>{if(!canManage||blocked.current||nativeClosePending.current)throw Error('ورود در این وضعیت مجاز نیست.');changeAdmin(next);setToast({type:'info',title:'ورود اطلاعات به تغییرات محلی اضافه شد؛ تأیید ذخیره جداگانه انجام می‌شود.'});}}/>}
     {show('trelloImport')&&portableExportOpen&&<Modal title="خروجی قابل‌انتقال مدار" width={680} onClose={()=>setPortableExportOpen(false)}><PortableExportPanel state={data} canManage={canManage} onClose={()=>setPortableExportOpen(false)}/></Modal>}
     {show('planner')&&plannerOpen&&(plannerIdentity(lanStatus)
       ?<PlannerPanel tasks={tasks.filter(t=>t.deleted!==true)} projects={projects} calendar={calendar} onClose={()=>setPlannerOpen(false)} onOpenTask={id=>{setPlannerOpen(false);setEditorId(id);}} accountId={plannerIdentity(lanStatus)}/>
@@ -2514,7 +2644,6 @@ export default function App(){
         users={users} initialScope={automationButtonsScope}
         cardOptions={tasks.filter(t=>t.boardId===activeBoard.id&&t.deleted!==true&&t.archived!==true).map(t=>({id:t.id,title:t.title}))}
         canManage={canManage} canRun={canEdit} onClose={()=>setAutomationButtonsScope(null)}/>}
-    {toast&&<div className="toast"><CheckCircle2 size={18}/>{toast}</div>}
     {!!activeTask&&activeTask.deleted!==true&&<TaskEditor key={activeTask.id} task={activeTask} stages={activeTask.boardId?boards.find(b=>b.id===activeTask.boardId)?.stages||stages:stages} projects={projects} boards={boards} users={users} username={lanStatus.user?.username} calendar={calendar} api={api} allTasks={allActiveTasks} allTemplates={data.templates||[]} priorities={priorities} labelLibrary={labelLibrary} onLabelToggle={toggleSharedLabel} onLabelCreate={createSharedLabel} onLabelEdit={editSharedLabel} onLabelDelete={deleteSharedLabel} canEdit={canEdit} canManage={canManage} showCosts={false} showOperations={show('taskTime')} chatAvailable={!isWebApp||!!webApi?.currentUser} initialSection={editorInitialSection} onUpdate={taskUpdate} onBoardChange={board=>changeAdmin(s=>({...s,boards:s.boards.map(item=>item.id===board.id?board:item)}))} onUndo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('undo'):undefined} onRedo={lanStatus.mode==='solo'&&canEdit?()=>reverseCardEdit('redo'):undefined} canUndo={canUndo} canRedo={canRedo} onDuplicate={duplicateTask} onSendToTaraz={sendToTaraz} tarazQueueAvailable={tarazEnabled&&tarazStatus?.supported===true&&tarazStatus?.postingEnabled===false} onClose={()=>{setEditorId(null);setEditorInitialSection(null);}} onArchive={()=>archiveTask(activeTask.id)} onDelete={()=>deleteTask(activeTask.id)}/>}
     {!!labelManager&&<Modal title="مدیریت برچسب‌ها" width={420} onClose={()=>setLabelManager(null)}>
       <div className="dialog-body"><LabelEditor key={labelManager.id||'global-library'} library={labelLibrary} labels={null} disabled={!canEdit}
@@ -2529,7 +2658,7 @@ export default function App(){
     {settingsOpen&&<SettingsPanel data={activeBoard?{...data,stages:activeBoard.stages}:data} priorityUsedIds={tasks.map(t=>t.priority)} onChange={updateSettingsForBoard} canManage={canManage} theme={uiTheme} onThemeChange={chooseTheme} themeMode={sharedThemeEnabled?uiTheme:currentThemeMode} generalUi={generalUi} onGeneralUiChange={updateGeneralUi} tarazStatus={tarazStatus} tarazEnabled={tarazEnabled} onTarazEnabledChange={updateTarazConsent} onRefreshTaraz={refreshTarazStatus} updateApi={isDesktop?api:null} boardId={activeBoard?.id||null} onArchiveList={id=>updateBoardListArchive(id,false)} onRestoreList={id=>updateBoardListArchive(id,true)} onOpenBoardButtons={()=>{setSettingsOpen(false);setAutomationButtonsScope('board');}} calendar={calendar} onCalendarChange={async choice=>{try{await api.setPreferences({calendar:choice,widgetSettings});setCalendar(choice);}catch(e){setToast(e.message);}}} accountStatus={lanStatus} onOpenLanSignup={()=>{setSettingsOpen(false);setLanInitialView('connection');setLanOpen(true);}} onOpenUserManagement={()=>{setSettingsOpen(false);openUserManagement();}} onOpenProfile={()=>{setSettingsOpen(false);setProfileOpen(true);}} onClose={()=>setSettingsOpen(false)}/>}
     {lanOpen&&<LanPanel api={api} projects={projects} status={lanStatus} initialView={lanInitialView} onRefresh={refreshLan} onConnected={syncFromServer} onClose={()=>setLanOpen(false)}/>}
     {show('secureApiKeys')&&integrationOpen&&<IntegrationKeyPanel api={api} users={users} onClose={()=>setIntegrationOpen(false)}/>}
-    {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()))}/>}
+    {show('calendarInterop')&&calendarInteropOpen&&<CalendarFilePanel api={api} projects={projects} boards={boards} onClose={()=>setCalendarInteropOpen(false)} onImport={(project,events)=>{if(!canManage||blocked.current||nativeClosePending.current)throw Error('ورود تقویم در این وضعیت مجاز نیست.');changeAdmin(s=>importCalendarEvents(s,project,events,uid,now()));setToast({type:'info',title:'رویدادهای تقویم به تغییرات محلی اضافه شدند؛ تأیید ذخیره جداگانه انجام می‌شود.'});}}/>}
     {notificationsOpen&&<NotificationsDialog api={api} onClose={()=>setNotificationsOpen(false)}
       onOpenTarget={openNotificationTarget}/>}
     {projectChatOpen&&selectedProject&&<ProjectConversation key={selectedProject.id}

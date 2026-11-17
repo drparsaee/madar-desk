@@ -1,0 +1,30 @@
+/* One top-level, nonmodal feedback surface, separate from the durable inbox. */
+[data-sileo-viewport] {
+  direction: rtl;
+  font-family: inherit;
+  /* Above Trello/import, planner and reporting modals in every section. */
+  z-index: 2800;
+  max-width: min(440px, calc(100vw - 1.5rem));
+}
+[data-sileo-toast] {
+  max-width: min(400px, calc(100vw - 1.5rem));
+}
+[data-sileo-title], [data-sileo-description] {
+  direction: rtl;
+  text-align: right;
+  text-transform: none;
+  white-space: normal;
+  unicode-bidi: plaintext;
+}
+[data-sileo-header-inner] {
+  white-space: normal;
+  max-width: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sileo-viewport], [data-sileo-viewport] *,
+  [data-sileo-viewport]::before, [data-sileo-viewport]::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

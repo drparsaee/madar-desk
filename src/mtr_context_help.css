@@ -1,0 +1,160 @@
+/* Independent opt-in help surface; reuses Madar's light/dark design tokens. */
+.mtr-context-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 60;
+  direction: rtl;
+  font-family: inherit;
+  font-size: 12px;
+}
+.mtr-context-help__trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border, #cbd7e5);
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  color: var(--text, #24334c);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mtr-context-help__trigger:hover,
+.mtr-context-help__trigger[aria-expanded="true"] {
+  background: var(--surface-soft, #f0f4fa);
+}
+.mtr-context-help__panel {
+  position: absolute;
+  z-index: 110;
+  top: calc(100% + 8px);
+  /* The trigger is near the right edge in RTL. Anchor the panel's RIGHT
+     (inline-start), so the 390px help panel grows left into the viewport. */
+  inset-inline-start: 0;
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(75dvh, 650px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid var(--border, #cbd7e5);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  color: var(--text, #24334c);
+  box-shadow: 0 16px 42px rgba(11, 24, 46, 0.19);
+  text-align: start;
+  line-height: 1.65;
+}
+.mtr-context-help__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.mtr-context-help__head h2 {
+  margin: 0;
+  color: inherit;
+  font-size: 15px;
+  font-weight: 800;
+}
+.mtr-context-help__close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border, #cbd7e5);
+  border-radius: 9px;
+  background: var(--surface-soft, #f0f4fa);
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mtr-context-help__current {
+  border: 1px solid var(--border, #cbd7e5);
+  border-radius: 11px;
+  background: var(--surface-soft, #f0f4fa);
+  padding: 10px 11px;
+}
+.mtr-context-help__current strong { display:block; font-size: 13px; }
+.mtr-context-help__current ol {
+  list-style: persian;
+  margin: 5px 0 0;
+  padding-inline-start: 22px;
+}
+.mtr-context-help__current li + li { margin-top: 3px; }
+.mtr-context-help__browse { margin-top: 13px; }
+.mtr-context-help__browse label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.mtr-context-help__browse input[type="search"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--border, #cbd7e5);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text, #24334c);
+  font: inherit;
+}
+.mtr-context-help__categories {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 9px 0;
+}
+.mtr-context-help__categories button,
+.mtr-context-help__results button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #cbd7e5);
+  background: var(--surface, #fff);
+  color: var(--text, #24334c);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.mtr-context-help__categories button[aria-pressed="true"],
+.mtr-context-help__results button[aria-current="true"] {
+  background: var(--surface-soft, #f0f4fa);
+  border-color: currentColor;
+  font-weight: 700;
+}
+.mtr-context-help__results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mtr-context-help__results button { overflow-wrap: anywhere; }
+.mtr-context-help__foot,
+.mtr-context-help__empty {
+  display: block;
+  color: var(--text-muted, #536781);
+  margin: 10px 0 0;
+  font-size: 11px;
+}
+.mtr-context-help :is(button, input):focus-visible {
+  outline: 2px solid #2381c7;
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .mtr-context-help__panel {
+    position: fixed;
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: min(82dvh, 650px);
+  }
+}

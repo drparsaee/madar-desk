@@ -97,14 +97,20 @@ class TarazExchangeTests(unittest.TestCase):
         bridge.saveState(state)
         self.assertFalse(bridge.finance_path.exists())
         self.assertFalse(bridge.finance_outbox_path.exists())
-        queued = bridge.tarazIntegrationQueue("example-2")
+        # v1.0.26's old one-shot bridge is deliberately made fail-closed:
+        # the new explicit flow reserves an immutable ID first.
+        with self.assertRaises(PermissionError):
+            bridge.tarazIntegrationQueue("example-2")
+        prepared = bridge.tarazIntegrationPrepare("example-2")
+        self.assertTrue(prepared["prepared"])
+        queued = bridge.tarazIntegrationQueue("example-2", None, prepared["id"])
         self.assertTrue(queued["queued"])
         self.assertFalse(queued["postingPerformed"])
         self.assertEqual(json.loads(
             (self.pending / (queued["id"] + ".json")).read_text(encoding="utf8")
         )["taskId"], "example-2")
         with self.assertRaises(ValueError):
-            bridge.tarazIntegrationQueue("not-saved")
+            bridge.tarazIntegrationPrepare("not-saved")
 
 
 if __name__ == "__main__":
