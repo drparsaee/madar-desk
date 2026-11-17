@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="UTF-8"/><title>Madar UI fixture</title></head>
+<body><main id="fixture"></main><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {GanttView} from '../../src/gantt_view.jsx';
+import {CardComments} from '../../src/teamplus.jsx';
+const h=React.createElement;
+const root=createRoot(document.getElementById('fixture'));
+window.testActions={opened:[],updated:[],commands:[]};
+const tasks=[
+  {id:'one',title:'فعالیت اول',plannedStart:'2026-11-07',plannedEnd:'2026-11-09',assignees:['ali'],priority:'high'},
+  {id:'two',title:'فعالیت دوم',plannedStart:'2026-11-10',plannedEnd:'2026-11-12',dependencies:['one'],assignees:['sara'],priority:'low'}
+];
+window.mountGantt=(canEdit=true)=>root.render(h(GanttView,{tasks,calendar:'gregorian',canEdit,
+  onUpdate:(id,patch)=>window.testActions.updated.push({id,patch}),
+  onOpen:id=>window.testActions.opened.push(id)}));
+let messages=[
+  {id:'a',author:'ali',text:'پیام علی',createdAt:'2026-11-07T09:00:00Z'},
+  {id:'b',author:'sara',text:'پیام سارا',createdAt:'2026-11-07T09:01:00Z'}
+];
+const api={
+  collabRead:async()=>messages.map(m=>({...m})),
+  collabCommand:async command=>{
+    window.testActions.commands.push(command);
+    if(command.type==='comment.add'||command.type==='comment.reply')messages.push({
+      id:'c'+messages.length,author:'ali',text:command.text,replyToId:command.replyToId||'',
+      createdAt:'2026-11-07T09:02:00Z'});
+    if(command.type==='comment.edit')messages=messages.map(m=>m.id===command.commentId?{
+      ...m,text:command.text,updatedAt:'2026-11-07T10:00:00Z'}:m);
+    if(command.type==='comment.delete')messages=messages.map(m=>m.id===command.commentId?{
+      ...m,text:'',deletedAt:'2026-11-07T10:00:00Z'}:m);
+    return {ok:true};
+  }
+};
+window.mountChat=(username='ali',canEdit=true,canManage=false)=>root.render(h(CardComments,{
+  cardId:'card-fixture',api,username,canEdit,canManage}));
+</script></body></html>

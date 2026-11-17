@@ -1,0 +1,30 @@
+.gantt-root{min-width:0;padding:18px;border:1px solid var(--border,#d7dfe6);border-radius:14px;background:var(--surface,#fff);color:var(--text,#27344a);direction:rtl}
+.gantt-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:8px}
+.gantt-toolbar label{display:flex;align-items:center;gap:6px;font-size:12px}
+.gantt-toolbar select,.gantt-toolbar input,.gantt-period button{min-height:34px;max-width:170px;border:1px solid var(--border,#d7dfe6);background:var(--surface,#fff);color:inherit;border-radius:8px;padding:5px 8px;font:inherit}
+.gantt-heading{display:flex;align-items:center;gap:8px;margin-inline-end:auto}.gantt-heading small{opacity:.7;font-size:11px}
+.gantt-period{display:flex;gap:4px}.gantt-period button{cursor:pointer}
+.gantt-hint{display:flex;align-items:center;gap:6px;font-size:11px;opacity:.75;margin:6px 0 12px}
+.gantt-error{font-size:12px;color:#b44a4a;padding:8px}
+.gantt-scroll{direction:rtl;overflow:auto;max-width:100%;max-height:66vh;border:1px solid var(--border,#d7dfe6);border-radius:9px}
+.gantt-board{direction:rtl;position:relative}
+.gantt-axis{display:flex;position:sticky;top:0;z-index:4;height:46px;background:var(--surface,#fff);border-bottom:1px solid var(--border,#d7dfe6)}
+.gantt-axis-title{box-sizing:border-box;flex:none;padding:14px 12px;font-size:12px;font-weight:700;position:sticky;right:0;z-index:4;background:var(--surface,#fff);border-left:1px solid var(--border,#d7dfe6)}
+.gantt-axis-cells{display:flex;flex:none;direction:ltr}
+.gantt-axis-cell{box-sizing:border-box;border-right:1px solid var(--border,#d7dfe6);font-size:10px;padding:13px 1px;text-align:center;white-space:nowrap;overflow:hidden}
+.gantt-content{position:relative}
+.gantt-row{display:flex;border-bottom:1px solid var(--border,#d7dfe6)}
+.gantt-task{box-sizing:border-box;position:sticky;right:0;flex:none;background:var(--surface,#fff);z-index:3;padding:6px 9px;border-left:1px solid var(--border,#d7dfe6);display:flex;flex-direction:column;justify-content:center;gap:5px}
+.gantt-task-title{border:0;background:none;color:inherit;text-align:right;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;padding:1px}
+.gantt-task-title:hover{text-decoration:underline}
+.gantt-dates{display:flex;gap:4px;align-items:center}
+.gantt-dates input{box-sizing:border-box;min-width:0;width:110px;font-size:9px;height:26px;color:inherit;background:transparent;border:1px solid var(--border,#d7dfe6);border-radius:5px;padding:1px 3px;direction:ltr}
+.gantt-dates span{font-size:10px;opacity:.7}
+.gantt-track{position:relative;flex:none;direction:ltr;background-image:linear-gradient(to right,var(--border,#d7dfe6) 1px,transparent 1px);background-position:0 0}
+.gantt-row:nth-child(2n) .gantt-track{background-color:rgba(120,150,180,.035)}
+.gantt-bar{position:absolute;top:22px;height:26px;min-width:5px;border:1px solid #258496;border-radius:6px;background:#268a9d;cursor:grab;touch-action:none;z-index:2}
+.gantt-bar:active{cursor:grabbing}.gantt-bar.is-done{background:#649b82;border-color:#50846c}
+.gantt-empty{display:block;color:var(--muted,#87919d);opacity:.7;font-size:11px;margin:26px 10px}
+.gantt-arrows{pointer-events:none;position:absolute;top:0;left:0;color:#b78b3b;z-index:2}
+.gantt-empty-panel{text-align:center;opacity:.75;padding:26px}
+@media(max-width:680px){.gantt-root{padding:10px}.gantt-toolbar{gap:7px}.gantt-heading{width:100%}.gantt-hint{line-height:1.7}}

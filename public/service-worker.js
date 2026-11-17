@@ -1,6 +1,6 @@
 // Shell-only offline cache. Private state is in IndexedDB and is never cached
 // here, nor are API calls, POST requests or cross-origin responses.
-const NAME='madar-pwa-shell-1.0.22-1';
+const NAME='madar-pwa-shell-1.0.22-2';
 const SHELL=['./','./index.html','./madar-icon.svg','./manifest.webmanifest'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
