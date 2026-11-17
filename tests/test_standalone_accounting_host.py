@@ -89,6 +89,7 @@ class StandaloneHostTests(unittest.TestCase):
 
     def test_local_standalone_read_uses_trusted_local_admin(self):
         result = self.bridge.standaloneAccountingRead()
+        self.assertRegex(result.pop("postingToday"), r"^\d{4}-\d{2}-\d{2}$")
         self.assertEqual(result, {"revision": 0, "view": {"standalone": True},
                                   "capabilities": {
                                       "canView": True, "canManage": True,
